@@ -1,0 +1,21 @@
+# Ambiente virtual
+venv/
+.env
+
+# Configurações do IDE
+.idea/
+.vscode/
+
+# Arquivos do Python
+__pycache__/
+*.py[cod]
+*$py.class
+/notebooks
+logs/
+.pytest_cache
+.mypy_cache/
+
+/.vscode
+/reports
+
+google_credentials/
