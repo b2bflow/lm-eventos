@@ -200,6 +200,13 @@ class GenerateResponseService:
                 phone=phone,
             )
 
+        automation_enabled = customer.get("automation", True)
+        if not automation_enabled:
+            logger.info(
+                f"[GENERATE RESPONSE SERVICE] Automação desativada para o cliente {customer.get('id')} telefone: {phone}. Ignorando mensagem."
+            )
+            return
+
         messages: list = self.message_repository.get_latest_customer_messages(
             customer_id=customer.get("id"), limit=int(os.getenv("CONTEXT_SIZE", "100"))
         )

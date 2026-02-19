@@ -24,6 +24,11 @@ class CustomerRepository(ICustomerRepository):
 
             customers = Customer.objects(id__in=object_ids)
             return [customer.to_dict() for customer in customers]
+    
+    def get_all_customers(self) -> list[dict]:
+        with self.db.get_connection_context():
+            customers = Customer.objects()
+            return [customer.to_dict() for customer in customers]
 
     def find(self, id: str | None = None, phone: str | None = None) -> dict | None:
         with self.db.get_connection_context():
@@ -80,7 +85,7 @@ class CustomerRepository(ICustomerRepository):
                 return None
 
             for key, value in attributes.items():
-                if key in ["name", "phone", "tag", "contract_data", "agent"]:
+                if key in ["name", "phone", "tag", "contract_data", "agent", "automation"]:
                     setattr(customer, key, value)
 
             customer.save()

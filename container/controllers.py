@@ -1,3 +1,4 @@
+from controllers.process_automation_controller import ProcessController
 from controllers.process_incoming_message_controller import (
     ProcessIncomingMessageController,
 )
@@ -14,3 +15,10 @@ class ControllerContainer:
         return ProcessIncomingMessageController(
             message_queue_service=self._services.message_queue_service,
         )
+    
+    @property
+    def process_controller(self) -> ProcessController:
+        return ProcessController(
+            service=self._services.automation_service
+        )
+

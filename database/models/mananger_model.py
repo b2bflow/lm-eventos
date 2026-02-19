@@ -1,17 +1,14 @@
-from mongoengine import Document, StringField, DateTimeField
+from mongoengine import Document, StringField, DateTimeField, DictField, BooleanField
 from datetime import datetime
 
-from mongoengine.fields import BooleanField
 
-
-class Customer(Document):
-    meta = {"collection": "customers"}
+class Manager(Document):
+    meta = {"collection": "managers"}
 
     name = StringField(required=True)
-    phone = StringField(required=True, unique=True)
-    agent = StringField()
-    address = StringField()
-    automation = BooleanField(default=True)
+    email = StringField(required=True, unique=True)
+    password_hash = StringField(required=True)
+    session_token = StringField()
     created_at = DateTimeField(default=datetime.now())
     updated_at = DateTimeField(default=datetime.now())
 
@@ -23,10 +20,9 @@ class Customer(Document):
         data = {
             "id": str(self.id),
             "name": self.name,
-            "phone": self.phone,
-            "agent": self.agent,
-            "address": self.address,
-            "automation": self.automation,
+            "email": self.email,
+            "password_hash": self.password_hash,
+            "session_token": self.session_token,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }

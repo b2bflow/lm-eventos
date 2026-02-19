@@ -1,4 +1,5 @@
 from container.clients import ClientContainer
+from repositories.manager_repository import ManagerRepository
 from repositories.message_repository import MessageRepository
 from repositories.customer_repository import CustomerRepository
 
@@ -15,3 +16,7 @@ class RepositoryContainer:
     @property
     def customer(self) -> CustomerRepository:
         return CustomerRepository(database_client=self._clients.database)
+    
+    @property
+    def manager(self) -> ManagerRepository:
+        return ManagerRepository(database_client=self._clients.database)

@@ -5,6 +5,10 @@ class ICustomerRepository(ABC):
     def get_customers(self, ids: list[str]) -> list[dict]:
         pass
 
+    def get_all_customers(self) -> list[dict]:
+        """Retrieve all customers."""
+        pass
+
     @abstractmethod
     def find(self, id: str | None = None, phone: str | None = None) -> dict | None:
         """Retrieve all messages."""

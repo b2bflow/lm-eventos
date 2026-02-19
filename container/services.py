@@ -2,6 +2,7 @@ from container.clients import ClientContainer
 from container.repositories import RepositoryContainer
 from container.agents import AgentContainer
 from container.tools import ToolContainer
+from services.automation_service import AutomationService
 from services.message_queue_service import MessageQueueService
 from services.generate_response_service import GenerateResponseService
 from services.audio_transcription_service import AudioTranscriptionService
@@ -65,4 +66,11 @@ class ServiceContainer:
     def automation_is_paused_service(self):
         return AutomationIsPausedService(
             chat_client=self._clients.chat,
+        )
+
+    @property
+    def automation_service(self) -> AutomationService:
+        return AutomationService(
+            customer_repository=self._repositories.customer,
+            manager_repository=self._repositories.manager
         )
