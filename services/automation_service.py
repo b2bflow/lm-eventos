@@ -143,3 +143,4 @@ class AutomationService:
             logger.exception(
                 f"[AUTOMATION SERVICE] Erro ao enviar mensagem no form_webhook: {err}"
             )
+            return jsonify({"status": "error"}), 500
