@@ -21,14 +21,12 @@ class ServiceContainer:
         agents: AgentContainer,
         tools: ToolContainer,
         queue_processor: Queue,
-        chat = IChat,
     ):
         self._clients = clients
         self._repositories = repositories
         self.agents = agents
         self.tools = tools
         self._queue_processor = queue_processor
-        self._chat = chat
 
     @property
     def generate_response_service(self) -> GenerateResponseService:
@@ -76,5 +74,5 @@ class ServiceContainer:
         return AutomationService(
             customer_repository=self._repositories.customer,
             manager_repository=self._repositories.manager,
-            chat_client=self._chat
+            chat_client=self._clients.chat
         )
