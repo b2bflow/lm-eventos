@@ -36,12 +36,17 @@ class SummaryTool(ITool, FunctionCallMixin):
                 lines.append(f"*{label}*")
                 lines.append(f"{value}\n")
 
-        message = "\n".join(lines)
+        first_message = "\n".join(lines)
+        second_message = "Link para formulario: https://docs.google.com/forms/d/e/1FAIpQLSe5KwuvXlPCKsT1gLtB_0agbidLPTDDueXvqZnMDpB600CDuQ/viewform?pli=1&pli=1"
 
-        self.chat.send_message(
+        message = [first_message, second_message]
+
+        for msg in message:
+            self.chat.send_message(
                 phone=phone,
-                message=message,
+                message=msg,
             )
+
         self.chat.send_contact(
             phone=phone,
             name=customer_name,
