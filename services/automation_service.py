@@ -123,12 +123,15 @@ class AutomationService:
 
         self.manager_repository.update(email=email, attributes={"session_token": None})
 
-    def form_webhook(self) -> dict:
+    def form_webhook(self, **payload) -> dict:
+
+        print(payload)
+        customer_name = payload.get("nome_cliente")
 
         try:
             phone = os.getenv("ADM_PHONE")
-            message = "Novo formulário recebido"
-
+            message = f"Novo formulário recebido de: {customer_name}"
+            
             self.chat.send_message(
                 phone=phone,
                 message=message,

@@ -124,10 +124,13 @@ def logout(**kwargs) -> tuple:
         return jsonify({"status": "error"}), 400
     
 
-@app.get("/form_webhook")
+@app.post("/form_webhook")
 def form_webhook(**kwargs) -> tuple:
+
+    payload: dict = request.get_json(silent=True) or {}
+
     try:
-        return container.controllers.process_controller.form_webhook()
+        return container.controllers.process_controller.form_webhook(**payload)
 
     except Exception as err:
         logger.exception(
