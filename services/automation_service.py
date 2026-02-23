@@ -130,8 +130,8 @@ class AutomationService:
 
         try:
             phone = os.getenv("ADM_PHONE")
-            message = f"Novo formulário recebido de: {customer_name}"
-            
+            message = f"Novo formulário recebido. Cliente: {customer_name}.\n\nSolicita-se verificação e andamento para orçamento."
+
             self.chat.send_message(
                 phone=phone,
                 message=message,
