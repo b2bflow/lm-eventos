@@ -5,14 +5,17 @@ from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 from interfaces.repositories.customer_repository_interface import ICustomerRepository
 from interfaces.repositories.manager_repository_interface import IManagerRepository
+from interfaces.clients.chat_interface import IChat
+from utils import logger
 
 
 load_dotenv()
 
 class AutomationService:
-    def __init__(self, customer_repository: ICustomerRepository, manager_repository: IManagerRepository) -> None:
+    def __init__(self, customer_repository: ICustomerRepository, manager_repository: IManagerRepository, chat_client: IChat) -> None:
         self.customer_repository = customer_repository
         self.manager_repository = manager_repository
+        self.chat = chat_client
 
     def customer_list(self, payload: dict) -> list:
 
@@ -119,3 +122,21 @@ class AutomationService:
             return None
 
         self.manager_repository.update(email=email, attributes={"session_token": None})
+
+    def form_webhook(self) -> dict:
+
+        try:
+            phone = os.getenv("ADM_PHONE")
+            message = "Novo formulário recebido"
+
+            self.chat.send_message(
+                phone=phone,
+                message=message,
+            )
+
+            return jsonify({"status": "ok"}), 200
+
+        except Exception as err:
+            logger.exception(
+                f"[AUTOMATION SERVICE] Erro ao enviar mensagem no form_webhook: {err}"
+            )

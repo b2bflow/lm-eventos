@@ -31,3 +31,6 @@ class ProcessController:
     def logout(self, **payload) -> tuple[dict, int]:
         self.service.logout(**payload)
         return {"message": "Logout successful."}
+    
+    def form_webhook(self) -> tuple[dict, int]:
+        return self.service.form_webhook()

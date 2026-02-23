@@ -1,3 +1,4 @@
+from aiohttp import payload
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -118,6 +119,19 @@ def logout(**kwargs) -> tuple:
     except Exception as err:
         logger.exception(
             f"[ENDPOINT LOGOUT] Erro ao processar endpoint /logout: {err}"
+        )
+
+        return jsonify({"status": "error"}), 400
+    
+
+@app.get("/form_webhook")
+def form_webhook(**kwargs) -> tuple:
+    try:
+        return container.controllers.process_controller.form_webhook()
+
+    except Exception as err:
+        logger.exception(
+            f"[ENDPOINT FORM WEBHOOK] Erro ao processar endpoint /form_webhook: {err}"
         )
 
         return jsonify({"status": "error"}), 400
