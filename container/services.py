@@ -72,5 +72,6 @@ class ServiceContainer:
     def automation_service(self) -> AutomationService:
         return AutomationService(
             customer_repository=self._repositories.customer,
-            manager_repository=self._repositories.manager
+            manager_repository=self._repositories.manager,
+            chat_client=self._clients.chat,
         )
