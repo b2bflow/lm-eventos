@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from interfaces.repositories.customer_repository_interface import ICustomerRepository
 from interfaces.repositories.manager_repository_interface import IManagerRepository
 from interfaces.clients.chat_interface import IChat
-from utils import logger
+from utils.logger import logger
 
 
 load_dotenv()
