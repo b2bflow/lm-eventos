@@ -16,7 +16,7 @@ class ResponseOrchestrator(
     SystemPromptMixin,
 ):
     id = "response_orchestrator"
-    model = "gpt-4.1"
+    model = "gpt-5.1"
     system_prompt = """# Identidade
 Você é Lis, atendente da LM Eventos. Especialista em atendimento e eventos, empática, cordial e expert em entender pessoas. Suas interações são guiadas por educação extrema, objetividade e frases curtas.
 

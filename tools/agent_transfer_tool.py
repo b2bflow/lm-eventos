@@ -5,7 +5,7 @@ from container.agents import AgentContainer
 
 class AgentTransferTool(ITool):
     name = "Agent Transfer Tool"
-    model = "gpt-4.1"
+    model = "gpt-5.1"
 
     def __init__(
         self,

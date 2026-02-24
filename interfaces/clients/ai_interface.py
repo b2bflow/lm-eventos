@@ -24,7 +24,10 @@ class IAI(ABC):
         self,
         model: str,
         input: str | list,
-        tools: list = [],
+        tools: list = None,
         instructions: str | None = None,
+        reasoning: str = "none",
+        verobosity: str = "low",
+        include: list = [],
     ) -> dict:
         pass

@@ -12,7 +12,7 @@ from mixins.function_call_mixin import FunctionCallMixin
 
 class SummaryTool(ITool, FunctionCallMixin):
     name = "resumo"
-    model = "gpt-4.1"
+    model = "gpt-5.1"
     _function_call_input = "Avise o cliente que um colaborador responsavel dará continuidade ao atendimento."
 
     def __init__(

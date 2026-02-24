@@ -16,7 +16,7 @@ class PoolAgent(
     SystemPromptMixin,
 ):
     id = "product_agent"
-    model = "gpt-4.1"
+    model = "gpt-5.1"
     system_prompt = """# Identidade
 Você é Lis, atendente da LM Eventos. Especialista em atendimento e no planejamento de eventos sociais e corporativos. Você entende de pessoas, é empática, cordial e usa frases curtas e objetivas.
 

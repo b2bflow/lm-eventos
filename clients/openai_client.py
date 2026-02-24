@@ -95,25 +95,34 @@ class OpenIAClient(IAI):
         self,
         model: str,
         input: str | list,
-        tools: list | None = None,
+        tools: list = None,
         instructions: str | None = None,
+        reasoning: str = "none",
+        verobosity: str = "low",
+        include: list = [],
     ) -> dict:
-        if not input:
-            input = []
-
         try:
-            logger.info(
-                f"[OPENAI] Gerando resposta com o modelo: {model}, último input: \n{to_json_dump(input[-1]) if isinstance(input, list) else input}"
-            )
+            logger.info(f"[OPENAI] Criando resposta: modelo: {model}")
+
+            # response = self.client.responses.create(
+            #     model=model,
+            #     instructions=instructions,
+            #     input=input,
+            #     tools=tools,
+            #     temperature=0.5,
+            #     top_p=1.0,
+            #     store=True
+            # )
 
             response = self.client.responses.create(
                 model=model,
-                instructions=instructions,
                 input=input,
+                instructions=instructions,
+                text={"format": {"type": "text"}, "verbosity": verobosity},
+                reasoning={"effort": reasoning},
                 tools=tools,
-                temperature=0.5,
-                top_p=1.0,
-                store=True,
+                store=False,
+                include=include,
             )
 
             return response.to_dict()
