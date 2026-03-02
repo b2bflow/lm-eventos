@@ -45,3 +45,15 @@ class ICustomerRepository(ABC):
     def exists(self, phone: str) -> bool:
         """Check if a customer exists by phone number."""
         pass
+
+    @abstractmethod
+    def get_customers_needing_follow_up(self) -> list[dict]:
+        """
+        Retrieve all customers that need follow-up.
+
+        Returns customers with needs_follow_up=True and follow_up_done=False.
+        The business logic to determine if a conversation is actually abandoned
+        is handled by the AbandonedConversationService.
+        """
+        pass
+

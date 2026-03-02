@@ -194,10 +194,18 @@ class GenerateResponseService:
 
     async def execute(self, phone: str, message: str) -> None:
         customer: dict = self.customer_repository.find(phone=phone)
+        customer_follow_up_enabled = customer.get("needs_follow_up")
         if not customer:
             customer = self.customer_repository.create(
                 name=self.chat.get_name(phone=phone),
                 phone=phone,
+            )
+
+        
+
+        if customer_follow_up_enabled == True:
+            self.customer_repository.update(
+                id=customer.get("id"), attributes={"needs_follow_up": False}
             )
 
         automation_enabled = customer.get("automation", True)

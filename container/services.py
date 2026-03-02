@@ -10,6 +10,7 @@ from services.audio_transcription_service import AudioTranscriptionService
 from services.unsupported_media_handler_service import UnsupportedMediaHandlerService
 from services.automation_is_paused_service import AutomationIsPausedService
 from workers.queue_processor import Queue
+from services.follow_up_service import FollowUpService
 
 
 class ServiceContainer:
@@ -67,6 +68,12 @@ class ServiceContainer:
     def automation_is_paused_service(self):
         return AutomationIsPausedService(
             chat_client=self._clients.chat,
+        )
+    
+    @property
+    def follow_up_service(self) -> FollowUpService:
+        return FollowUpService(
+            database_client=self._clients.database,
         )
 
     @property

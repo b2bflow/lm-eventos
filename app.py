@@ -1,7 +1,10 @@
+from os import getenv
+
 from aiohttp import payload
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from cron_tasks.follow_up_task import run_abandoned_conversation_follow_up
 from utils.logger import logger, to_json_dump
 from utils.util import auth_required, token_required
 
@@ -36,7 +39,25 @@ def receive_message() -> tuple:
         )
 
         return jsonify({"status": "error"}), 400
+    
 
+@token_required
+@app.post("/run_cron_job")
+def run_cron_job():
+    try:
+        logger.info("[ENDPOINT RUN CRON JOB] Cron job iniciado com sucesso")
+        run_abandoned_conversation_follow_up(
+            hours_absence=int(getenv("ABANDONED_CONVERSATION_HOURS", "5"))
+        )
+
+        return jsonify({"status": "ok"}), 200
+
+    except Exception as err:
+        logger.exception(
+            f"[ENDPOINT RUN CRON JOB] Erro ao processar endpoint /run_cron_job: {err}"
+        )
+
+        return jsonify({"status": "error"}), 500
 
 @app.get("/get_customers")
 @token_required

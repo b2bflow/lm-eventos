@@ -85,7 +85,15 @@ class CustomerRepository(ICustomerRepository):
                 return None
 
             for key, value in attributes.items():
-                if key in ["name", "phone", "tag", "contract_data", "agent", "automation"]:
+                if key in [
+                    "name", 
+                    "phone", 
+                    "tag", "contract_data", 
+                    "agent",
+                    "needs_follow_up",
+                    "follow_up_done", 
+                    "automation"
+                ]:
                     setattr(customer, key, value)
 
             customer.save()
@@ -94,3 +102,19 @@ class CustomerRepository(ICustomerRepository):
     def exists(self, phone: str) -> bool:
         with self.db.get_connection_context():
             return Customer.objects(phone=phone).count() > 0
+        
+    
+    def get_customers_needing_follow_up(self) -> list[dict]:
+        """
+        Retorna todos os customers que precisam de follow-up.
+
+        Critérios:
+        - needs_follow_up = True
+        - follow_up_done = False
+
+        A lógica de negócio para determinar se uma conversa foi realmente abandonada
+        é feita em um serviço específico.
+        """
+        with self.db.get_connection_context():
+            customers = Customer.objects(needs_follow_up=True, follow_up_done=False)
+            return [customer.to_dict() for customer in customers]
