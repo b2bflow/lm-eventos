@@ -70,6 +70,9 @@ class MessageQueueService:
             url: str = self.chat.get_file_url(**kwargs)
             message = f"<file-url>{url}</file-url> {caption or ''}"
 
+        elif self.chat.is_button_response(**kwargs):
+            message = f"<kwargs>{kwargs}</kwargs>"
+
         else:
             transcribed_message = self.audio_transcription_service.transcribe(**kwargs)
             message = transcribed_message or self.chat.get_message(**kwargs)

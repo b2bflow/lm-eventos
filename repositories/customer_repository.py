@@ -92,7 +92,8 @@ class CustomerRepository(ICustomerRepository):
                     "agent",
                     "needs_follow_up",
                     "follow_up_done", 
-                    "automation"
+                    "automation",
+                    "new_service"
                 ]:
                     setattr(customer, key, value)
 

@@ -235,6 +235,9 @@ class ZAPIClient(IChat):
 
     def is_image(self, **kwargs) -> bool:
         return "image" in kwargs and kwargs["image"].get("imageUrl") is not None
+    
+    def is_button_response(self, **kwargs) -> bool:
+        return 'buttonsResponseMessage' in kwargs
 
     def is_audio_message(self, **kwargs) -> bool:
         return "audio" in kwargs
@@ -350,6 +353,36 @@ class ZAPIClient(IChat):
             raise last_exception
         finally:
             self._execute_after_send_hooks(event="send_message")
+
+    def send_message_with_button(self, phone: str, message: str, buttons: list) -> dict:
+        url = f"{self._resolve_url()}/send-button-list"
+
+        headers = {**self._headers, "Client-Token": self._client_token}
+
+        payload = {
+            "phone": self._resolve_phone(phone),
+            "message": message,
+            "buttonList": {
+                "buttons": buttons,
+            },
+            "delayTyping": 3,
+        }
+
+        try:
+            if not buttons:
+                logger.error(f"[Z-API] Lista de botões vazia: {phone}")
+                return
+
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+
+            logger.info(
+                f"[Z-API] Lista de botões enviada para {phone}: \n{to_json_dump(response.json())}"
+            )
+
+        except Exception as e:
+            logger.exception(f"[Z-API] ❌ Erro ao enviar lista de botões: \n{to_json_dump(e)}")
+            raise e
 
     def send_contact(self, phone: str, name: str, contact_phone: str) -> dict:
         url = self._resolve_url() + "/send-contact"

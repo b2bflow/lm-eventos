@@ -65,6 +65,10 @@ class IChat(ABC):
         pass
 
     @abstractmethod
+    def is_button_response(self, **kwargs) -> bool:
+        pass
+
+    @abstractmethod
     def get_image_url(self, **kwargs) -> str:
         pass
 
@@ -98,4 +102,8 @@ class IChat(ABC):
 
     @abstractmethod
     def get_chat_metadata(self, phone: str) -> dict:
+        pass
+
+    @abstractmethod
+    def send_message_with_button(self, phone: str, message: str, buttons: list) -> bool:
         pass

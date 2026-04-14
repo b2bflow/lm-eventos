@@ -10,10 +10,10 @@ from utils.logger import logger, to_json_dump
 from mixins.function_call_mixin import FunctionCallMixin
 
 
-class SummaryTool(ITool, FunctionCallMixin):
-    name = "resumo"
+class HumanoTool(ITool, FunctionCallMixin):
+    name = "humano"
     model = "gpt-5.1"
-    _function_call_input = "Avise o cliente que logo ele ira receber o seu orçamento, seja educado e cordial."
+    _function_call_input = ""
 
     def __init__(
         self,
@@ -27,9 +27,9 @@ class SummaryTool(ITool, FunctionCallMixin):
 
     def sends_unregister_request(self, customer_phone: dict, customer_name: str, arguments: dict) -> None:
         phone = os.getenv("REGISTER_PHONE", "").strip()
-
-        lines = ["⚠️ *Nova solicitação* ⚠️\n"]
-
+        
+        lines = ["⚠️ *Solicitação de atendimento humano* ⚠️\n"]
+        
         for key, value in arguments.items():
             if value:
                 label = key.replace("_", " ").capitalize()
@@ -37,15 +37,11 @@ class SummaryTool(ITool, FunctionCallMixin):
                 lines.append(f"{value}\n")
 
         first_message = "\n".join(lines)
-        second_message = "Link para formulario: https://docs.google.com/forms/d/e/1FAIpQLSe5KwuvXlPCKsT1gLtB_0agbidLPTDDueXvqZnMDpB600CDuQ/viewform?pli=1&pli=1"
-
-        message = [first_message, second_message]
-
-        for msg in message:
-            self.chat.send_message(
-                phone=phone,
-                message=msg,
-            )
+        
+        self.chat.send_message(
+            phone=phone,
+            message=first_message,
+        )
 
         self.chat.send_contact(
             phone=phone,
@@ -75,20 +71,11 @@ class SummaryTool(ITool, FunctionCallMixin):
             to_json_dump(arguments),
         )
 
-        a = self.customer.update(
-            id=customer.get("id"),
-            attributes={"new_service": True}
-        )
-
-        logger.info(
-            "[UNREGISTER TOOL] Atualizando o cliente: %s",
-            to_json_dump(a),
-        )
-
         logger.info(
             "[UNREGISTER TOOL] Argumentos: %s",
             arguments,
         )
+
 
         Thread(
             target=self.sends_unregister_request,
@@ -111,17 +98,18 @@ class SummaryTool(ITool, FunctionCallMixin):
             ),
         ]
 
-        _, (fc_input, fc_msg_id, function_call_output) = await asyncio.gather(*tasks)
+        self.customer.update(
+            id=customer.get("id"),
+            attributes={"new_service": True}
+        )
 
         return [
-            *fc_input,
             {
-                "id": fc_msg_id,
                 "role": "assistant",
                 "content": [
                     {
                         "type": "output_text",
-                        "text": function_call_output,
+                        "text": "",
                     }
                 ],
             },

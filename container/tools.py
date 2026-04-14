@@ -6,6 +6,7 @@ from interfaces.tools.tool_interface import ITool
 from container.clients import ClientContainer
 from container.repositories import RepositoryContainer
 from tools.agent_transfer_tool import AgentTransferTool
+from tools.humano_tool import HumanoTool
 from tools.summary_tool import SummaryTool
 
 
@@ -40,6 +41,13 @@ class ToolContainer:
 
             "resumo": partial(
                 SummaryTool,
+                ai_client=self._clients.ai,
+                chat_client=self._clients.chat,
+                customer_repository=self._repositories.customer,
+            ),
+
+            "humano": partial(
+                HumanoTool,
                 ai_client=self._clients.ai,
                 chat_client=self._clients.chat,
                 customer_repository=self._repositories.customer,

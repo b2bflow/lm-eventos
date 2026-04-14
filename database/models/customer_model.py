@@ -11,6 +11,7 @@ class Customer(Document):
     phone = StringField(required=True, unique=True)
     agent = StringField()
     address = StringField()
+    new_service = BooleanField(default=True)
     automation = BooleanField(default=True)
     needs_follow_up = BooleanField(default=True)
     follow_up_done = BooleanField(default=False)
@@ -28,6 +29,7 @@ class Customer(Document):
             "phone": self.phone,
             "agent": self.agent,
             "address": self.address,
+            "new_service": self.new_service,
             "automation": self.automation,
             "needs_follow_up": self.needs_follow_up,
             "follow_up_done": self.follow_up_done,
