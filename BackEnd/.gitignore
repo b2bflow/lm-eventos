@@ -1,0 +1,77 @@
+# ==========================================
+# 1. AMBIENTE VIRTUAL E DEPENDÊNCIAS
+# ==========================================
+# Nunca devemos subir os binários do Python para o repositório.
+venv/
+env/
+.venv/
+Scripts/
+Include/
+Lib/
+.vscode/
+logs/
+
+# ==========================================
+# 2. VARIÁVEIS DE AMBIENTE E SEGURANÇA (CRÍTICO)
+# ==========================================
+# Onde ficam suas senhas do Mongo, Secret Key do Django, etc.
+.env
+.env.local
+.env.*
+*.pem
+secrets.json
+
+# ==========================================
+# 3. CACHE DO PYTHON E COMPILAÇÕES
+# ==========================================
+# Arquivos gerados automaticamente pela máquina que rola o código.
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==========================================
+# 4. BANCO DE DADOS LOCAL E ARQUIVOS DE MÍDIA
+# ==========================================
+# Mesmo usando MongoDB, o Django cria o sqlite3 por padrão se não configurado.
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# ==========================================
+# 5. LOGS E TESTES
+# ==========================================
+*.log
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+
+# ==========================================
+# 6. CONFIGURAÇÕES DE IDE E SISTEMA OPERACIONAL
+# ==========================================
+# Evita que configurações do seu PC poluam o repositório dos colegas.
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
