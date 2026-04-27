@@ -61,11 +61,12 @@ DATABASES = {
     }
 }
 
-mongo_user = os.getenv('DB_USERNAME', '').strip()
-mongo_pass = os.getenv('MONGO_PASSWORD', '').strip()
-mongo_db = os.getenv('MONGO_DB_NAME', 'dev_db').strip()
-mongo_host = os.getenv('MONGO_HOST', 'localhost').strip()
-mongo_port = int(os.getenv('MONGO_PORT', 27017))
+mongo_user = os.getenv('DB_USERNAME').strip()
+mongo_pass = os.getenv('MONGO_PASSWORD').strip()
+mongo_db = os.getenv('MONGO_DB_NAME').strip()
+mongo_host = os.getenv('MONGO_HOST').strip()
+mongo_port = int(os.getenv('MONGO_PORT'))
+
 
 if mongo_user and mongo_pass:
     mongoengine.connect(

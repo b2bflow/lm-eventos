@@ -6,7 +6,7 @@ from chat.gateways.interfaces import IEventGateway
 
 class SocketAdapter(IEventGateway): 
     def __init__(self):
-        self.redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        self.redis_url = os.environ.get("REDIS_URL")
 
     def emit_new_message(self, payload: dict) -> None: 
         try:

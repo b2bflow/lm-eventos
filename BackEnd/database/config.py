@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_HOST = os.getenv("MONGO_HOST", "localhost")
-DB_PORT = os.getenv("MONGO_PORT", "27017")
+DB_HOST = os.getenv("MONGO_HOST")
+DB_PORT = os.getenv("MONGO_PORT")
 DB_DATABASE = os.getenv("MONGO_DB_NAME")
-DB_USERNAME = os.getenv("MONGO_USERNAME", "")
-DB_PASSWORD = os.getenv("MONGO_PASSWORD", "")
+DB_USERNAME = os.getenv("MONGO_USERNAME")
+DB_PASSWORD = os.getenv("MONGO_PASSWORD")
 
 
 def get_database_uri():
