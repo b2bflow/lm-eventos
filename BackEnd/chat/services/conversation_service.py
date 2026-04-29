@@ -3,12 +3,14 @@ from utils.logger import logger
 from chat.repositories.conversation_repository import ConversationRepository
 from chat.repositories.message_repository import MessageRepository
 from chat.interfaces.chat_service_interface import IConversationService
+from crm.services.quote_service import QuoteService
 
 
 class ConversationService(IConversationService):
     def __init__(self):
         self.conversation_repo = ConversationRepository()
         self.message_repo = MessageRepository()
+        self.quote_service = QuoteService()
 
     def get_all_conversations(self):
         try:
@@ -26,11 +28,34 @@ class ConversationService(IConversationService):
             if 'tag' in data:
                 conversation.tag = data['tag']
                 conversation.ai_active = (data['tag'] == 'AGENTE')
+                if data['tag'] in ['OPERADOR', 'operador_humano', 'orcamento']:
+                    conversation.needs_attention = True
                 
             if 'status' in data and data['status'] in ['OPEN', 'CLOSED', 'ARCHIVED']:
                 conversation.status = data['status']
                 if data['status'] == 'CLOSED':
-                    conversation.final_customer_status = getattr(conversation.customer, 'customer_state_now', 'ANALYSIS')
+                    final_status = data.get('final_customer_status') or getattr(conversation.customer, 'customer_state_now', 'ANALYSIS')
+                    conversation.final_customer_status = final_status
+                    if not getattr(conversation, 'quote', None) and final_status in ['WON', 'LOST']:
+                        from crm.models.quote_model import Quote
+                        quote = self.quote_service.get_or_create_active_quote_for_customer(str(conversation.customer.id))
+                        conversation.quote = Quote.objects(id=quote.get("id")).first()
+
+                    if getattr(conversation, 'quote', None) and final_status in ['WON', 'LOST']:
+                        close_payload = {
+                            key: value
+                            for key, value in {
+                                "contract_value": data.get("contract_value"),
+                                "notes": data.get("notes"),
+                            }.items()
+                            if value not in (None, "")
+                        }
+                        self.quote_service.close_quote(
+                            quote_id=str(conversation.quote.id),
+                            status_value=final_status,
+                            data=close_payload,
+                            user=user,
+                        )
 
             if 'needs_attention' in data:
                 conversation.needs_attention = data['needs_attention']

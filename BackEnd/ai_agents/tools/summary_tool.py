@@ -2,10 +2,12 @@ import asyncio
 import os
 import re
 from threading import Thread
-from datetime import datetime
+from datetime import datetime, timedelta
 from ai_agents.interfaces.ai_interface import IAI
 from ai_agents.interfaces.tool_interface import ITool
 from crm.interfaces.customer_repository_interface import ICustomerRepository
+from crm.services.quote_service import QuoteService
+from chat.interfaces.conversation_repository_interface import IConversationRepository
 from gateway.interfaces.chat_interface import IChat
 from utils.logger import logger, to_json_dump
 from ai_agents.mixins.function_call_mixin import FunctionCallMixin
@@ -21,10 +23,13 @@ class SummaryTool(ITool, FunctionCallMixin):
         ai_client: IAI,
         chat_client: IChat,
         customer_repository: ICustomerRepository,
+        conversation_repository: IConversationRepository,
     ):
         self.ai = ai_client
         self.chat = chat_client
         self.customer = customer_repository
+        self.conversation = conversation_repository
+        self.quote_service = QuoteService()
 
     def _parse_datetime(self, value: str | None) -> datetime | None:
         if not value:
@@ -123,6 +128,24 @@ class SummaryTool(ITool, FunctionCallMixin):
             contact_phone=customer_phone or "",
         )
 
+    def _block_customer_and_mark_budget(self, customer: dict) -> None:
+        blocked_until = datetime.utcnow() + timedelta(hours=24)
+
+        self.customer.update(
+            id=customer.get("id"),
+            attributes={
+                "blocked_until": blocked_until,
+                "customer_custom_tag": "operador humano",
+            },
+        )
+
+        conversation = self.conversation.get_active_conversation(customer=customer.get("id"))
+        if conversation:
+            conversation.tag = "operador humano"
+            conversation.ai_active = False
+            conversation.needs_attention = True
+            self.conversation.update_conversation(conversation)
+
     async def execute(
         self,
         function_call_id: str,
@@ -146,6 +169,18 @@ class SummaryTool(ITool, FunctionCallMixin):
         )
 
         customer_attributes = self._build_customer_attributes(customer, arguments)
+        customer_attributes["status"] = "ANALYSIS"
+
+        self._block_customer_and_mark_budget(customer)
+        active_quote = self.quote_service.get_or_create_active_quote_for_customer(
+            customer_id=customer.get("id"),
+            seed=customer_attributes,
+        )
+        if active_quote:
+            self.quote_service.update_quote(
+                quote_id=active_quote.get("id"),
+                data=customer_attributes,
+            )
 
         Thread(
             target=self.sends_unregister_request,
@@ -160,7 +195,6 @@ class SummaryTool(ITool, FunctionCallMixin):
                 attributes={
                     "new_service": True,
                     "agent": "response_orchestrator",
-                    **customer_attributes,
                 },
             ),
             asyncio.to_thread(

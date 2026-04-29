@@ -52,7 +52,7 @@ export function RegisterLead() {
 
   const mutation = useMutation({
     mutationFn: async (data: LeadFormValues) => {
-      const leadResponse = await api.post('/crm/customers/', {
+      const leadResponse = await api.post('/crm/quotes/', {
         name: data.name,
         phone: data.phone,
         celebration_type: data.celebration_type,
@@ -66,7 +66,7 @@ export function RegisterLead() {
       return leadResponse.data;
     },
     onSuccess: () => {
-      toast.success("Lead cadastrado com sucesso na etapa Análise.");
+      toast.success("Cotação cadastrada com sucesso na etapa Análise.");
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
 

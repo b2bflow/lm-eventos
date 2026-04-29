@@ -13,6 +13,9 @@ import { LEAD_STATUS_LABELS, LEAD_STATUS_OPTIONS } from "@/constants/mappings";
 
 interface LeadData {
   id: string | number;
+  quote_id?: string;
+  customer?: string;
+  customer_id?: string;
   name?: string;
   phone?: string;
   customer_state_now?: string;
@@ -73,7 +76,8 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
   const updateLeadMutation = useMutation({
     mutationFn: async () => {
       if (!lead) throw new Error("Sem lead selecionado");
-      const { data } = await api.patch(`/crm/customers/${lead.id}/`, {
+      const endpoint = lead.quote_id ? `/crm/quotes/${lead.quote_id}/` : `/crm/customers/${lead.id}/`;
+      const { data } = await api.patch(endpoint, {
         ...formData,
         event_date: formData.event_date || undefined,
         guest_count: Number(formData.guest_count || 0),
@@ -86,6 +90,7 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       toast.success("Lead atualizado com sucesso.");
       onClose();
@@ -206,9 +211,6 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              `Análise`, `Orçamento` e `Negociando` podem ser recalculadas automaticamente pelo backend. `Venda` e `Perdido` só mudam quando o operador define.
-            </p>
           </div>
 
           <div className="space-y-2">

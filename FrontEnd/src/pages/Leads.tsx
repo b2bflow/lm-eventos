@@ -27,8 +27,8 @@ const Leads = () => {
   const handleDelete = async () => {
     if (!selectedLead) return;
     try {
-      await api.delete(`/crm/customers/${selectedLead.id}/`);
-      toast.success("Lead excluído com sucesso");
+      await api.delete(`/crm/quotes/${selectedLead.id}/`);
+      toast.success("Cotação excluída com sucesso");
       setIsDeleteOpen(false);
       refetch(); 
     } catch (error) {
@@ -162,10 +162,10 @@ const Leads = () => {
               <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
             <DialogContent className="glass border-border/50">
               <DialogHeader><DialogTitle>Confirmar Exclusão</DialogTitle></DialogHeader>
-              <p className="text-muted-foreground py-4">Tem a certeza que deseja excluir <strong>{selectedLead?.name}</strong>?</p>
+              <p className="text-muted-foreground py-4">Tem a certeza que deseja excluir esta cotação de <strong>{selectedLead?.name}</strong>?</p>
               <DialogFooter>
                 <DialogClose asChild><Button variant="outline">Cancelar</Button></DialogClose>
-                <Button onClick={handleDelete} variant="destructive">Excluir Lead</Button>
+                <Button onClick={handleDelete} variant="destructive">Excluir Cotação</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

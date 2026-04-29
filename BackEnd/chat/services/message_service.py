@@ -47,6 +47,19 @@ class MessageService(IMessageService):
             if not self.chat.is_valid_message(**kwargs):
                 return
 
+            customer = self.customer_repository.get_by_phone(phone)
+            blocked_until = customer.get("blocked_until") if isinstance(customer, dict) else None
+            if isinstance(blocked_until, str):
+                blocked_until = datetime.fromisoformat(blocked_until.replace("Z", "+00:00"))
+
+            if blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow():
+                logger.info(
+                    "[MessageService] Cliente %s bloqueado até %s. Webhook ignorado antes de respostas automáticas.",
+                    phone,
+                    blocked_until,
+                )
+                return
+
             if self.unsupported_media_handler.handle(kwargs):
                 return
 
@@ -124,9 +137,8 @@ class MessageService(IMessageService):
                     {"id": "5", "label": "Falar com a Erica"},
                     {"id": "6", "label": "Evento Social"},
                     {"id": "7", "label": "Evento Corporativo"},
-                    {"id": "8", "label": "Casamento"},
-                    {"id": "9", "label": "Estrutura para Eventos"},
-                    {"id": "10", "label": "Produto Unico"},
+                    {"id": "8", "label": "Estrutura para Eventos"},
+                    {"id": "9", "label": "Produto Unico"},
                 ]
 
                 self.chat.send_message_with_button(
@@ -186,6 +198,7 @@ class MessageService(IMessageService):
                 return None
 
             customer_service = CrmContainer.get_customer_service()
+            quote_service = CrmContainer.get_quote_service()
             customer = customer_service.get_customer_by_phone(phone)
 
             if not customer:
@@ -204,6 +217,18 @@ class MessageService(IMessageService):
                         "phone": phone
                     }
                 )
+
+            blocked_until = customer.get("blocked_until") if isinstance(customer, dict) else None
+            if isinstance(blocked_until, str):
+                blocked_until = datetime.fromisoformat(blocked_until.replace("Z", "+00:00"))
+
+            if blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow():
+                logger.info(
+                    "[MessageService] Cliente %s bloqueado até %s. Mensagem ignorada antes do fluxo automático.",
+                    phone,
+                    blocked_until,
+                )
+                return None
 
             if customer.get("new_service", True):
                 print(f"Enviando mensagem de boas-vindas para {phone} com ID do paciente {customer.get('id')}")
@@ -241,12 +266,17 @@ class MessageService(IMessageService):
 
             # 1. Extraímos apenas o ID do dicionário/objeto
             customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
+            active_quote = quote_service.get_or_create_active_quote_for_customer(customer_id)
 
             # 2. Passamos a variável patient_id para as duas funções do repositório
             conversation = self.conversation_repo.get_active_conversation(customer_id)
 
             if not conversation:
                 conversation = self.conversation_repo.create_conversation(customer_id)
+
+            if active_quote and not getattr(conversation, 'quote', None):
+                from crm.models.quote_model import Quote
+                conversation.quote = Quote.objects(id=active_quote.get("id")).first()
 
             message = self._save_and_notify(
                 conversation_id=str(conversation.id),
@@ -261,7 +291,7 @@ class MessageService(IMessageService):
             conversation.last_message_content = content
             conversation.unread_count = getattr(conversation, 'unread_count', 0) + 1
 
-            if getattr(conversation, 'tag', '') == 'OPERADOR':
+            if getattr(conversation, 'tag', '') in ['OPERADOR', 'operador_humano', 'orcamento']:
                 conversation.needs_attention = True
 
             self.conversation_repo.update_conversation(conversation)

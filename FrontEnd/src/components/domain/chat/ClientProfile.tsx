@@ -11,6 +11,16 @@ interface PastConversation {
   final_customer_status?: string;
 }
 
+interface PastQuote {
+  id: string;
+  created_at: string;
+  status?: string;
+  customer_state_now?: string;
+  event_title?: string | null;
+  quoted_amount?: number;
+  contract_value?: number;
+}
+
 interface ClientProfileProps {
   customer: {
     id: string; 
@@ -21,6 +31,7 @@ interface ClientProfileProps {
     customer_status?: string; 
     final_customer_status?: string;
     past_conversations?: PastConversation[];
+    past_quotes?: PastQuote[];
   } | undefined;
   onEdit: () => void; 
   onCloseMobile?: () => void; 
@@ -152,6 +163,42 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
                         </span>
                         <span className={cn("text-[9px] font-bold", pastStatusInfo.color.split(" ")[0])}>
                           {pastStatusInfo.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {customer.past_quotes && customer.past_quotes.length > 0 && (
+          <>
+            <Separator className="bg-border/50" />
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <History className="w-4 h-4" /> Cotações anteriores
+              </h3>
+              <div className="space-y-2">
+                {customer.past_quotes.map((quote) => {
+                  const quoteStatus = quote.status || quote.customer_state_now;
+                  const quoteStatusInfo = getStatusDisplay(quoteStatus);
+                  const amount = quote.contract_value || quote.quoted_amount || 0;
+                  return (
+                    <div key={quote.id} className="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+                      <div className="flex justify-between gap-2 mb-1.5">
+                        <span className="text-[11px] font-bold text-foreground truncate">
+                          {quote.event_title || "Cotação sem título"}
+                        </span>
+                        <span className={cn("text-[9px] font-bold", quoteStatusInfo.color.split(" ")[0])}>
+                          {quoteStatusInfo.label}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                        <span>{new Date(quote.created_at).toLocaleDateString()}</span>
+                        <span>
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount)}
                         </span>
                       </div>
                     </div>

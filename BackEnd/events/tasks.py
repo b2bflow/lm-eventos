@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 
 from celery import shared_task
 from utils.logger import logger, print_error_details
@@ -26,6 +27,15 @@ def trigger_ai_agent_task(self, conversation_id: str, trigger_message_id: str):
 
         if not conversation:
             return "Conversa não encontrada"
+
+        blocked_until = getattr(conversation.customer, "blocked_until", None)
+        if blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow():
+            logger.info(
+                "[EventTasks] Abortando IA para conversa %s. Cliente bloqueado até %s.",
+                conversation_id,
+                blocked_until,
+            )
+            return "Blocked"
 
         recent_messages = message_service.message_repo.get_recent_context(conversation_id, limit=1)
 

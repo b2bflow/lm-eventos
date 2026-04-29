@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, Sparkles, User, CheckCircle2, Clock } from "lucide-react";
+import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -9,7 +9,7 @@ interface Conversation {
   name: string;
   lastMessage: string;
   time: string;
-  tag: "AGENTE" | "OPERADOR"; 
+  tag: string; 
   unread?: boolean;
   finished?: boolean;
   customer_status?: string;
@@ -20,7 +20,7 @@ interface ConversationListProps {
   conversations: Conversation[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onToggleTag?: (id: string, currentTag: "AGENTE" | "OPERADOR") => void;
+  onToggleTag?: (id: string, currentTag: string) => void;
 }
 
 const getStatusDisplay = (status: string | undefined) => {
@@ -36,10 +36,34 @@ const getStatusDisplay = (status: string | undefined) => {
 
 export function ConversationList({ conversations, selectedId, onSelect, onToggleTag }: ConversationListProps) {
   const [activeTab, setActiveTab] = useState<"OPEN" | "CLOSED">("OPEN");
+  const [tagFilter, setTagFilter] = useState<string>("all");
 
-  const filteredConversations = conversations.filter(c => 
-    activeTab === "OPEN" ? !c.finished : c.finished
-  );
+  const availableTags = Array.from(new Set(conversations.map((c) => c.tag).filter(Boolean))).sort();
+
+  const filteredConversations = conversations.filter(c => {
+    const matchesStatus = activeTab === "OPEN" ? !c.finished : c.finished;
+    const matchesTag = tagFilter === "all" || c.tag === tagFilter;
+    return matchesStatus && matchesTag;
+  });
+
+  const getTagLabel = (tag: string) => {
+    switch (tag) {
+      case "AGENTE": return "AGENTE IA";
+      case "OPERADOR": return "OPERADOR";
+      case "operador_humano": return "OPERADOR HUMANO";
+      case "orcamento": return "ORÇAMENTO";
+      default: return tag.replace(/_/g, " ").toUpperCase();
+    }
+  };
+
+  const getTagStyle = (tag: string) => {
+    switch (tag) {
+      case "AGENTE": return "bg-purple-500 text-white border-purple-400 hover:bg-purple-600 shadow-purple-500/20";
+      case "orcamento": return "bg-amber-500 text-white border-amber-400 hover:bg-amber-600 shadow-amber-500/20";
+      case "operador_humano": return "bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-700 shadow-emerald-600/20";
+      default: return "bg-blue-600 text-white border-blue-500 hover:bg-blue-700 shadow-blue-600/20";
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-background/50 backdrop-blur-xl border-r border-border/50">
@@ -49,7 +73,23 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
           Conversas
         </h2>
 
-        <div className="flex gap-2 mt-4 p-1 bg-secondary/50 rounded-lg">
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <Tag className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={tagFilter}
+              onChange={(event) => setTagFilter(event.target.value)}
+              className="h-8 w-full rounded-md border border-border/50 bg-background px-2 text-xs font-medium text-foreground outline-none focus:border-primary"
+            >
+              <option value="all">Todas as tags</option>
+              {availableTags.map((tag) => (
+                <option key={tag} value={tag}>{getTagLabel(tag)}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-3 p-1 bg-secondary/50 rounded-lg">
           <button
             onClick={() => setActiveTab("OPEN")}
             className={cn(
@@ -137,15 +177,13 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
                               }}
                               className={cn(
                                 "flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all border shadow-sm hover:scale-105 active:scale-95",
-                                conv.tag === "AGENTE" 
-                                  ? "bg-purple-500 text-white border-purple-400 hover:bg-purple-600 shadow-purple-500/20" 
-                                  : "bg-blue-600 text-white border-blue-500 hover:bg-blue-700 shadow-blue-600/20"
+                                getTagStyle(conv.tag)
                               )}
                             >
                               {conv.tag === "AGENTE" ? (
                                 <><Sparkles className="w-3 h-3 animate-pulse" />AGENTE IA</>
                               ) : (
-                                <><User className="w-3 h-3" />OPERADOR</>
+                                <><User className="w-3 h-3" />{getTagLabel(conv.tag)}</>
                               )}
                             </button>
 

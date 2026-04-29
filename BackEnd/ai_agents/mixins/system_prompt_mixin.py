@@ -22,7 +22,7 @@ class SystemPromptMixin:
             "role": "developer",
             "content": self.system_prompt.format(
                 current_date=datetime.now().strftime("%A %Y/%m/%d %H:%M"),
-                customer_name=customer_name,
+                customer_name='',
             ),
         }
 

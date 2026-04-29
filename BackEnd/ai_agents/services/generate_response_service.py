@@ -1,5 +1,6 @@
 import os
 import re
+from datetime import datetime
 from ai_agents.interfaces.agent_interface import IAgent
 from gateway.interfaces.chat_interface import IChat
 from ai_agents.containers.agent_container import AgentContainer
@@ -328,9 +329,31 @@ class GenerateResponseService:
                 agent="response_orchestrator",
             )
 
-        messages: list = self.message_repository.get_latest_customer_messages(
-            customer_id=customer.get("id"), limit=int(os.getenv("CONTEXT_SIZE", "100"))
-        )
+        blocked_until = customer.get("blocked_until")
+        if isinstance(blocked_until, str):
+            blocked_until = datetime.fromisoformat(blocked_until.replace("Z", "+00:00"))
+
+        if blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow():
+            logger.info(
+                "[GENERATE RESPONSE SERVICE] Cliente %s bloqueado até %s. IA não processada.",
+                phone,
+                blocked_until,
+            )
+            return
+
+        active_conversation = self.conversation_repository.get_active_conversation(customer=customer.get("id"))
+        if active_conversation:
+            messages = [
+                msg.to_dict()
+                for msg in self.message_repository.get_recent_context(
+                    str(active_conversation.id),
+                    limit=int(os.getenv("CONTEXT_SIZE", "100")),
+                )
+            ]
+        else:
+            messages: list = self.message_repository.get_latest_customer_messages(
+                customer_id=customer.get("id"), limit=int(os.getenv("CONTEXT_SIZE", "100"))
+            )
 
         context: list[dict] = self._prepare_context(
             context=messages or [],

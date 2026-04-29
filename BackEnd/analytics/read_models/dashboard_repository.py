@@ -17,10 +17,10 @@ class DashboardRepository:
             if end_date:
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
 
-            customer_service = CrmContainer.get_customer_service()
-            customers = customer_service.get_active_customers()
-            total_leads_general = len(customers)
-            filtered_customers = []
+            quote_service = CrmContainer.get_quote_service()
+            quotes = quote_service.list_quotes()
+            total_leads_general = len(quotes)
+            filtered_quotes = []
             upcoming_window_end = datetime.utcnow() + timedelta(days=30)
             occupied_dates = set()
 
@@ -40,17 +40,17 @@ class DashboardRepository:
                 "confirmed_revenue": 0.0,
             }
 
-            for customer in customers:
-                created_at_raw = customer.get("created_at")
+            for quote in quotes:
+                created_at_raw = quote.get("created_at")
                 created_at = datetime.fromisoformat(created_at_raw) if isinstance(created_at_raw, str) else created_at_raw
                 if not created_at or created_at < start_dt or created_at > end_dt:
                     continue
 
-                filtered_customers.append(customer)
+                filtered_quotes.append(quote)
                 day_str = created_at.strftime("%d/%m")
-                stage = customer.get("customer_state_now", "ANALYSIS")
-                quoted_amount = float(customer.get("quoted_amount") or 0)
-                contract_value = float(customer.get("contract_value") or 0)
+                stage = quote.get("status") or quote.get("customer_state_now", "ANALYSIS")
+                quoted_amount = float(quote.get("quoted_amount") or 0)
+                contract_value = float(quote.get("contract_value") or 0)
                 revenue_reference = contract_value or quoted_amount
 
                 daily_stats[day_str]["lead_pipeline"] += 1
@@ -72,7 +72,7 @@ class DashboardRepository:
                 if stage != "LOST":
                     summary["projected_revenue"] += revenue_reference
 
-                event_date_raw = customer.get("event_date")
+                event_date_raw = quote.get("event_date")
                 event_date = datetime.fromisoformat(event_date_raw) if isinstance(event_date_raw, str) and event_date_raw else event_date_raw
                 if event_date and datetime.utcnow() <= event_date <= upcoming_window_end:
                     occupied_dates.add(event_date.date().isoformat())
@@ -91,7 +91,7 @@ class DashboardRepository:
                 projected_revenue_series.append(round(daily_stats[day_str]["projected_revenue"], 2))
                 current_dt += timedelta(days=1)
 
-            total_leads = len(filtered_customers)
+            total_leads = len(filtered_quotes)
             events_confirmed = summary["won"]
             conversion_rate = round((events_confirmed / total_leads) * 100, 2) if total_leads else 0
             interruption_count = max(total_leads - summary["negotiating"] - summary["won"], 0)

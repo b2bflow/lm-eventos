@@ -4,6 +4,9 @@ import api from "@/services/api";
 
 export interface Lead {
   id: string;
+  quote_id?: string;
+  customer?: string;
+  customer_id?: string;
   name: string;
   phone: string;
   customer_state_now: string;
@@ -39,7 +42,7 @@ export const useLeads = () => {
   const { data, isLoading, isError, refetch } = useQuery<LeadsResponse>({
     queryKey: ["leads", page, searchTerm, statusFilter],
     queryFn: async () => {
-      const response = await api.get("/crm/customers/", {
+      const response = await api.get("/crm/quotes/", {
         params: {
           page,
           search: searchTerm || undefined,

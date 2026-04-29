@@ -3,11 +3,13 @@ from crm.services.customer_service import CustomerService
 from crm.interfaces.customer_service_interface import ICustomerService
 from crm.services.log_service import LogService
 from crm.interfaces.log_service_interface import ILogService
+from crm.services.quote_service import QuoteService
 
 
 class CrmContainer:
     _customer_service = None
     _log_service = None
+    _quote_service = None
 
     @classmethod
     def get_customer_service(self) -> ICustomerService:
@@ -31,3 +33,13 @@ class CrmContainer:
             logger.error(f"[CrmContainer] Erro ao instanciar LogService: {e}")
             raise e
 
+    @classmethod
+    def get_quote_service(self) -> QuoteService:
+        try:
+            if not self._quote_service:
+                self._quote_service = QuoteService()
+                logger.info("[CrmContainer] QuoteService instanciado via Container.")
+            return self._quote_service
+        except Exception as e:
+            logger.error(f"[CrmContainer] Erro ao instanciar QuoteService: {e}")
+            raise e

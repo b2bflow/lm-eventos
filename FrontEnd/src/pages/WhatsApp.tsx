@@ -10,12 +10,18 @@ import { socket } from "@/services/socket";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { normalizeChatMessageContent } from "@/lib/chatMessage";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export interface Conversa {
   final_customer_status?: string;
   past_conversations?: { id: string, created_at: string, status: string, final_customer_status?: string }[];
+  past_quotes?: { id: string, created_at: string, status?: string, customer_state_now?: string, event_title?: string | null, quoted_amount?: number, contract_value?: number }[];
   id: string;
   customer: string; 
+  quote_id?: string | null;
   customer_name: string; 
   customer_phone: string; 
   last_message_content: string;
@@ -24,6 +30,16 @@ export interface Conversa {
   tag: string; 
   unread_count?: number;
   customer_status?: string;
+  customer_state_now?: string;
+  celebration_type?: string | null;
+  event_title?: string | null;
+  event_date?: string | null;
+  guest_count?: number;
+  quoted_amount?: number;
+  contract_value?: number;
+  venue?: string | null;
+  notes?: string | null;
+  next_step?: string | null;
   needs_attention?: boolean;
 }
 
@@ -33,6 +49,10 @@ export default function WhatsApp() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditLeadOpen, setIsEditLeadOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
+  const [closeStatus, setCloseStatus] = useState<"WON" | "LOST">("WON");
+  const [closeContractValue, setCloseContractValue] = useState("");
+  const [closeNotes, setCloseNotes] = useState("");
 
   const queryClient = useQueryClient();
 
@@ -125,7 +145,7 @@ export default function WhatsApp() {
   });
 
   const toggleTagMutation = useMutation({
-    mutationFn: async ({ id, newTag }: { id: string, newTag: "AGENTE" | "OPERADOR" }) => {
+    mutationFn: async ({ id, newTag }: { id: string, newTag: string }) => {
       await api.patch(`/chat/conversations/${id}/`, { tag: newTag });
     },
     onSuccess: () => {
@@ -135,13 +155,23 @@ export default function WhatsApp() {
   });
 
   const closeConversationMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await api.patch(`/chat/conversations/${id}/`, { status: "CLOSED" });
+    mutationFn: async ({ id, finalStatus, contractValue, notes }: { id: string, finalStatus: "WON" | "LOST", contractValue?: string, notes?: string }) => {
+      await api.patch(`/chat/conversations/${id}/`, {
+        status: "CLOSED",
+        final_customer_status: finalStatus,
+        contract_value: contractValue ? parseFloat(contractValue) : undefined,
+        notes: notes || undefined,
+      });
     },
     onSuccess: () => {
       toast.success("Conversa finalizada!");
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["leads"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      setIsCloseDialogOpen(false);
       setSelectedConversationId(null);
+      setCloseContractValue("");
+      setCloseNotes("");
     }
   });
 
@@ -161,7 +191,7 @@ export default function WhatsApp() {
     }
   };
 
-  const handleToggleTag = (id: string, currentTag: "AGENTE" | "OPERADOR") => {
+  const handleToggleTag = (id: string, currentTag: string) => {
     const newTag = currentTag === "AGENTE" ? "OPERADOR" : "AGENTE";
     toggleTagMutation.mutate({ id, newTag });
   };
@@ -186,6 +216,16 @@ export default function WhatsApp() {
     api.patch(`/chat/conversations/${id}/`, { needs_attention: false });
   };
 
+  const handleCloseConversation = () => {
+    if (!selectedConversationId) return;
+    closeConversationMutation.mutate({
+      id: selectedConversationId,
+      finalStatus: closeStatus,
+      contractValue: closeContractValue,
+      notes: closeNotes,
+    });
+  };
+
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
       <Sidebar />
@@ -204,7 +244,7 @@ export default function WhatsApp() {
                   name: c.customer_name,
                   lastMessage: normalizeChatMessageContent(c.last_message_content),
                   time: c.last_interaction_at ? new Date(c.last_interaction_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
-                  tag: c.tag as "AGENTE" | "OPERADOR",
+                  tag: c.tag,
                   unread: (c.unread_count || 0) > 0,
                   finished: c.status === "CLOSED",
                   customer_status: c.final_customer_status || c.customer_status,
@@ -235,7 +275,7 @@ export default function WhatsApp() {
                   onToggleProfile={() => setIsProfileOpen(!isProfileOpen)}
                   onBack={() => setSelectedConversationId(null)}
                   isClosed={isClosed}
-                  onCloseConversation={() => closeConversationMutation.mutate(selectedConversationId!)}
+                  onCloseConversation={() => setIsCloseDialogOpen(true)}
                   onOpenConversation={() => openConversationMutation.mutate(selectedConversationId!)} 
                   onLoadHistory={() => setShowFullHistory(true)}
                   isLoadingHistory={isFetchingMessages && showFullHistory} 
@@ -262,7 +302,7 @@ export default function WhatsApp() {
                   }} 
                   onEdit={() => setIsEditLeadOpen(true)}
                   onCloseMobile={() => setIsProfileOpen(false)}
-                  onCloseConversation={() => closeConversationMutation.mutate(selectedConversationId!)}
+                  onCloseConversation={() => setIsCloseDialogOpen(true)}
                   isClosed={isClosed}
                   onSelectConversation={handleSelectConversation} 
                 />
@@ -274,11 +314,69 @@ export default function WhatsApp() {
 
       {selectedConversationObj && (
         <EditLeadDialog 
-          lead={{ ...selectedConversationObj, id: selectedConversationObj.customer }}
+          lead={{
+            ...selectedConversationObj,
+            id: selectedConversationObj.customer,
+            quote_id: selectedConversationObj.quote_id || undefined,
+            name: selectedConversationObj.customer_name,
+            phone: selectedConversationObj.customer_phone,
+          }}
           isOpen={isEditLeadOpen} 
           onClose={() => setIsEditLeadOpen(false)} 
         />
       )}
+
+      <Dialog open={isCloseDialogOpen} onOpenChange={setIsCloseDialogOpen}>
+        <DialogContent className="glass border-border/50 sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>Finalizar Atendimento</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={closeStatus === "WON" ? "default" : "outline"}
+                onClick={() => setCloseStatus("WON")}
+              >
+                Venda
+              </Button>
+              <Button
+                type="button"
+                variant={closeStatus === "LOST" ? "default" : "outline"}
+                onClick={() => setCloseStatus("LOST")}
+              >
+                Perdido
+              </Button>
+            </div>
+
+            {closeStatus === "WON" && (
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Valor fechado"
+                value={closeContractValue}
+                onChange={(event) => setCloseContractValue(event.target.value)}
+              />
+            )}
+
+            <Textarea
+              rows={4}
+              placeholder="Observação de fechamento"
+              value={closeNotes}
+              onChange={(event) => setCloseNotes(event.target.value)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCloseDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCloseConversation} disabled={closeConversationMutation.isPending}>
+              Finalizar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

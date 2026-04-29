@@ -118,18 +118,7 @@ class CustomerRepository(ICustomerRepository):
                     "phone",
                     "agent",
                     "customer_state_now",
-                    "celebration_type",
-                    "event_title",
-                    "event_date",
-                    "guest_count",
-                    "quoted_amount",
-                    "contract_value",
-                    "venue",
-                    "notes",
-                    "proposal_sent_at",
-                    "last_interaction_at",
-                    "next_step",
-                    "customer_custom_tag",
+                    "blocked_until",
                     "new_service"
                 ]:
                     setattr(customer, key, value)

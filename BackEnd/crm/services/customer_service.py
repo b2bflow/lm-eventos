@@ -1,3 +1,4 @@
+import os
 from database.client.mongodb_client import MongoDBClient
 from utils.logger import logger
 from typing import List, Any, Optional
@@ -5,10 +6,13 @@ from datetime import datetime
 from crm.interfaces.customer_service_interface import ICustomerService
 from crm.repositories.customer_repository import CustomerRepository
 from crm.repositories.log_service_repository import ServiceLogRepository
+from chat.models.conversation_model import ConversationModel
+from gateway.adapters.zapi_adapter import ZAPIClient
 
 
 class CustomerService(ICustomerService):
     MANUAL_STAGES = {'WON', 'LOST'}
+    AUTO_STAGES = {'ANALYSIS', 'BUDGET', 'NEGOTIATING'}
     INTERACTION_FIELDS = {'notes', 'last_interaction_at', 'next_step'}
 
     def __init__(self):
@@ -66,6 +70,9 @@ class CustomerService(ICustomerService):
         if current_stage in self.MANUAL_STAGES and requested_stage not in self.MANUAL_STAGES:
             return current_stage
 
+        if requested_stage in self.AUTO_STAGES:
+            return requested_stage
+
         quoted_amount = payload.get('quoted_amount')
         if quoted_amount is None and existing_customer:
             quoted_amount = existing_customer.get('quoted_amount')
@@ -105,6 +112,57 @@ class CustomerService(ICustomerService):
             return {'action_type': 'STAGE_CHANGED', 'description': f'Etapa alterada para {resolved_stage}.'}
 
         return {'action_type': 'LEAD_UPDATED', 'description': 'Dados comerciais do lead atualizados.'}
+
+    def _has_budget_payload(self, data: dict) -> bool:
+        quoted_amount = data.get('quoted_amount')
+        contract_value = data.get('contract_value')
+        return any(value not in (None, '', 0, 0.0) for value in [quoted_amount, contract_value])
+
+    def _build_financial_summary(self, customer: dict) -> str:
+        def value_or_dash(value):
+            return value if value not in (None, '') else '-'
+
+        amount = customer.get('quoted_amount') or customer.get('contract_value') or 0
+        lines = [
+            "*Orçamento definido*",
+            f"Cliente: {value_or_dash(customer.get('name'))}",
+            f"Telefone: {value_or_dash(customer.get('phone'))}",
+            f"Valor: R$ {float(amount or 0):,.2f}",
+            f"Evento/Produto: {value_or_dash(customer.get('event_title') or customer.get('celebration_type'))}",
+            f"Data: {value_or_dash(customer.get('event_date'))}",
+            f"Local: {value_or_dash(customer.get('venue'))}",
+            f"Resumo: {value_or_dash(customer.get('notes'))}",
+            f"Próximo passo: {value_or_dash(customer.get('next_step'))}",
+        ]
+        return "\n".join(lines)
+
+    def _mark_budget_and_notify_finance(self, customer: dict) -> None:
+        try:
+            conversation = ConversationModel.objects(customer=customer.get('id'), status__in=['OPEN', 'IN_PROGRESS']).first()
+            if conversation:
+                conversation.tag = 'orcamento'
+                conversation.ai_active = False
+                conversation.needs_attention = True
+                conversation.save()
+
+            finance_phone = (
+                os.getenv("FINANCE_PHONE")
+                or os.getenv("FINANCEIRO_PHONE")
+                or os.getenv("ADM_PHONE")
+                or os.getenv("REGISTER_PHONE")
+                or ""
+            ).strip()
+
+            if not finance_phone:
+                logger.warning("[CustomerService] FINANCE_PHONE não configurado. Resumo financeiro não enviado.")
+                return
+
+            ZAPIClient().send_message(
+                phone=finance_phone,
+                message=self._build_financial_summary(customer),
+            )
+        except Exception as e:
+            logger.error(f"[CustomerService] Falha ao notificar financeiro: {str(e)}")
 
     def register_customer(self, data: dict, user: Any = None) -> Any:
         try:
@@ -163,6 +221,14 @@ class CustomerService(ICustomerService):
             customer = self.customer_repo.update(id=customer_id, attributes=data)
             if not customer:
                 raise ValueError("Lead não encontrado.")
+
+            if self._has_budget_payload(data):
+                self.customer_repo.update(
+                    id=customer_id,
+                    attributes={"customer_custom_tag": "orcamento"},
+                )
+                customer["customer_custom_tag"] = "orcamento"
+                self._mark_budget_and_notify_finance(customer)
 
             operator_id = str(user.id) if user and hasattr(user, 'id') else None
             log_payload = self._build_log_payload(existing_customer, data, customer['customer_state_now'])
