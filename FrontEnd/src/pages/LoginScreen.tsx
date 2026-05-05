@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import api from '@/services/api';
 
 const Login = () => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +18,7 @@ const Login = () => {
 
     try {
       const response = await api.post('/users/token/', {
-        username,
+        email,
         password
       });
 
@@ -68,18 +68,18 @@ const Login = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 w-full">
-                  <label htmlFor="username" className="text-sm font-medium text-foreground">
-                    E-mail / Usuário
-                  </label>
-                  <input 
-                    type="text" 
-                    id="username" 
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    disabled={isLoading}
-                    className="w-full p-3 rounded-lg border border-input bg-background text-foreground text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  />
+                    <label htmlFor="email" className="text-sm font-medium text-foreground">
+                      E-mail
+                    </label>
+                    <input 
+                      type="email" 
+                      id="email" 
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isLoading}
+                      className="w-full p-3 rounded-lg border border-input bg-background text-foreground text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    />
                 </div>
 
                 <div className="flex flex-col gap-2 w-full">
