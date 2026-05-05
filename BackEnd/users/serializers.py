@@ -1,20 +1,42 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import authenticate
 from users.models import User
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["email"] = serializers.EmailField(write_only=True)
+        del self.fields["username"]
+
     def validate(self, attrs):
+
         email = attrs.get("email")
         password = attrs.get("password")
 
         try:
             user = User.objects.get(email=email)
-            attrs["username"] = user.username
         except User.DoesNotExist:
-            raise serializers.ValidationError("E-mail não encontrado")
+            raise serializers.ValidationError(
+                self.default_error_messages,
+                code="no_active_account",
+            )
 
-        data = super().validate(attrs)
+        self.user = authenticate(username=user.username, password=password)
+
+        if self.user is None:
+            raise serializers.ValidationError(
+                self.default_error_messages,
+                code="no_active_account",
+            )
+
+        refresh = self.get_token(self.user)
+
+        data = {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
         data["username"] = self.user.username
         data["is_admin"] = self.user.is_staff
         return data
