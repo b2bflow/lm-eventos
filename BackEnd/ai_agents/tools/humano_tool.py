@@ -1,7 +1,10 @@
 import asyncio
+from datetime import datetime, timedelta
 from os import getenv
 import os
 from threading import Thread
+from BackEnd.chat.interfaces.conversation_repository_interface import IConversationRepository
+from BackEnd.chat.repositories import conversation_repository
 from ai_agents.interfaces.ai_interface import IAI
 from ai_agents.interfaces.tool_interface import ITool
 from crm.interfaces.customer_repository_interface import ICustomerRepository
@@ -20,10 +23,12 @@ class HumanoTool(ITool, FunctionCallMixin):
         ai_client: IAI,
         chat_client: IChat,
         customer_repository: ICustomerRepository,
+        conversation_repository: IConversationRepository,
     ):
         self.ai = ai_client
         self.chat = chat_client
         self.customer = customer_repository
+        self.conversation = conversation_repository
 
     def sends_unregister_request(self, customer_phone: dict, customer_name: str, arguments: dict) -> None:
         phone = os.getenv("REGISTER_PHONE", "").strip()
@@ -48,6 +53,24 @@ class HumanoTool(ITool, FunctionCallMixin):
             name=customer_name,
             contact_phone=customer_phone or "",
         )
+
+    def _block_customer_and_mark_budget(self, customer: dict) -> None:
+        blocked_until = datetime.utcnow() + timedelta(hours=24)
+
+        self.customer.update(
+            id=customer.get("id"),
+            attributes={
+                "blocked_until": blocked_until,
+                "customer_custom_tag": "operador humano",
+            },
+        )
+
+        conversation = self.conversation.get_active_conversation(customer=customer.get("id"))
+        if conversation:
+            conversation.tag = "operador humano"
+            conversation.ai_active = False
+            conversation.needs_attention = True
+            self.conversation.update_conversation(conversation)
 
     async def execute(
         self,
@@ -106,6 +129,8 @@ class HumanoTool(ITool, FunctionCallMixin):
             id=customer.get("id"),
             attributes={"new_service": True}
         )
+
+        self._block_customer_and_mark_budget(customer)
 
         return [
             {

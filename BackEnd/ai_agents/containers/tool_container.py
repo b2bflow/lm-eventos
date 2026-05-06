@@ -47,6 +47,7 @@ class ToolContainer:
                 ai_client=self._clients.ai(),
                 chat_client=self._clients.chat(),
                 customer_repository=self._repositories.customer,
+                conversation_repository=self._repositories.conversation,
             ),
         }
 
