@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from os import getenv
 import os
 from threading import Thread
-from BackEnd.chat.interfaces.conversation_repository_interface import IConversationRepository
-from BackEnd.chat.repositories import conversation_repository
+from chat.interfaces.conversation_repository_interface import IConversationRepository
+from chat.repositories import conversation_repository
 from ai_agents.interfaces.ai_interface import IAI
 from ai_agents.interfaces.tool_interface import ITool
 from crm.interfaces.customer_repository_interface import ICustomerRepository
