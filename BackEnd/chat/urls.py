@@ -1,5 +1,5 @@
 from django.urls import path
-from chat.controllers.chat_controller import ConversationViewSet, MessageViewSet
+from chat.controllers.chat_controller import ConversationViewSet, MessageFileUploadView, MessageViewSet
 
 # 1. Definimos o que acontece quando batem na rota principal (sem ID)
 conversation_list = ConversationViewSet.as_view({
@@ -35,6 +35,7 @@ urlpatterns = [
     path('conversations/<str:pk>/', conversation_detail, name='conversation-detail'),
     
     path('messages/', message_list, name='message-list'),
+    path('messages/files/', MessageFileUploadView.as_view(), name='message-file-upload'),
     path('messages/<str:pk>/', message_detail, name='message-detail'),
 
     # --- Aliases (Português) ---
@@ -42,5 +43,6 @@ urlpatterns = [
     path('conversas/<str:pk>/', conversation_detail, name='conversa_alias-detail'),
     
     path('mensagens/', message_list, name='mensagem_alias-list'),
+    path('mensagens/arquivos/', MessageFileUploadView.as_view(), name='mensagem-file-upload-alias'),
     path('mensagens/<str:pk>/', message_detail, name='mensagem_alias-detail'),
 ]

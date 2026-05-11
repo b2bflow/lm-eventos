@@ -6,7 +6,7 @@ from crm.models.custumer_model import Customer
 
 
 class QuoteRepository:
-    ACTIVE_STATUSES = ["ANALYSIS", "BUDGET", "NEGOTIATING"]
+    ACTIVE_STATUSES = ["ANALYSIS", "BUDGET", "NEGOTIATING", "WON", "LOST", "WAITING_BUDGET"]
 
     def create(self, customer, attributes: dict | None = None) -> dict:
         quote = Quote(customer=customer)

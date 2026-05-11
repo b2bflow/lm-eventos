@@ -10,6 +10,7 @@ export interface DashboardMetrics {
   total_leads: number;
   analysis_count: number;
   budget_count: number;
+  waiting_budget_count: number;
   negotiating_count: number;
   events_confirmed: number;
   lost_count: number;

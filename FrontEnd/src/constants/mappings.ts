@@ -1,6 +1,7 @@
 export const LEAD_STATUS_LABELS: Record<string, string> = {
   ANALYSIS: "Análise",
-  BUDGET: "Orçamento",
+  BUDGET: "Orçamento Enviado",
+  WAITING_BUDGET: "Orçamento Pendente",
   NEGOTIATING: "Negociando",
   WON: "Venda",
   LOST: "Perdido",
@@ -9,6 +10,7 @@ export const LEAD_STATUS_LABELS: Record<string, string> = {
 export const LEAD_STATUS_STYLES: Record<string, string> = {
   ANALYSIS: "bg-slate-500/10 text-slate-600 border-slate-500/20",
   BUDGET: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  WAITING_BUDGET: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
   NEGOTIATING: "bg-sky-500/10 text-sky-600 border-sky-500/20",
   WON: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
   LOST: "bg-rose-500/10 text-rose-600 border-rose-500/20",
@@ -16,6 +18,7 @@ export const LEAD_STATUS_STYLES: Record<string, string> = {
 
 export const LEAD_STATUS_OPTIONS = [
   "ANALYSIS",
+  "WAITING_BUDGET",
   "BUDGET",
   "NEGOTIATING",
   "WON",

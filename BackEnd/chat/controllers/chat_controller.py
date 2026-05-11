@@ -1,6 +1,11 @@
 from utils.logger import logger
+import os
+from django.conf import settings
+from django.core.files.uploadhandler import MemoryFileUploadHandler
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_mongoengine.viewsets import ModelViewSet
 
 from chat.container import ChatContainer
@@ -122,4 +127,71 @@ class MessageViewSet(ModelViewSet):
             return Response(
                 {"detail": "Erro interno ao processar solicitação."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class MessageFileUploadView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, *args, **kwargs) -> Response:
+        try:
+            max_upload_mb = int(os.getenv("CHAT_FILE_UPLOAD_MAX_MB", "15"))
+            configured_max_bytes = max_upload_mb * 1024 * 1024
+            django_memory_limit = getattr(settings, "FILE_UPLOAD_MAX_MEMORY_SIZE", configured_max_bytes)
+            max_upload_bytes = min(configured_max_bytes, django_memory_limit)
+            effective_max_mb = max_upload_bytes // (1024 * 1024)
+
+            if request.META.get("CONTENT_LENGTH"):
+                content_length = int(request.META["CONTENT_LENGTH"])
+                if content_length > max_upload_bytes:
+                    return Response(
+                        {"detail": f"Arquivo excede o limite de {effective_max_mb}MB."},
+                        status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    )
+
+            request._request.upload_handlers = [
+                MemoryFileUploadHandler(request._request)
+            ]
+
+            conversation_id = request.data.get("conversation_id")
+            uploaded_file = request.FILES.get("file")
+            caption = request.data.get("caption") or None
+
+            if not conversation_id or not uploaded_file:
+                return Response(
+                    {"detail": "conversation_id e file são obrigatórios."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if uploaded_file.size > max_upload_bytes:
+                return Response(
+                    {"detail": f"Arquivo excede o limite de {effective_max_mb}MB."},
+                    status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                )
+
+            message_service = ChatContainer.get_message_service()
+            message = message_service.execute_operator_file(
+                conversation_id=conversation_id,
+                uploaded_file=uploaded_file,
+                sender_id=str(request.user.id) if request.user else "SYSTEM",
+                caption=caption,
+            )
+
+            return Response(
+                {
+                    "status": "sent",
+                    "message_id": str(message.id),
+                    "external_id": message.external_id,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        except ValueError as ve:
+            return Response({"detail": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            logger.error(f"[ChatController] File upload error: {e}")
+            return Response(
+                {"detail": "Erro interno ao enviar arquivo."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

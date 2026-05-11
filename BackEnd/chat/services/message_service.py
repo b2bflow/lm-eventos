@@ -1,4 +1,5 @@
 import ast
+import mimetypes
 import os
 import re
 from time import sleep
@@ -127,18 +128,15 @@ class MessageService(IMessageService):
     def _determine_agent_flow(self, vals, phone, customer):
         """Define qual agente usar e se deve atualizar tag."""
 
-        print("entrou aquii pohhaa")
-
         if vals[0]:
-            if vals[1] == "1" or vals[1] == "11":
+            if vals[1] == "1" or vals[1] == "13":
                 msg_text = "Sobre o que você gostaria de falar? Selecione uma das opções abaixo:"
 
                 buttons = [
-                    {"id": "5", "label": "Falar com a Erica"},
-                    {"id": "6", "label": "Evento Social"},
-                    {"id": "7", "label": "Evento Corporativo"},
-                    {"id": "8", "label": "Estrutura para Eventos"},
-                    {"id": "9", "label": "Produto Unico"},
+                    {"id": "5", "label": "Evento Social"},
+                    {"id": "6", "label": "Evento Corporativo"},
+                    {"id": "7", "label": "Estrutura Ground/Box Trans"},
+                    {"id": "8", "label": "Locação de Produto Único"},
                 ]
 
                 self.chat.send_message_with_button(
@@ -146,37 +144,20 @@ class MessageService(IMessageService):
                 )
 
                 return True
-
+            
             if vals[1] == "5":
-                erica_phone = os.getenv("ERICA_PHONE")
-                self.chat.send_message(
-                    phone=phone, message="Encaminhando para a Erica, aguarde um momento...")
-
-                self.chat.send_contact(
-                    phone=erica_phone,
-                    name=customer.get("name"),
-                    contact_phone=phone,
-                )
-
-                sleep(2)
+                msg_text = "Qual formato de evento social você deseja realizar? Selecione uma das opções abaixo:"
 
                 buttons = [
-                    {"id": "11", "label": "Sim, quero continuar!"},
-                    {"id": "12", "label": "Não, obrigado!"},
+                    {"id": "9", "label": "Casamento"},
+                    {"id": "10", "label": "Aniversário"},
+                    {"id": "11", "label": "Formatura"},
+                    {"id": "12", "label": "Debutante"},
+                    {"id": "13", "label": "Voltar para menu"},
                 ]
-
-                msg_text = "A Erica já recebeu seu contato e irá falar com você em breve. Enquanto isso, posso ajudar com mais alguma coisa?"
 
                 self.chat.send_message_with_button(
                     phone=phone, message=msg_text, buttons=buttons
-                )
-
-                self.message_repo.create(
-                    role="assistant",
-                    content=msg_text,
-                    direction="OUTGOING",
-                    conversation=None,
-                    raw_metadata={"buttons": buttons}
                 )
 
                 return True
@@ -307,7 +288,18 @@ class MessageService(IMessageService):
             logger.error(f"[MessageService] Erro ao processar mensagem recebida: {e}")
             raise e
 
-    def _save_and_notify(self, conversation_id: str, content: str, direction: str, sender_role: str, external_id: str = None, raw_metadata: dict = None) -> Any:
+    def _save_and_notify(
+        self,
+        conversation_id: str,
+        content: str,
+        direction: str,
+        sender_role: str,
+        external_id: str = None,
+        raw_metadata: dict = None,
+        message_type: str = "text",
+        media_url: str = None,
+        status: str = "QUEUED",
+    ) -> Any:
         try:
             conversation = self.conversation_repo.get_by_id(conversation_id)
             if not conversation:
@@ -319,7 +311,10 @@ class MessageService(IMessageService):
                 content=content,
                 role=sender_role,
                 external_id=external_id,
-                raw_metadata=raw_metadata
+                raw_metadata=raw_metadata,
+                message_type=message_type,
+                media_url=media_url,
+                status=status,
             )
 
             self.socket_adapter.emit_new_message({
@@ -328,6 +323,9 @@ class MessageService(IMessageService):
                 "content": content,
                 "direction": direction,
                 "role": sender_role,
+                "message_type": message_type,
+                "media_url": media_url,
+                "raw_metadata": raw_metadata or {},
                 "created_at": message.created_at.isoformat()
             })
 
@@ -371,6 +369,68 @@ class MessageService(IMessageService):
 
     def execute_operator_message(self, conversation_id: str, content: str, sender_id: str):
         return self._process_outgoing_message(conversation_id, content, "OPERATOR", sender_id)
+
+    def execute_operator_file(
+        self,
+        conversation_id: str,
+        uploaded_file,
+        sender_id: str,
+        caption: str | None = None,
+    ):
+        conversation = self.conversation_repo.get_by_id(conversation_id)
+        if not conversation:
+            raise ValueError("Conversa não encontrada.")
+
+        if not getattr(conversation, "customer", None) or not getattr(conversation.customer, "phone", None):
+            raise ValueError("Conversa sem telefone válido.")
+
+        filename = os.path.basename(getattr(uploaded_file, "name", "arquivo"))
+        content_type = (
+            getattr(uploaded_file, "content_type", None)
+            or mimetypes.guess_type(filename)[0]
+            or "application/octet-stream"
+        )
+        size = getattr(uploaded_file, "size", None)
+        file_bytes = b"".join(uploaded_file.chunks())
+
+        zapi_response = self.chat.send_file_bytes(
+            phone=conversation.customer.phone,
+            file_bytes=file_bytes,
+            filename=filename,
+            content_type=content_type,
+            caption=caption,
+        )
+        send_target = zapi_response.get("send_target", {})
+        message_type = send_target.get("message_type", "file")
+
+        external_id = zapi_response.get("messageId") or zapi_response.get("id")
+        content = caption or f"[Arquivo] {filename}"
+        metadata = {
+            "operator_id": sender_id,
+            "file_name": filename,
+            "content_type": content_type,
+            "size": size,
+            "send_endpoint": send_target.get("endpoint"),
+            "payload_key": send_target.get("payload_key"),
+            "zapi_response": zapi_response,
+        }
+
+        message = self._save_and_notify(
+            conversation_id=conversation_id,
+            content=content,
+            direction="OUTGOING",
+            sender_role="OPERATOR",
+            external_id=external_id,
+            raw_metadata=metadata,
+            message_type=message_type,
+            status="SENT_TO_GATEWAY",
+        )
+
+        conversation.last_message_content = content
+        conversation.updated_at = datetime.now()
+        self.conversation_repo.update_conversation(conversation)
+
+        return message
 
     def execute_bot_message(self, conversation_id: str, content: str):
         return self._process_outgoing_message(conversation_id, content, "assistant")

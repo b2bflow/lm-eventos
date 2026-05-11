@@ -39,7 +39,9 @@ class SummaryTool(ITool, FunctionCallMixin):
 
         for fmt in (
             "%d/%m/%Y %H:%M",
+            "%d/%m/%y %H:%M",
             "%d/%m/%Y",
+            "%d/%m/%y",
             "%Y-%m-%d %H:%M:%S",
             "%Y-%m-%d",
         ):
@@ -61,13 +63,32 @@ class SummaryTool(ITool, FunctionCallMixin):
         return int(match.group()) if match else 0
 
     def _build_notes(self, arguments: dict) -> str:
+        dedicated_fields = {"horario_evento", "hora_evento", "event_time"}
         lines = []
         for key, value in arguments.items():
-            if not value:
+            if not value or key in dedicated_fields:
                 continue
             label = key.replace("_", " ").capitalize()
             lines.append(f"{label}: {value}")
         return "\n".join(lines)
+
+    def _get_event_time(self, arguments: dict) -> str | None:
+        value = (
+            arguments.get("horario_evento")
+            or arguments.get("hora_evento")
+            or arguments.get("event_time")
+        )
+
+        if value in (None, ""):
+            return None
+
+        normalized = str(value).strip().lower().replace("h", ":")
+        if normalized.isdigit():
+            return f"{int(normalized):02d}:00"
+        if normalized.endswith(":"):
+            return f"{normalized}00"
+
+        return normalized
 
     def _build_customer_attributes(self, customer: dict, arguments: dict) -> dict:
         notes = self._build_notes(arguments)
@@ -76,6 +97,7 @@ class SummaryTool(ITool, FunctionCallMixin):
         if "tipo_evento" in arguments:
             return {
                 "event_date": self._parse_datetime(arguments.get("data_evento")),
+                "event_time": self._get_event_time(arguments),
                 "guest_count": self._parse_guest_count(arguments.get("numero_pessoas")),
                 "celebration_type": arguments.get("tipo_evento"),
                 "event_title": arguments.get("tipo_evento"),
@@ -89,6 +111,7 @@ class SummaryTool(ITool, FunctionCallMixin):
             produto = arguments.get("produto")
             return {
                 "event_date": self._parse_datetime(arguments.get("data_inicio")),
+                "event_time": self._get_event_time(arguments),
                 "celebration_type": "Locação de produto",
                 "event_title": produto,
                 "venue": arguments.get("local"),
@@ -169,7 +192,7 @@ class SummaryTool(ITool, FunctionCallMixin):
         )
 
         customer_attributes = self._build_customer_attributes(customer, arguments)
-        customer_attributes["status"] = "ANALYSIS"
+        customer_attributes["status"] = "WAITING_BUDGET"
 
         self._block_customer_and_mark_budget(customer)
         active_quote = self.quote_service.get_or_create_active_quote_for_customer(

@@ -34,11 +34,13 @@ export interface Conversa {
   celebration_type?: string | null;
   event_title?: string | null;
   event_date?: string | null;
+  event_time?: string | null;
   guest_count?: number;
   quoted_amount?: number;
   contract_value?: number;
   venue?: string | null;
   notes?: string | null;
+  operator_requests?: string | null;
   next_step?: string | null;
   needs_attention?: boolean;
 }
@@ -85,6 +87,9 @@ export default function WhatsApp() {
         content: normalizeChatMessageContent(msg.content),
         direction: msg.direction,
         role: msg.role,
+        message_type: msg.message_type,
+        media_url: msg.media_url,
+        raw_metadata: msg.raw_metadata,
         created_at: msg.created_at,
         time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
         conversation: msg.conversation_id || msg.conversation
@@ -144,6 +149,25 @@ export default function WhatsApp() {
     onError: () => toast.error("Falha ao enviar mensagem.")
   });
 
+  const sendFileMutation = useMutation({
+    mutationFn: async ({ conversationId, file }: { conversationId: string, file: File }) => {
+      const formData = new FormData();
+      formData.append("conversation_id", conversationId);
+      formData.append("file", file);
+
+      await api.post("/chat/messages/files/", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    },
+    onMutate: () => setIsSending(true),
+    onSettled: () => setIsSending(false),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId, showFullHistory] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+    onError: () => toast.error("Falha ao enviar arquivo.")
+  });
+
   const toggleTagMutation = useMutation({
     mutationFn: async ({ id, newTag }: { id: string, newTag: string }) => {
       await api.patch(`/chat/conversations/${id}/`, { tag: newTag });
@@ -188,6 +212,12 @@ export default function WhatsApp() {
   const handleSendMessage = (message: string) => {
     if (selectedConversationId) {
       sendMessageMutation.mutate({ conversationId: selectedConversationId, message });
+    }
+  };
+
+  const handleSendFile = (file: File) => {
+    if (selectedConversationId) {
+      sendFileMutation.mutate({ conversationId: selectedConversationId, file });
     }
   };
 
@@ -268,7 +298,9 @@ export default function WhatsApp() {
                   conversationData={{ name: selectedConversationObj.customer_name || "Desconhecido", phone: selectedConversationObj.customer_phone || "Sem Número" }}
                   messages={messages}
                   onSendMessage={handleSendMessage}
+                  onSendFile={handleSendFile}
                   isSending={isSending}
+                  isUploadingFile={sendFileMutation.isPending}
                   isAIActive={selectedConversationObj.tag === "AGENTE"}
                   onToggleAI={(mode) => handleToggleTag(selectedConversationId, mode === "AGENTE" ? "OPERADOR" : "AGENTE")}
                   isProfileOpen={isProfileOpen}
@@ -360,13 +392,6 @@ export default function WhatsApp() {
                 onChange={(event) => setCloseContractValue(event.target.value)}
               />
             )}
-
-            <Textarea
-              rows={4}
-              placeholder="Observação de fechamento"
-              value={closeNotes}
-              onChange={(event) => setCloseNotes(event.target.value)}
-            />
           </div>
 
           <DialogFooter>

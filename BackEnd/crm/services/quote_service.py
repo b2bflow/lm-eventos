@@ -14,17 +14,19 @@ from gateway.adapters.zapi_adapter import ZAPIClient
 
 class QuoteService:
     MANUAL_STAGES = {"WON", "LOST"}
-    AUTO_STAGES = {"ANALYSIS", "BUDGET", "NEGOTIATING"}
+    AUTO_STAGES = {"ANALYSIS", "BUDGET", "NEGOTIATING", "WAITING_BUDGET"}
     INTERACTION_FIELDS = {"notes", "last_interaction_at", "next_step"}
     QUOTE_FIELDS = {
         "celebration_type",
         "event_title",
         "event_date",
+        "event_time",
         "guest_count",
         "quoted_amount",
         "contract_value",
         "venue",
         "notes",
+        "operator_requests",
         "proposal_sent_at",
         "last_interaction_at",
         "next_step",
@@ -47,12 +49,28 @@ class QuoteService:
             try:
                 return datetime.fromisoformat(cleaned)
             except ValueError:
-                for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
+                for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y", "%d/%m/%y"):
                     try:
                         return datetime.strptime(value, fmt)
                     except ValueError:
                         continue
         raise ValueError("Data inválida informada.")
+
+    def _parse_time(self, value):
+        if value in (None, ""):
+            return None
+
+        cleaned = str(value).strip().lower().replace("h", ":")
+        if cleaned.endswith(":"):
+            cleaned = f"{cleaned}00"
+
+        for fmt in ("%H:%M", "%H:%M:%S"):
+            try:
+                return datetime.strptime(cleaned, fmt).strftime("%H:%M")
+            except ValueError:
+                continue
+
+        raise ValueError("Horário inválido informado.")
 
     def normalize_quote_data(self, data: dict) -> dict:
         data = dict(data or {})
@@ -71,6 +89,9 @@ class QuoteService:
         for field in datetime_fields:
             if field in data:
                 data[field] = self._parse_datetime(data[field]) if data[field] else None
+
+        if "event_time" in data:
+            data["event_time"] = self._parse_time(data["event_time"])
 
         return data
 
@@ -106,6 +127,8 @@ class QuoteService:
             return "NEGOTIATING"
         if has_budget:
             return "BUDGET"
+        if has_interaction:
+            return "WAITING_BUDGET"
         return "ANALYSIS"
 
     def _customer_document(self, customer_id: str):
@@ -135,11 +158,13 @@ class QuoteService:
             "celebration_type": customer.get("celebration_type"),
             "event_title": customer.get("event_title"),
             "event_date": self._parse_datetime(customer.get("event_date")) if customer.get("event_date") else None,
+            "event_time": self._parse_time(customer.get("event_time")) if customer.get("event_time") else None,
             "guest_count": customer.get("guest_count") or 0,
             "quoted_amount": customer.get("quoted_amount") or 0,
             "contract_value": customer.get("contract_value") or 0,
             "venue": customer.get("venue"),
             "notes": customer.get("notes"),
+            "operator_requests": customer.get("operator_requests"),
             "proposal_sent_at": self._parse_datetime(customer.get("proposal_sent_at")) if customer.get("proposal_sent_at") else None,
             "last_interaction_at": self._parse_datetime(customer.get("last_interaction_at")) if customer.get("last_interaction_at") else None,
             "next_step": customer.get("next_step"),
@@ -147,8 +172,16 @@ class QuoteService:
 
     def _has_budget_payload(self, data: dict) -> bool:
         quoted_amount = data.get("quoted_amount")
-        contract_value = data.get("contract_value")
-        return any(value not in (None, "", 0, 0.0) for value in [quoted_amount, contract_value])
+        return quoted_amount not in (None, "", 0, 0.0)
+
+    def _budget_was_first_filled(self, existing_quote: dict, payload: dict) -> bool:
+        if "quoted_amount" not in payload:
+            return False
+
+        previous_amount = existing_quote.get("quoted_amount")
+        new_amount = payload.get("quoted_amount")
+
+        return previous_amount in (None, "", 0, 0.0) and new_amount not in (None, "", 0, 0.0)
 
     def _build_financial_summary(self, quote: dict) -> str:
         def value_or_dash(value):
@@ -163,8 +196,10 @@ class QuoteService:
                 f"Valor: R$ {float(amount or 0):,.2f}",
                 f"Evento/Produto: {value_or_dash(quote.get('event_title') or quote.get('celebration_type'))}",
                 f"Data: {value_or_dash(quote.get('event_date'))}",
+                f"Horário: {value_or_dash(quote.get('event_time'))}",
                 f"Local: {value_or_dash(quote.get('venue'))}",
                 f"Resumo: {value_or_dash(quote.get('notes'))}",
+                f"Solicitações da Erica: {value_or_dash(quote.get('operator_requests'))}",
                 f"Próximo passo: {value_or_dash(quote.get('next_step'))}",
             ]
         )
@@ -181,6 +216,16 @@ class QuoteService:
             self.customer_repo.update(
                 id=quote["customer_id"],
                 attributes={"customer_custom_tag": "orcamento", "updated_at": datetime.utcnow()},
+            )
+
+            self.customer_repo.update(
+                id=quote["customer_id"],
+                attributes={"customer_state_now": "BUDGET", "updated_at": datetime.utcnow()},
+            )
+
+            self.quote_repo.update(
+                quote_id=quote["id"],
+                attributes={"status": "BUDGET", "updated_at": datetime.utcnow()}
             )
 
             finance_phone = (
@@ -210,7 +255,7 @@ class QuoteService:
         customer = customer_doc.to_dict()
         has_commercial_data = any(
             customer.get(field) not in (None, "", 0, 0.0)
-            for field in ["celebration_type", "event_title", "event_date", "guest_count", "quoted_amount", "contract_value", "venue", "notes"]
+            for field in ["celebration_type", "event_title", "event_date", "event_time", "guest_count", "quoted_amount", "contract_value", "venue", "notes"]
         )
         if not has_commercial_data:
             return None
@@ -259,11 +304,15 @@ class QuoteService:
         }
         if data.get("name") not in (None, ""):
             customer_updates["name"] = data.get("name")
+
         if data.get("phone") not in (None, ""):
             customer_updates["phone"] = data.get("phone")
+
         self.customer_repo.update(id=updated["customer_id"], attributes=customer_updates)
-        if self._has_budget_payload(data):
+
+        if self._budget_was_first_filled(existing_quote, data):
             self._mark_budget_and_notify_finance(updated)
+
         return updated
 
     def close_quote(self, quote_id: str, status_value: str, data: dict | None = None, user: Any = None) -> dict:

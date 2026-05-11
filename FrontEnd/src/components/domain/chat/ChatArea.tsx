@@ -12,6 +12,12 @@ export interface Message {
     content: string;
     direction: "INCOMING" | "OUTGOING";
     role: string;
+    message_type?: "text" | "image" | "audio" | "video" | "file";
+    raw_metadata?: {
+        file_name?: string;
+        content_type?: string;
+        size?: number;
+    };
     created_at: string; 
     time: string; 
     conversation?: string;
@@ -22,7 +28,9 @@ interface ChatAreaProps {
     conversationData?: { name: string; phone: string };
     messages: Message[];
     onSendMessage: (message: string) => void;
+    onSendFile?: (file: File) => void;
     isSending?: boolean;
+    isUploadingFile?: boolean;
     isAIActive: boolean; 
     onToggleAI: (mode: "AGENTE" | "OPERADOR") => void;
     isProfileOpen: boolean;
@@ -42,7 +50,9 @@ export function ChatArea({
     conversationData, 
     messages, 
     onSendMessage, 
+    onSendFile,
     isSending, 
+    isUploadingFile,
     isAIActive, 
     onToggleAI, 
     isProfileOpen, 
@@ -57,6 +67,7 @@ export function ChatArea({
 }: ChatAreaProps) {
     const [inputValue, setInputValue] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Ajuste: Só rola para baixo se não estiver carregando histórico antigo, 
     // para evitar que a tela pule pro final quando o usuário carregar mensagens velhas.
@@ -77,6 +88,14 @@ export function ChatArea({
             e.preventDefault();
             handleSend();
         }
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+
+        if (!file || isClosed || isUploadingFile) return;
+        onSendFile?.(file);
     };
 
     const formatMessageDate = (dateString: string) => {
@@ -207,7 +226,21 @@ export function ChatArea({
                                             <span className="text-[10px] uppercase font-bold">Agente IA</span>
                                         </div>
                                     )}
-                                    <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+                                    {["file", "image", "audio", "video"].includes(msg.message_type || "") ? (
+                                        <div className="text-sm leading-relaxed">
+                                            <div className="flex items-center gap-2 font-medium">
+                                                <Paperclip className="h-4 w-4 shrink-0" />
+                                                <span className="break-all">
+                                                    {msg.raw_metadata?.file_name || msg.content.replace("[Arquivo] ", "")}
+                                                </span>
+                                            </div>
+                                            {msg.content && !msg.content.startsWith("[Arquivo]") && (
+                                                <p className="mt-1 whitespace-pre-wrap break-words opacity-80">{msg.content}</p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+                                    )}
                                     <span className={cn(
                                         "text-[10px] mt-1.5 block font-medium opacity-60 text-right",
                                         isIncoming ? "text-muted-foreground" : "text-white/80"
@@ -224,7 +257,24 @@ export function ChatArea({
 
             <div className="p-3 sm:p-4 bg-background/50 border-t border-border/50 shrink-0">
                 <div className="bg-card/50 border border-border/50 rounded-xl p-1 flex items-center gap-2 shadow-inner">
-                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary shrink-0"><Paperclip className="w-5 h-5" /></Button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        onChange={handleFileChange}
+                        disabled={isClosed || isUploadingFile}
+                    />
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isClosed || isUploadingFile || !onSendFile}
+                        className="text-muted-foreground hover:text-primary shrink-0"
+                        title="Anexar arquivo"
+                    >
+                        {isUploadingFile ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                    </Button>
                     <Input
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}

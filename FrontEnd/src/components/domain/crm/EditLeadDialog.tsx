@@ -22,11 +22,13 @@ interface LeadData {
   celebration_type?: string | null;
   event_title?: string | null;
   event_date?: string | null;
+  event_time?: string | null;
   guest_count?: number;
   quoted_amount?: number;
   contract_value?: number;
   venue?: string | null;
   notes?: string | null;
+  operator_requests?: string | null;
   next_step?: string | null;
 }
 
@@ -44,11 +46,13 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
     celebration_type: "",
     event_title: "",
     event_date: "",
+    event_time: "",
     guest_count: 0,
     quoted_amount: "",
     contract_value: "",
     venue: "",
     notes: "",
+    operator_requests: "",
     next_step: "",
   });
   
@@ -63,11 +67,13 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
         celebration_type: lead.celebration_type || "",
         event_title: lead.event_title || "",
         event_date: lead.event_date ? lead.event_date.slice(0, 10) : "",
+        event_time: lead.event_time || "",
         guest_count: lead.guest_count || 0,
         quoted_amount: lead.quoted_amount ? String(lead.quoted_amount) : "",
         contract_value: lead.contract_value ? String(lead.contract_value) : "",
         venue: lead.venue || "",
         notes: lead.notes || "",
+        operator_requests: lead.operator_requests || "",
         next_step: lead.next_step || "",
       });
     }
@@ -80,6 +86,7 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
       const { data } = await api.patch(endpoint, {
         ...formData,
         event_date: formData.event_date || undefined,
+        event_time: formData.event_time || undefined,
         guest_count: Number(formData.guest_count || 0),
         quoted_amount: formData.quoted_amount ? parseFloat(formData.quoted_amount) : 0,
         contract_value: formData.contract_value ? parseFloat(formData.contract_value) : 0,
@@ -151,13 +158,22 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label>Data do Evento</Label>
               <Input 
                 type="date"
                 value={formData.event_date} 
                 onChange={(e) => setFormData({...formData, event_date: e.target.value})} 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Horário</Label>
+              <Input
+                type="time"
+                value={formData.event_time}
+                onChange={(e) => setFormData({...formData, event_time: e.target.value})}
               />
             </div>
 
@@ -221,19 +237,22 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Próximo Passo</Label>
-              <Input 
-                value={formData.next_step} 
-                onChange={(e) => setFormData({...formData, next_step: e.target.value})} 
+          <div className="flex">
+            <div className="w-full">
+              <Label>Solicitações da Erica</Label>
+              <Textarea
+                rows={8}
+                value={formData.operator_requests}
+                onChange={(e) => setFormData({...formData, operator_requests: e.target.value})}
               />
             </div>
+          </div>
 
-            <div className="space-y-2">
+          <div className="flex">
+            <div className="w-full">
               <Label>Notas da Negociação</Label>
               <Textarea 
-                rows={4}
+                rows={5}
                 value={formData.notes} 
                 onChange={(e) => setFormData({...formData, notes: e.target.value})} 
               />

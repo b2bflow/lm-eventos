@@ -21,6 +21,7 @@ class Customer(Document):
     STATE_CHOICES = (
         ('ANALYSIS', 'Analise'),
         ('BUDGET', 'Orcamento'),
+        ('WAITING_BUDGET', 'Aguardando Orcamento'),
         ('NEGOTIATING', 'Negociando'),
         ('WON', 'Venda'),
         ('LOST', 'Perdido'),

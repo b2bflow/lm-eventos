@@ -45,6 +45,7 @@ const getStatusDisplay = (status: string | undefined) => {
     case 'ANALYSIS': return { label: 'Análise', color: 'text-slate-600 bg-slate-500/10 border-slate-500/20' };
     case 'BUDGET': return { label: 'Orçamento', color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' };
     case 'NEGOTIATING': return { label: 'Negociando', color: 'text-sky-600 bg-sky-500/10 border-sky-500/20' };
+    case 'WAITING_BUDGET': return { label: 'Orçamento Pendente', color: 'text-yellow-600 bg-yellow-500/10 border-yellow-500/20' };
     case 'WON': return { label: 'Venda', color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20' };
     case 'LOST': return { label: 'Perdido', color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' };
     default: return { label: 'Análise', color: 'text-slate-600 bg-slate-500/10 border-slate-500/20' };

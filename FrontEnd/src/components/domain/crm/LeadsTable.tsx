@@ -20,9 +20,11 @@ interface Lead {
   celebration_type?: string | null;
   event_title?: string | null;
   event_date?: string | null;
+  event_time?: string | null;
   guest_count?: number;
   quoted_amount?: number;
   contract_value?: number;
+  operator_requests?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -86,6 +88,7 @@ export function LeadsTable({ data, isLoading, onEdit, onDelete }: LeadsTableProp
                     <span className="flex items-center gap-1">
                       <CalendarDays className="w-3.5 h-3.5" />
                       {lead.event_date ? new Date(lead.event_date).toLocaleDateString() : "Sem data"}
+                      {lead.event_time ? ` às ${lead.event_time}` : ""}
                     </span>
                     <span className="flex items-center gap-1">
                       <Users className="w-3.5 h-3.5" />

@@ -124,11 +124,11 @@ const Leads = () => {
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <Badge variant="outline" className="gap-1">
                     <TrendingUp className="w-3 h-3" />
-                    Venda e Perdido são definidos manualmente
+                    Análise, Orçamento Pendente e Orçamento atualizam automaticamente
                   </Badge>
                   <Badge variant="outline" className="gap-1">
                     <CalendarRange className="w-3 h-3" />
-                    Análise, Orçamento e Negociando atualizam automaticamente
+                    Negociando, Venda e Perdido são definidos manualmente
                   </Badge>
                 </div>
               </div>

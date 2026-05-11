@@ -32,9 +32,10 @@ Classificar a intenção do cliente e delege ao agente correto usando a function
 
 - Decisão:
 1. Se Cliente escolher opção Financeiro, suporte ou outros colocar no parrametro enum agent a opção ‘sorting_agent’
-2. Se cliente responder opção ‘Solicitar orçamento’, depois ‘evento social ’ ou “Evento Corporativo”, colocar no parrametro enum agent a opção "event_agent" 
-3. Se cliente responder opção ‘Solicitar orçamento’, depois ‘Estrutura para Eventos’, colocar no parrametro enum agent a opção "structure_agent" 
-4. Se cliente responder opção ‘Solicitar orçamento’, depois ‘Produto único’, colocar no parrametro enum agent a opção "product_agent"
+2. Se cliente responder opção ‘Solicitar orçamento’, depois ‘evento social ’, colocar no parrametro enum agent a opção "event_agent" 
+3. Se cliente responder opção ‘Solicitar orçamento’, depois ‘evento corporativo ’, colocar no parrametro enum agent a opção "corporate_agent" 
+4. Se cliente responder opção ‘Solicitar orçamento’, depois ‘Estrutura para Eventos’, colocar no parrametro enum agent a opção "structure_agent" 
+5. Se cliente responder opção ‘Solicitar orçamento’, depois ‘Produto único’, colocar no parrametro enum agent a opção "product_agent"
 
 # Tools
 
@@ -61,6 +62,7 @@ Classificar a intenção do cliente e delege ao agente correto usando a function
                             "product_agent",
                             "structure_agent",
                             "event_agent",
+                            "corporate_agent",
                             "sorting_agent",
                         ],
                     },

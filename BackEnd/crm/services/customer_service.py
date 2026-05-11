@@ -129,7 +129,6 @@ class CustomerService(ICustomerService):
             f"Telefone: {value_or_dash(customer.get('phone'))}",
             f"Valor: R$ {float(amount or 0):,.2f}",
             f"Evento/Produto: {value_or_dash(customer.get('event_title') or customer.get('celebration_type'))}",
-            f"Data: {value_or_dash(customer.get('event_date'))}",
             f"Local: {value_or_dash(customer.get('venue'))}",
             f"Resumo: {value_or_dash(customer.get('notes'))}",
             f"Próximo passo: {value_or_dash(customer.get('next_step'))}",

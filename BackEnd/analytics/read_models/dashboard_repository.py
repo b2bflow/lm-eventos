@@ -32,6 +32,7 @@ class DashboardRepository:
 
             summary = {
                 "analysis": 0,
+                "waiting_budget": 0,
                 "budget": 0,
                 "negotiating": 0,
                 "won": 0,
@@ -60,6 +61,8 @@ class DashboardRepository:
                     summary["analysis"] += 1
                 elif stage == "BUDGET":
                     summary["budget"] += 1
+                elif stage == "WAITING_BUDGET":
+                    summary["waiting_budget"] += 1
                 elif stage == "NEGOTIATING":
                     summary["negotiating"] += 1
                 elif stage == "WON":
@@ -108,6 +111,7 @@ class DashboardRepository:
                 "total_leads": total_leads,
                 "analysis_count": summary["analysis"],
                 "budget_count": summary["budget"],
+                "waiting_budget_count": summary["waiting_budget"],
                 "negotiating_count": summary["negotiating"],
                 "events_confirmed": events_confirmed,
                 "lost_count": summary["lost"],

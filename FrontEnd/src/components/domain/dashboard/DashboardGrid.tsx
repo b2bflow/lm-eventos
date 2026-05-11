@@ -136,8 +136,12 @@ export function DashboardGrid({ role }: DashboardGridProps) {
               <div className="text-xs uppercase tracking-wider text-muted-foreground">Em análise</div>
               <div className="mt-2 text-3xl font-bold">{metrics?.analysis_count || 0}</div>
             </div>
+            <div className="rounded-xl bg-yellow-500/10 p-4 border border-yellow-500/20">
+              <div className="text-xs uppercase tracking-wider text-yellow-700">Orçamento Pendente</div>
+              <div className="mt-2 text-3xl font-bold text-yellow-700">{metrics?.waiting_budget_count || 0}</div>
+            </div>
             <div className="rounded-xl bg-amber-500/10 p-4 border border-amber-500/20">
-              <div className="text-xs uppercase tracking-wider text-amber-700">Aguardando orçamento</div>
+              <div className="text-xs uppercase tracking-wider text-amber-700">Orçamento Enviado</div>
               <div className="mt-2 text-3xl font-bold text-amber-700">{metrics?.budget_count || 0}</div>
             </div>
             <div className="rounded-xl bg-sky-500/10 p-4 border border-sky-500/20">

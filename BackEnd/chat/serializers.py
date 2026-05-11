@@ -13,11 +13,13 @@ class ConversationSerializer(DocumentSerializer):
     celebration_type = serializers.CharField(source='quote.celebration_type', read_only=True, allow_null=True)
     event_title = serializers.CharField(source='quote.event_title', read_only=True, allow_null=True)
     event_date = serializers.DateTimeField(source='quote.event_date', read_only=True, allow_null=True)
+    event_time = serializers.CharField(source='quote.event_time', read_only=True, allow_null=True)
     guest_count = serializers.IntegerField(source='quote.guest_count', read_only=True, allow_null=True)
     quoted_amount = serializers.FloatField(source='quote.quoted_amount', read_only=True, allow_null=True)
     contract_value = serializers.FloatField(source='quote.contract_value', read_only=True, allow_null=True)
     venue = serializers.CharField(source='quote.venue', read_only=True, allow_null=True)
     notes = serializers.CharField(source='quote.notes', read_only=True, allow_null=True)
+    operator_requests = serializers.CharField(source='quote.operator_requests', read_only=True, allow_null=True)
     next_step = serializers.CharField(source='quote.next_step', read_only=True, allow_null=True)
     
     last_interaction_at = serializers.DateTimeField(source='updated_at', read_only=True)
@@ -31,8 +33,9 @@ class ConversationSerializer(DocumentSerializer):
         model = ConversationModel
         fields = [
             'id', 'customer', 'quote_id', 'customer_name', 'customer_phone', 'customer_status', 
-            'customer_state_now', 'celebration_type', 'event_title', 'event_date',
-            'guest_count', 'quoted_amount', 'contract_value', 'venue', 'notes', 'next_step',
+            'customer_state_now', 'celebration_type', 'event_title', 'event_date', 'event_time',
+            'guest_count', 'quoted_amount', 'contract_value', 'venue', 'notes',
+            'operator_requests', 'next_step',
             'status', 'tag', 'ai_active', 'last_message_content', 
             'last_interaction_at', 'unread_count', 'created_at',
             'final_customer_status', 'past_conversations', 'past_quotes',
@@ -72,5 +75,6 @@ class MessageSerializer(DocumentSerializer):
         model = MessageModel
         fields = [
             'id', 'conversation_id', 'role', 'direction', 
-            'status', 'message_type', 'content', 'media_url', 'created_at'
+            'status', 'message_type', 'content', 'media_url',
+            'raw_metadata', 'created_at'
         ]

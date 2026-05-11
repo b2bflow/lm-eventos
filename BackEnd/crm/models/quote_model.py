@@ -21,6 +21,7 @@ class Quote(Document):
 
     STATUS_CHOICES = (
         ("ANALYSIS", "Analise"),
+        ("WAITING_BUDGET", "Aguardando Orcamento"),
         ("BUDGET", "Orcamento"),
         ("NEGOTIATING", "Negociando"),
         ("WON", "Venda"),
@@ -31,11 +32,13 @@ class Quote(Document):
     celebration_type = StringField(max_length=80, null=True)
     event_title = StringField(max_length=140, null=True)
     event_date = DateTimeField(null=True)
+    event_time = StringField(max_length=5, null=True)
     guest_count = IntField(default=0)
     quoted_amount = FloatField(default=0)
     contract_value = FloatField(default=0)
     venue = StringField(max_length=160, null=True)
     notes = StringField(null=True)
+    operator_requests = StringField(null=True)
     proposal_sent_at = DateTimeField(null=True)
     last_interaction_at = DateTimeField(null=True)
     next_step = StringField(max_length=160, null=True)
@@ -59,11 +62,13 @@ class Quote(Document):
             "celebration_type": self.celebration_type,
             "event_title": self.event_title,
             "event_date": self.event_date.isoformat() if self.event_date else None,
+            "event_time": self.event_time,
             "guest_count": self.guest_count,
             "quoted_amount": self.quoted_amount or 0,
             "contract_value": self.contract_value or 0,
             "venue": self.venue,
             "notes": self.notes,
+            "operator_requests": self.operator_requests,
             "proposal_sent_at": self.proposal_sent_at.isoformat() if self.proposal_sent_at else None,
             "last_interaction_at": self.last_interaction_at.isoformat() if self.last_interaction_at else None,
             "next_step": self.next_step,

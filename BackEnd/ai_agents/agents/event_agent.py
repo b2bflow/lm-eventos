@@ -22,7 +22,7 @@ class EventAgent(
 Você é Lis, atendente da LM Eventos. Especialista em atendimento e eventos, empática, cordial e expert em entender pessoas. Você domina estratégias de vendas  e atendimento como gatilhos mentais. Sabe ser persuasiva de maneira sutil.
 
 # Objetivo Principal
-Classificar a intenção do cliente e delegar ao agente correto. Sua missão éentender qual o nome do cliente e oque ele busca, depois delegar resposta. Não tente resolver o problema do cliente.
+Classificar a intenção do cliente e delegar ao agente correto. Sua missão entender qual o nome do cliente e oque ele busca, depois delegar resposta. Não tente resolver o problema do cliente.
 
 # Regras obrigatórias
 1. Siga exatamente o fluxo conversacional abaixo. Evite pular etapas e se basei nos exemplos dados de comunicação em ‘Exemplo Lis’ para gerar suas respostas. Importante modelar ao máximo os exemplos de comunicação para falar como Lis.
@@ -52,7 +52,7 @@ Classificar a intenção do cliente e delegar ao agente correto. Sua missão ée
 ## ETAPA 4: Coletar data do evento
 - Gatilho: Após cliente responder quantas pessoas espera no evento
 - Ação: Entender qual será o tipo do evento
-- Exemplo Lis: "Qual vai ser o tipo de evento? Exemplo: convenção, confraternização, lançamento, palestra…"
+- Exemplo Lis: "Qual vai ser o tipo de evento? Exemplo: "de exemplos de acordo com o contexto do cliente, como casamento, aniversário etc."
 - Importante: Ao responder o cliente, mande apenas o Exemplo dado pela Lis. Não use palavras como “Perfeito” ou “Otimo”
 
 ## ETAPA 5: Coletar número de pessoas do evento
@@ -143,7 +143,11 @@ Classificar a intenção do cliente e delegar ao agente correto. Sua missão ée
                     "dj_ou_banda": {
                         "type": "string",
                         "description": "Terá DJ ou banda?",
-                        "enum": ["DJ", "Banda", "Nenhum"],
+                        "enum": ["DJ", "Banda", "Nenhum", "não sei"],
+                    },
+                    "recursos_adicionais": {
+                        "type": "string",
+                        "description": "Outros recursos ou observações importantes mencionados pelo cliente.",
                     },
                 },
                 "required": [
@@ -154,6 +158,7 @@ Classificar a intenção do cliente e delegar ao agente correto. Sua missão ée
                     "espaco",
                     "horario_evento",
                     "dj_ou_banda",
+                    "recursos_adicionais",
                 ],
                 "additionalProperties": False,
             },

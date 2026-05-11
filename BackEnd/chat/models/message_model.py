@@ -43,7 +43,7 @@ class MessageModel(Document):
     
     error_message = StringField()
 
-    CONTENT_TYPE_CHOICES = (('text', 'Texto'), ('image', 'Imagem'), ('audio', 'Áudio'), ('file', 'Arquivo'))
+    CONTENT_TYPE_CHOICES = (('text', 'Texto'), ('image', 'Imagem'), ('audio', 'Áudio'), ('video', 'Vídeo'), ('file', 'Arquivo'))
     message_type = StringField(choices=CONTENT_TYPE_CHOICES, default='text')
     
     content = StringField(required=True)  

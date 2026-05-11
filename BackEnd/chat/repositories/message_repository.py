@@ -24,7 +24,9 @@ class MessageRepository(IMessageRepository):
         role: str = None,
         status: str = 'QUEUED', 
         external_id: str = None,
-        raw_metadata: dict = None
+        raw_metadata: dict = None,
+        message_type: str = 'text',
+        media_url: str = None,
     ) -> MessageModel:
         
         if not role:
@@ -38,7 +40,9 @@ class MessageRepository(IMessageRepository):
             status=status, 
             content=content,
             external_id=external_id,
-            raw_metadata=raw_metadata or {}
+            raw_metadata=raw_metadata or {},
+            message_type=message_type,
+            media_url=media_url,
         )
         
         try:

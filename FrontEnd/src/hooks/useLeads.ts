@@ -15,11 +15,13 @@ export interface Lead {
   celebration_type?: string | null;
   event_title?: string | null;
   event_date?: string | null;
+  event_time?: string | null;
   guest_count?: number;
   quoted_amount?: number;
   contract_value?: number;
   venue?: string | null;
   notes?: string | null;
+  operator_requests?: string | null;
   proposal_sent_at?: string | null;
   last_interaction_at?: string | null;
   next_step?: string | null;
@@ -52,7 +54,8 @@ export const useLeads = () => {
       return response.data;
     },
     placeholderData: keepPreviousData,
-    refetchInterval: 4000,
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
   });
 
   return {
