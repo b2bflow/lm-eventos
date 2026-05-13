@@ -68,7 +68,7 @@ class QuoteService:
 
         for fmt in ("%H:%M", "%H:%M:%S"):
             try:
-                return datetime.strptime(cleaned, fmt).strftime("%H:%M")
+                return datetime.strptime(cleaned, fmt).strftime("%Hh%M")
             except ValueError:
                 continue
 
@@ -76,7 +76,7 @@ class QuoteService:
         if match:
             hour = int(match.group(1))
             minute = int(match.group(2) or 0)
-            return f"{hour:02d}:{minute:02d}"
+            return f"{hour:02d}h{minute:02d}"
 
         raise ValueError("Horário inválido informado.")
 

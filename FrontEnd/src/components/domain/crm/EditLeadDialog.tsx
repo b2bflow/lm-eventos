@@ -38,6 +38,19 @@ interface EditLeadDialogProps {
   onClose: () => void;
 }
 
+const toTimeInputValue = (value?: string | null) => value?.replace("h", ":") || "";
+const toBrazilianTimeValue = (value: string) => value.replace(":", "h");
+const getResponseData = (error: unknown): Record<string, unknown> | null => {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return null;
+  }
+
+  const response = (error as { response?: { data?: unknown } }).response;
+  return response?.data && typeof response.data === "object"
+    ? response.data as Record<string, unknown>
+    : null;
+};
+
 export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
   const [formData, setFormData] = useState({
     name: "",
@@ -67,7 +80,7 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
         celebration_type: lead.celebration_type || "",
         event_title: lead.event_title || "",
         event_date: lead.event_date ? lead.event_date.slice(0, 10) : "",
-        event_time: lead.event_time || "",
+        event_time: toTimeInputValue(lead.event_time),
         guest_count: lead.guest_count || 0,
         quoted_amount: lead.quoted_amount ? String(lead.quoted_amount) : "",
         contract_value: lead.contract_value ? String(lead.contract_value) : "",
@@ -86,7 +99,7 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
       const { data } = await api.patch(endpoint, {
         ...formData,
         event_date: formData.event_date || undefined,
-        event_time: formData.event_time || undefined,
+        event_time: formData.event_time ? toBrazilianTimeValue(formData.event_time) : undefined,
         guest_count: Number(formData.guest_count || 0),
         quoted_amount: formData.quoted_amount ? parseFloat(formData.quoted_amount) : 0,
         contract_value: formData.contract_value ? parseFloat(formData.contract_value) : 0,
@@ -102,9 +115,9 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
       toast.success("Lead atualizado com sucesso.");
       onClose();
     },
-    onError: (error: any) => {
-      if (error.response?.data) {
-        const errorData = error.response.data;
+    onError: (error: unknown) => {
+      const errorData = getResponseData(error);
+      if (errorData) {
         const firstKey = Object.keys(errorData)[0];
         const errorMessage = errorData[firstKey];
         toast.error(`Erro em ${firstKey}: ${errorMessage}`);
