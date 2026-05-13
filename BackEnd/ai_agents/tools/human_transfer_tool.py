@@ -59,8 +59,6 @@ class HumanTransferTool(ITool, FunctionCallMixin, AgentOrchestrationMixin):
                 }
             )
 
-            logger.info("AGENTE ENCONTRADO: ", self._agents.get(kwargs['arguments']['agent']))
-
             result = await self._agents.get(kwargs['arguments']['agent']).execute(
                 kwargs['context'], kwargs['customer']
             )

@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from typing import Any, Optional
 from bson import ObjectId
@@ -60,7 +61,8 @@ class QuoteService:
         if value in (None, ""):
             return None
 
-        cleaned = str(value).strip().lower().replace("h", ":")
+        raw_value = str(value).strip().lower()
+        cleaned = raw_value.replace("h", ":")
         if cleaned.endswith(":"):
             cleaned = f"{cleaned}00"
 
@@ -69,6 +71,12 @@ class QuoteService:
                 return datetime.strptime(cleaned, fmt).strftime("%H:%M")
             except ValueError:
                 continue
+
+        match = re.search(r"(?<!\d)([01]?\d|2[0-3])\s*(?:h|:)?\s*([0-5]\d)?(?!\d)", raw_value)
+        if match:
+            hour = int(match.group(1))
+            minute = int(match.group(2) or 0)
+            return f"{hour:02d}:{minute:02d}"
 
         raise ValueError("Horário inválido informado.")
 
