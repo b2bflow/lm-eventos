@@ -9,7 +9,7 @@ def handle_send_outgoing_message(payload: dict):
         to_phone = payload.get('phone')
         content = payload.get('content')
 
-        gateway: ZAPIClient = GatewayContainer.chat()
+        gateway: ZAPIClient = GatewayContainer().chat
 
         gateway.send_message(phone=to_phone, message=content)
 

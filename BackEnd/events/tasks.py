@@ -3,6 +3,7 @@ from datetime import datetime
 
 from celery import shared_task
 from utils.logger import logger, print_error_details
+from utils.phone import is_employee_phone
 
 @shared_task(bind=True, max_retries=3)
 def dispatch_event_task(self, event_name: str, payload: dict):
@@ -28,6 +29,15 @@ def trigger_ai_agent_task(self, conversation_id: str, trigger_message_id: str):
         if not conversation:
             return "Conversa não encontrada"
 
+        phone = getattr(conversation.customer, "phone", None)
+        if is_employee_phone(phone):
+            logger.info(
+                "[EventTasks] Abortando IA para conversa %s. Telefone %s está em EMPLOYEE_PHONES.",
+                conversation_id,
+                phone,
+            )
+            return "Employee phone"
+
         blocked_until = getattr(conversation.customer, "blocked_until", None)
         if blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow():
             logger.info(
@@ -52,7 +62,6 @@ def trigger_ai_agent_task(self, conversation_id: str, trigger_message_id: str):
 
         logger.info(f"[Debounce] Tempo esgotado para {conversation_id}. Iniciando Orquestrador de IA...")
         orchestrator = AgentsContainer.get_orchestrator()
-        phone = conversation.customer.phone
         message_content = last_message.content
 
         asyncio.run(orchestrator.execute(phone=phone, message=message_content))

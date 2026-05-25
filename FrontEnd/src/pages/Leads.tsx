@@ -124,7 +124,7 @@ const Leads = () => {
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <Badge variant="outline" className="gap-1">
                     <TrendingUp className="w-3 h-3" />
-                    Análise, Orçamento Pendente e Orçamento atualizam automaticamente
+                    Análise, Orçamento Pendente e Orçamento enviado atualizam automaticamente
                   </Badge>
                   <Badge variant="outline" className="gap-1">
                     <CalendarRange className="w-3 h-3" />

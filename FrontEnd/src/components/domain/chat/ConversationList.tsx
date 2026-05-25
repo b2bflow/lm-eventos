@@ -9,7 +9,8 @@ interface Conversation {
   name: string;
   lastMessage: string;
   time: string;
-  tag: string; 
+  tag: string;
+  ai_active?: boolean;
   unread?: boolean;
   finished?: boolean;
   customer_status?: string;
@@ -26,7 +27,7 @@ interface ConversationListProps {
 const getStatusDisplay = (status: string | undefined) => {
   switch(status) {
     case 'ANALYSIS': return { label: 'Análise', color: 'bg-slate-600 text-white border-slate-500 shadow-slate-500/20' };
-    case 'BUDGET': return { label: 'Orçamento', color: 'bg-amber-500 text-white border-amber-400 shadow-amber-500/20' };
+    case 'BUDGET': return { label: 'Orçamento Enviado', color: 'bg-amber-500 text-white border-amber-400 shadow-amber-500/20' };
     case 'NEGOTIATING': return { label: 'Negociando', color: 'bg-sky-500 text-white border-sky-400 shadow-sky-500/20' };
     case 'WAITING_BUDGET': return { label: 'Orçamento Pendente', color: 'text-yellow-600 bg-yellow-500/10 border-yellow-500/20' };
     case 'WON': return { label: 'Venda', color: 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/20' };
@@ -37,34 +38,26 @@ const getStatusDisplay = (status: string | undefined) => {
 
 export function ConversationList({ conversations, selectedId, onSelect, onToggleTag }: ConversationListProps) {
   const [activeTab, setActiveTab] = useState<"OPEN" | "CLOSED">("OPEN");
-  const [tagFilter, setTagFilter] = useState<string>("all");
+  const [modeFilter, setModeFilter] = useState<"all" | "ai" | "manual">("all");
 
-  const availableTags = Array.from(new Set(conversations.map((c) => c.tag).filter(Boolean))).sort();
+  const isAiMode = (conversation: Conversation) => conversation.ai_active === true || conversation.tag === "AGENTE";
 
   const filteredConversations = conversations.filter(c => {
     const matchesStatus = activeTab === "OPEN" ? !c.finished : c.finished;
-    const matchesTag = tagFilter === "all" || c.tag === tagFilter;
-    return matchesStatus && matchesTag;
+    const matchesMode =
+      modeFilter === "all" ||
+      (modeFilter === "ai" && isAiMode(c)) ||
+      (modeFilter === "manual" && !isAiMode(c));
+    return matchesStatus && matchesMode;
   });
 
-  const getTagLabel = (tag: string) => {
-    switch (tag) {
-      case "AGENTE": return "AGENTE IA";
-      case "OPERADOR": return "OPERADOR";
-      case "operador_humano": return "OPERADOR HUMANO";
-      case "orcamento": return "ORÇAMENTO";
-      default: return tag.replace(/_/g, " ").toUpperCase();
-    }
-  };
+  const getModeLabel = (isActive: boolean) => isActive ? "AGENTE IA ATIVO" : "OPERADOR MANUAL";
 
-  const getTagStyle = (tag: string) => {
-    switch (tag) {
-      case "AGENTE": return "bg-purple-500 text-white border-purple-400 hover:bg-purple-600 shadow-purple-500/20";
-      case "orcamento": return "bg-amber-500 text-white border-amber-400 hover:bg-amber-600 shadow-amber-500/20";
-      case "operador_humano": return "bg-emerald-600 text-white border-emerald-500 hover:bg-emerald-700 shadow-emerald-600/20";
-      default: return "bg-blue-600 text-white border-blue-500 hover:bg-blue-700 shadow-blue-600/20";
-    }
-  };
+  const getModeStyle = (isActive: boolean) => (
+    isActive
+      ? "bg-purple-500 text-white border-purple-400 hover:bg-purple-600 shadow-purple-500/20"
+      : "bg-blue-600 text-white border-blue-500 hover:bg-blue-700 shadow-blue-600/20"
+  );
 
   return (
     <div className="h-full flex flex-col bg-background/50 backdrop-blur-xl border-r border-border/50">
@@ -78,14 +71,13 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
           <div className="flex items-center gap-2">
             <Tag className="w-4 h-4 text-muted-foreground" />
             <select
-              value={tagFilter}
-              onChange={(event) => setTagFilter(event.target.value)}
+              value={modeFilter}
+              onChange={(event) => setModeFilter(event.target.value as "all" | "ai" | "manual")}
               className="h-8 w-full rounded-md border border-border/50 bg-background px-2 text-xs font-medium text-foreground outline-none focus:border-primary"
             >
-              <option value="all">Todas as tags</option>
-              {availableTags.map((tag) => (
-                <option key={tag} value={tag}>{getTagLabel(tag)}</option>
-              ))}
+              <option value="all">Todos os modos</option>
+              <option value="ai">Agente IA Ativo</option>
+              <option value="manual">Operador Manual</option>
             </select>
           </div>
         </div>
@@ -121,6 +113,7 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
         ) : (
           filteredConversations.map((conv) => {
             const statusInfo = getStatusDisplay(conv.customer_status);
+            const aiMode = isAiMode(conv);
 
             return (
               <div
@@ -174,17 +167,17 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
                             <button
                               onClick={(e) => {
                                 e.stopPropagation(); 
-                                onToggleTag?.(conv.id, conv.tag);
+                                onToggleTag?.(conv.id, aiMode ? "AGENTE" : "OPERADOR");
                               }}
                               className={cn(
                                 "flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold transition-all border shadow-sm hover:scale-105 active:scale-95",
-                                getTagStyle(conv.tag)
+                                getModeStyle(aiMode)
                               )}
                             >
-                              {conv.tag === "AGENTE" ? (
-                                <><Sparkles className="w-3 h-3 animate-pulse" />AGENTE IA</>
+                              {aiMode ? (
+                                <><Sparkles className="w-3 h-3 animate-pulse" />{getModeLabel(aiMode)}</>
                               ) : (
-                                <><User className="w-3 h-3" />{getTagLabel(conv.tag)}</>
+                                <><User className="w-3 h-3" />{getModeLabel(aiMode)}</>
                               )}
                             </button>
 

@@ -7,6 +7,7 @@ from ai_agents.containers.agent_container import AgentContainer
 from chat.interfaces.conversation_repository_interface import IConversationRepository
 from chat.interfaces.chat_service_interface import IMessageService
 from utils.logger import logger, to_json_dump
+from utils.phone import is_employee_phone
 from chat.interfaces.message_repository_interface import IMessageRepository
 from crm.interfaces.customer_repository_interface import ICustomerRepository
 import re
@@ -320,6 +321,13 @@ class GenerateResponseService:
         return self.agents.get(agent)
 
     async def execute(self, phone: str, message: str) -> None:
+        if is_employee_phone(phone):
+            logger.info(
+                "[GENERATE RESPONSE SERVICE] Telefone %s está em EMPLOYEE_PHONES. IA não processada.",
+                phone,
+            )
+            return
+
         customer: dict = self.customer_repository.find(phone=phone)
 
         if not customer:

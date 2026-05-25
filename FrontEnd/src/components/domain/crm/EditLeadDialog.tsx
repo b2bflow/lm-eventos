@@ -33,7 +33,7 @@ interface LeadData {
 }
 
 interface EditLeadDialogProps {
-  lead: LeadData | null; 
+  lead: LeadData | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -68,7 +68,7 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
     operator_requests: "",
     next_step: "",
   });
-  
+
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -133,22 +133,22 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
         <DialogHeader>
           <DialogTitle>Editar Lead / Evento</DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nome</Label>
-              <Input 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
 
             <div className="space-y-2">
               <Label>Telefone</Label>
-              <Input 
-                value={formData.phone} 
-                onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+              <Input
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               />
             </div>
           </div>
@@ -156,78 +156,78 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Tipo de Celebração</Label>
-              <Input 
-                value={formData.celebration_type} 
-                onChange={(e) => setFormData({...formData, celebration_type: e.target.value})} 
+              <Input
+                value={formData.celebration_type}
+                onChange={(e) => setFormData({ ...formData, celebration_type: e.target.value })}
               />
             </div>
 
             <div className="space-y-2">
               <Label>Nome do Evento</Label>
-              <Input 
-                value={formData.event_title} 
-                onChange={(e) => setFormData({...formData, event_title: e.target.value})} 
+              <Input
+                value={formData.event_title}
+                onChange={(e) => setFormData({ ...formData, event_title: e.target.value })}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="space-y-2 md:col-span-3">
               <Label>Data do Evento</Label>
-              <Input 
+              <Input
                 type="date"
-                value={formData.event_date} 
-                onChange={(e) => setFormData({...formData, event_date: e.target.value})} 
+                value={formData.event_date}
+                onChange={(e) => setFormData({ ...formData, event_date: e.target.value })}
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <Label>Horário</Label>
               <Input
                 type="time"
                 value={formData.event_time}
-                onChange={(e) => setFormData({...formData, event_time: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, event_time: e.target.value })}
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <Label>Convidados</Label>
-              <Input 
+              <Input
                 type="number"
                 min="0"
-                value={formData.guest_count} 
-                onChange={(e) => setFormData({...formData, guest_count: Number(e.target.value)})} 
+                value={formData.guest_count}
+                onChange={(e) => setFormData({ ...formData, guest_count: Number(e.target.value) })}
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <Label>Orçamento</Label>
-              <Input 
+              <Input
                 type="number"
                 min="0"
                 step="0.01"
-                value={formData.quoted_amount} 
-                onChange={(e) => setFormData({...formData, quoted_amount: e.target.value})} 
+                value={formData.quoted_amount}
+                onChange={(e) => setFormData({ ...formData, quoted_amount: e.target.value })}
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-3">
               <Label>Valor Fechado</Label>
-              <Input 
+              <Input
                 type="number"
                 min="0"
                 step="0.01"
-                value={formData.contract_value} 
-                onChange={(e) => setFormData({...formData, contract_value: e.target.value})} 
+                value={formData.contract_value}
+                onChange={(e) => setFormData({ ...formData, contract_value: e.target.value })}
               />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label>Status do Funil</Label>
-            <Select 
-              value={formData.customer_state_now} 
-              onValueChange={(val) => setFormData({...formData, customer_state_now: val})}
+            <Select
+              value={formData.customer_state_now}
+              onValueChange={(val) => setFormData({ ...formData, customer_state_now: val })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o status" />
@@ -244,9 +244,9 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
 
           <div className="space-y-2">
             <Label>Local</Label>
-            <Input 
-              value={formData.venue} 
-              onChange={(e) => setFormData({...formData, venue: e.target.value})} 
+            <Input
+              value={formData.venue}
+              onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
             />
           </div>
 
@@ -256,7 +256,7 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
               <Textarea
                 rows={8}
                 value={formData.operator_requests}
-                onChange={(e) => setFormData({...formData, operator_requests: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, operator_requests: e.target.value })}
               />
             </div>
           </div>
@@ -264,10 +264,10 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
           <div className="flex">
             <div className="w-full">
               <Label>Notas da Negociação</Label>
-              <Textarea 
+              <Textarea
                 rows={5}
-                value={formData.notes} 
-                onChange={(e) => setFormData({...formData, notes: e.target.value})} 
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               />
             </div>
           </div>
@@ -275,8 +275,8 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button 
-            onClick={() => updateLeadMutation.mutate()} 
+          <Button
+            onClick={() => updateLeadMutation.mutate()}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
             disabled={updateLeadMutation.isPending}
           >

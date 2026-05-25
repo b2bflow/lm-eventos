@@ -27,7 +27,8 @@ export interface Conversa {
   last_message_content: string;
   last_interaction_at: string;
   status: "OPEN" | "CLOSED" | "ARCHIVED";
-  tag: string; 
+  tag: string;
+  ai_active?: boolean;
   unread_count?: number;
   customer_status?: string;
   customer_state_now?: string;
@@ -275,9 +276,10 @@ export default function WhatsApp() {
                   lastMessage: normalizeChatMessageContent(c.last_message_content),
                   time: c.last_interaction_at ? new Date(c.last_interaction_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
                   tag: c.tag,
+                  ai_active: c.ai_active,
                   unread: (c.unread_count || 0) > 0,
                   finished: c.status === "CLOSED",
-                  customer_status: c.final_customer_status || c.customer_status,
+                  customer_status: c.final_customer_status || c.customer_state_now || c.customer_status,
                   needs_attention: c.needs_attention 
                 }))}
                 selectedId={selectedConversationId}
@@ -301,8 +303,11 @@ export default function WhatsApp() {
                   onSendFile={handleSendFile}
                   isSending={isSending}
                   isUploadingFile={sendFileMutation.isPending}
-                  isAIActive={selectedConversationObj.tag === "AGENTE"}
-                  onToggleAI={(mode) => handleToggleTag(selectedConversationId, mode === "AGENTE" ? "OPERADOR" : "AGENTE")}
+                  isAIActive={selectedConversationObj.ai_active === true || selectedConversationObj.tag === "AGENTE"}
+                  onToggleAI={() => handleToggleTag(
+                    selectedConversationId,
+                    selectedConversationObj.ai_active === true || selectedConversationObj.tag === "AGENTE" ? "AGENTE" : "OPERADOR"
+                  )}
                   isProfileOpen={isProfileOpen}
                   onToggleProfile={() => setIsProfileOpen(!isProfileOpen)}
                   onBack={() => setSelectedConversationId(null)}

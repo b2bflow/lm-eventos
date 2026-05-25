@@ -6,6 +6,7 @@ from time import sleep
 from dotenv import load_dotenv
 from typing import Optional, Any
 from utils.logger import logger, print_error_details
+from utils.phone import is_employee_phone
 from chat.repositories.conversation_repository import ConversationRepository
 from chat.repositories.message_repository import MessageRepository
 from chat.interfaces.chat_service_interface import IMessageService
@@ -48,20 +49,15 @@ class MessageService(IMessageService):
             if not self.chat.is_valid_message(**kwargs):
                 return
 
+            is_employee = is_employee_phone(phone)
             customer = self.customer_repository.get_by_phone(phone)
             blocked_until = customer.get("blocked_until") if isinstance(customer, dict) else None
             if isinstance(blocked_until, str):
                 blocked_until = datetime.fromisoformat(blocked_until.replace("Z", "+00:00"))
 
-            if blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow():
-                logger.info(
-                    "[MessageService] Cliente %s bloqueado até %s. Webhook ignorado antes de respostas automáticas.",
-                    phone,
-                    blocked_until,
-                )
-                return
+            is_blocked = bool(blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow())
 
-            if self.unsupported_media_handler.handle(kwargs):
+            if not is_employee and not is_blocked and self.unsupported_media_handler.handle(kwargs):
                 return
 
             message = ""
@@ -173,7 +169,7 @@ class MessageService(IMessageService):
             print("Aqui >>>>>>>>>>>> RAW METADATA", raw_metadata)
             print("Aqui >>>>>>>>>>>> Content", content)
 
-            # Verifica se o numro e conteudo são validos
+            # Verifica se o numero e conteudo sao validos
             if not phone or not content:
                 logger.warning("[MessageService] Dados de mensagem recebida incompletos.")
                 return None
@@ -203,13 +199,59 @@ class MessageService(IMessageService):
             if isinstance(blocked_until, str):
                 blocked_until = datetime.fromisoformat(blocked_until.replace("Z", "+00:00"))
 
-            if blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow():
+            is_blocked = bool(blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow())
+            is_employee = is_employee_phone(phone)
+
+            # 1. Extraimos apenas o ID do dicionario/objeto
+            customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
+            active_quote = quote_service.get_or_create_active_quote_for_customer(customer_id)
+
+            # 2. Passamos a variavel patient_id para as duas funcoes do repositorio
+            conversation = self.conversation_repo.get_active_conversation(customer_id)
+
+            if not conversation:
+                conversation = self.conversation_repo.create_conversation(customer_id)
+
+            if active_quote and not getattr(conversation, 'quote', None):
+                from crm.models.quote_model import Quote
+                conversation.quote = Quote.objects(id=active_quote.get("id")).first()
+
+            message = self._save_and_notify(
+                conversation_id=str(conversation.id),
+                content=content,
+                direction='INCOMING',
+                sender_role='user',
+                external_id=external_id,
+                raw_metadata=raw_metadata
+            )
+
+            conversation.updated_at = datetime.now()
+            conversation.last_message_content = content
+            conversation.unread_count = getattr(conversation, 'unread_count', 0) + 1
+
+            if is_blocked:
+                conversation.tag = 'operador_humano'
+                conversation.ai_active = False
+                conversation.needs_attention = True
+            elif getattr(conversation, 'tag', '') in ['OPERADOR', 'operador_humano', 'operador humano', 'orcamento']:
+                conversation.needs_attention = True
+
+            self.conversation_repo.update_conversation(conversation)
+
+            if is_blocked:
                 logger.info(
-                    "[MessageService] Cliente %s bloqueado até %s. Mensagem ignorada antes do fluxo automático.",
+                    "[MessageService] Cliente %s bloqueado até %s. Mensagem salva; tag definida como operador_humano e IA não será acionada.",
                     phone,
                     blocked_until,
                 )
-                return None
+                return message
+
+            if is_employee:
+                logger.info(
+                    "[MessageService] Telefone %s está em EMPLOYEE_PHONES. Mensagem salva; IA não será acionada.",
+                    phone,
+                )
+                return message
 
             if customer.get("new_service", True):
                 print(f"Enviando mensagem de boas-vindas para {phone} com ID do paciente {customer.get('id')}")
@@ -233,49 +275,15 @@ class MessageService(IMessageService):
 
                 print("Atualização do campo new_service:", b)
 
-                return
+                return message
             
             vals = self.processar_mensagem(content)
-
-            message = vals[0]['message'] if vals[0] else content
 
             leave_execution = self._determine_agent_flow(
                 vals, phone, customer)
             
             if leave_execution:
-                return
-
-            # 1. Extraímos apenas o ID do dicionário/objeto
-            customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
-            active_quote = quote_service.get_or_create_active_quote_for_customer(customer_id)
-
-            # 2. Passamos a variável patient_id para as duas funções do repositório
-            conversation = self.conversation_repo.get_active_conversation(customer_id)
-
-            if not conversation:
-                conversation = self.conversation_repo.create_conversation(customer_id)
-
-            if active_quote and not getattr(conversation, 'quote', None):
-                from crm.models.quote_model import Quote
-                conversation.quote = Quote.objects(id=active_quote.get("id")).first()
-
-            message = self._save_and_notify(
-                conversation_id=str(conversation.id),
-                content=content,
-                direction='INCOMING',
-                sender_role='user',
-                external_id=external_id,
-                raw_metadata=raw_metadata
-            )
-
-            conversation.updated_at = datetime.now()
-            conversation.last_message_content = content
-            conversation.unread_count = getattr(conversation, 'unread_count', 0) + 1
-
-            if getattr(conversation, 'tag', '') in ['OPERADOR', 'operador_humano', 'orcamento']:
-                conversation.needs_attention = True
-
-            self.conversation_repo.update_conversation(conversation)
+                return message
 
             if getattr(conversation, 'tag', '') == 'AGENTE' or getattr(conversation, 'ai_active', False):
                 from events.tasks import trigger_ai_agent_task

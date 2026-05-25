@@ -28,7 +28,7 @@ class ConversationService(IConversationService):
             if 'tag' in data:
                 conversation.tag = data['tag']
                 conversation.ai_active = (data['tag'] == 'AGENTE')
-                if data['tag'] in ['OPERADOR', 'operador_humano', 'orcamento']:
+                if data['tag'] in ['OPERADOR', 'operador_humano', 'operador humano', 'orcamento']:
                     conversation.needs_attention = True
                 
             if 'status' in data and data['status'] in ['OPEN', 'CLOSED', 'ARCHIVED']:
