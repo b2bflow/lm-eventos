@@ -131,7 +131,7 @@ class MessageService(IMessageService):
                 buttons = [
                     {"id": "5", "label": "Evento Social"},
                     {"id": "6", "label": "Evento Corporativo"},
-                    {"id": "7", "label": "Estrutura Ground/Box Trans"},
+                    {"id": "7", "label": "Estrutura Ground/Box Truss"},
                     {"id": "8", "label": "Locação de Produto Único"},
                 ]
 
