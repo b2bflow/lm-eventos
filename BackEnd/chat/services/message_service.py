@@ -39,8 +39,8 @@ class MessageService(IMessageService):
             phones_for_validation_list = (
                 self.phones_for_validation.split(",") if self.phones_for_validation else []
             )
-            if phones_for_validation_list and phone not in phones_for_validation_list:
-                return
+            # if phones_for_validation_list and phone not in phones_for_validation_list:
+            #     return
 
             # if not self.customer_repository.exists(phone=phone):
             #     self.customer_repository.create(
