@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Tag } from "lucide-react";
+import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Tag, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -39,8 +39,9 @@ const getStatusDisplay = (status: string | undefined) => {
 export function ConversationList({ conversations, selectedId, onSelect, onToggleTag }: ConversationListProps) {
   const [activeTab, setActiveTab] = useState<"OPEN" | "CLOSED">("OPEN");
   const [modeFilter, setModeFilter] = useState<"all" | "ai" | "manual">("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const isAiMode = (conversation: Conversation) => conversation.ai_active === true || conversation.tag === "AGENTE";
+  const isAiMode = (conversation: Conversation) => conversation.tag === "AGENTE" && conversation.ai_active === true;
 
   const filteredConversations = conversations.filter(c => {
     const matchesStatus = activeTab === "OPEN" ? !c.finished : c.finished;
@@ -48,7 +49,9 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
       modeFilter === "all" ||
       (modeFilter === "ai" && isAiMode(c)) ||
       (modeFilter === "manual" && !isAiMode(c));
-    return matchesStatus && matchesMode;
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const matchesName = !normalizedSearch || c.name.toLowerCase().includes(normalizedSearch);
+    return matchesStatus && matchesMode && matchesName;
   });
 
   const getModeLabel = (isActive: boolean) => isActive ? "AGENTE IA ATIVO" : "OPERADOR MANUAL";
@@ -101,6 +104,17 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
           >
             Fechadas
           </button>
+        </div>
+
+        <div className="relative mt-3">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Pesquisar cliente pelo nome"
+            className="h-9 w-full rounded-md border border-border/50 bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
+          />
         </div>
       </div>
 

@@ -39,7 +39,8 @@ class ConversationRepository(IConversationRepository):
             conv = ConversationModel(
                 customer=customer,
                 status='OPEN',
-                tag='AGENTE'
+                tag='AGENTE',
+                ai_active=True,
             )
             conv.save()
 

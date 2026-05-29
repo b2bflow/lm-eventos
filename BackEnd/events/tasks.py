@@ -29,6 +29,20 @@ def trigger_ai_agent_task(self, conversation_id: str, trigger_message_id: str):
         if not conversation:
             return "Conversa não encontrada"
 
+        if (
+            getattr(conversation, "status", "") != "OPEN"
+            or getattr(conversation, "tag", "") != "AGENTE"
+            or getattr(conversation, "ai_active", False) is not True
+        ):
+            logger.info(
+                "[EventTasks] Abortando IA para conversa %s. Status=%s Tag=%s AI=%s.",
+                conversation_id,
+                getattr(conversation, "status", None),
+                getattr(conversation, "tag", None),
+                getattr(conversation, "ai_active", None),
+            )
+            return "AI inactive"
+
         phone = getattr(conversation.customer, "phone", None)
         if is_employee_phone(phone):
             logger.info(

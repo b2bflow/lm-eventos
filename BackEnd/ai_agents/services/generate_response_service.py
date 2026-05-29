@@ -350,6 +350,20 @@ class GenerateResponseService:
             return
 
         active_conversation = self.conversation_repository.get_active_conversation(customer=customer.get("id"))
+        if active_conversation and (
+            getattr(active_conversation, "status", "") != "OPEN"
+            or getattr(active_conversation, "tag", "") != "AGENTE"
+            or getattr(active_conversation, "ai_active", False) is not True
+        ):
+            logger.info(
+                "[GENERATE RESPONSE SERVICE] IA não processada para %s. Status=%s Tag=%s AI=%s.",
+                phone,
+                getattr(active_conversation, "status", None),
+                getattr(active_conversation, "tag", None),
+                getattr(active_conversation, "ai_active", None),
+            )
+            return
+
         if active_conversation:
             messages = [
                 msg.to_dict()

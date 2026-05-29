@@ -253,6 +253,22 @@ class MessageService(IMessageService):
                 )
                 return message
 
+            should_trigger_ai = (
+                getattr(conversation, "status", "") == "OPEN"
+                and getattr(conversation, "tag", "") == "AGENTE"
+                and getattr(conversation, "ai_active", False) is True
+            )
+
+            if not should_trigger_ai:
+                logger.info(
+                    "[MessageService] Mensagem salva para %s; IA não acionada. Status=%s Tag=%s AI=%s.",
+                    phone,
+                    getattr(conversation, "status", None),
+                    getattr(conversation, "tag", None),
+                    getattr(conversation, "ai_active", None),
+                )
+                return message
+
             if customer.get("new_service", True):
                 print(f"Enviando mensagem de boas-vindas para {phone} com ID do paciente {customer.get('id')}")
                 msg_text = "Olá! Bem-vindo à LM Eventos. Sou a Lis. Seu contato é sobre?"
@@ -285,7 +301,7 @@ class MessageService(IMessageService):
             if leave_execution:
                 return message
 
-            if getattr(conversation, 'tag', '') == 'AGENTE' or getattr(conversation, 'ai_active', False):
+            if should_trigger_ai:
                 from events.tasks import trigger_ai_agent_task
                 logger.info(f"[MessageService] Iniciando contagem de Debounce (5s) para IA na conversa {conversation.id}")
                 trigger_ai_agent_task.apply_async(args=[str(conversation.id), str(message.id)], countdown=int(os.getenv("DEBOUNCE_SECONDS", 1)))

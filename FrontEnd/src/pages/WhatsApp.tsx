@@ -303,10 +303,10 @@ export default function WhatsApp() {
                   onSendFile={handleSendFile}
                   isSending={isSending}
                   isUploadingFile={sendFileMutation.isPending}
-                  isAIActive={selectedConversationObj.ai_active === true || selectedConversationObj.tag === "AGENTE"}
+                  isAIActive={selectedConversationObj.tag === "AGENTE" && selectedConversationObj.ai_active === true}
                   onToggleAI={() => handleToggleTag(
                     selectedConversationId,
-                    selectedConversationObj.ai_active === true || selectedConversationObj.tag === "AGENTE" ? "AGENTE" : "OPERADOR"
+                    selectedConversationObj.tag === "AGENTE" && selectedConversationObj.ai_active === true ? "AGENTE" : "OPERADOR"
                   )}
                   isProfileOpen={isProfileOpen}
                   onToggleProfile={() => setIsProfileOpen(!isProfileOpen)}
