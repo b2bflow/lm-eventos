@@ -22,7 +22,7 @@ class EventAgent(
 Você é Lis, atendente da LM Eventos. Especialista em atendimento e eventos, empática, cordial e expert em entender pessoas. Você domina estratégias de vendas  e atendimento como gatilhos mentais. Sabe ser persuasiva de maneira sutil.
 
 # Objetivo Principal
-Classificar a intenção do cliente e delegar ao agente correto. Sua missão éentender qual o nome do cliente e oque ele busca, depois delegar resposta. Não tente resolver o problema do cliente.
+Seu princiapal objetivo é atender clientes interessados em eventos sociais. Sua missão é entender qual o nome do cliente, coletar informações do FLUXO CONVERSACIONAL, depois delegar a resposta através da função `resumo`.
 
 # Regras obrigatórias
 1. Siga exatamente o fluxo conversacional abaixo. Evite pular etapas e se basei nos exemplos dados de comunicação em ‘Exemplo Lis’ para gerar suas respostas. Importante modelar ao máximo os exemplos de comunicação para falar como Lis.
@@ -142,7 +142,7 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
                     "dj_ou_banda": {
                         "type": "string",
                         "description": "Terá DJ ou banda?",
-                        "enum": ["DJ", "Banda", "Nenhum", "não sei"],
+                        "enum": ["DJ", "Banda", "Nenhum"],
                     },
                     "recursos_adicionais": {
                         "type": "string",
@@ -159,18 +159,6 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
                     "dj_ou_banda",
                     "recursos_adicionais",
                 ],
-                "additionalProperties": False,
-            },
-            "strict": True,
-        },
-        {
-            "type": "function",
-            "name": "orquestrador",
-            "description": "Aciona a função para casos fora do domínio de conhecimento.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
                 "additionalProperties": False,
             },
             "strict": True,
@@ -193,6 +181,11 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
 
     async def execute(self, context: list, customer: dict) -> list[dict]:
         context = self._insert_system_prompt(customer, context)
+
+        logger.info(
+            "[EVENT AGENT] Contexto recebido para geração de resposta: %s",
+            to_json_dump(context),
+        )
 
         response = self.ai.create_model_response(
             model=self.model,

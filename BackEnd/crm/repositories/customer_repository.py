@@ -119,7 +119,8 @@ class CustomerRepository(ICustomerRepository):
                     "agent",
                     "customer_state_now",
                     "blocked_until",
-                    "new_service"
+                    "new_service",
+                    "send_button",
                 ]:
                     setattr(customer, key, value)
 

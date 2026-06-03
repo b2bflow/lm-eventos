@@ -1,3 +1,4 @@
+import ast
 import os
 import re
 from datetime import datetime
@@ -153,15 +154,64 @@ class GenerateResponseService:
 
         return ". ".join(item for item in resolved_outputs if item)
 
+    def _extract_callback_message(self, content: str) -> str:
+        """
+        Extrai apenas o texto relevante de callbacks do WhatsApp/Z-API.
+
+        Exemplo:
+
+        <kwargs>{'buttonsResponseMessage': {'buttonId': '10', 'message': 'aniversario'}}</kwargs>
+
+        retorna:
+
+        aniversario
+        """
+
+        if not isinstance(content, str):
+            return content
+
+        match = re.search(
+            r"<kwargs>(.*?)</kwargs>",
+            content,
+            re.DOTALL,
+        )
+
+        if not match:
+            return content
+
+        try:
+            payload = ast.literal_eval(match.group(1))
+
+            buttons_response = payload.get("buttonsResponseMessage")
+            if buttons_response:
+                return buttons_response.get("message", content)
+
+            list_response = payload.get("listResponseMessage")
+            if list_response:
+                return list_response.get("message", content)
+
+            return content
+
+        except Exception:
+            return content
+
+
     def _prepare_context(self, context: list, user_input: str) -> list[dict]:
+        # Limpa callbacks do input atual
+        user_input = self._extract_callback_message(user_input)
+
         # Faz a formatação correta do contexto caso não esteja vazio
         if context:
             context_resolved = []
 
-            # Trata os casos do contexto simples do usuário e do assistente e das chamadas e saídas das tools
+            # Trata os casos do contexto simples do usuário,
+            # assistente e das chamadas e saídas das tools
             for message in context:
                 role = message.get("role", "")
                 content = message.get("content", "")
+
+                # Limpa callbacks antigos do histórico
+                content = self._extract_callback_message(content)
 
                 if role in ["user", "assistant"]:
                     context_resolved.append(
@@ -177,9 +227,18 @@ class GenerateResponseService:
             context = context_resolved
 
         # Prepara o input de imagem caso exista
-        image_url = re.search(r"<image-url>(.*?)</image-url>", user_input)
+        image_url = re.search(
+            r"<image-url>(.*?)</image-url>",
+            user_input,
+        )
+
         if image_url:
-            user_input = re.sub(r"<image-url>.*?</image-url>", "", user_input).strip()
+            user_input = re.sub(
+                r"<image-url>.*?</image-url>",
+                "",
+                user_input,
+            ).strip()
+
             context.append(
                 {
                     "role": "user",
@@ -199,9 +258,18 @@ class GenerateResponseService:
             return context
 
         # Prepara o input de arquivo caso exista
-        file_url = re.search(r"<file-url>(.*?)</file-url>", user_input)
+        file_url = re.search(
+            r"<file-url>(.*?)</file-url>",
+            user_input,
+        )
+
         if file_url:
-            user_input = re.sub(r"<file-url>.*?</file-url>", "", user_input).strip()
+            user_input = re.sub(
+                r"<file-url>.*?</file-url>",
+                "",
+                user_input,
+            ).strip()
+
             context.append(
                 {
                     "role": "user",
@@ -220,7 +288,8 @@ class GenerateResponseService:
 
             return context
 
-        # Caso não tenha imagem, apenas adiciona o input do usuário
+        # Caso não tenha imagem nem arquivo,
+        # apenas adiciona o input do usuário
         if not self._message_already_in_context(context, user_input):
             context.append(
                 {

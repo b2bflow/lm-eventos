@@ -31,6 +31,8 @@ class Customer(Document):
     blocked_until = DateTimeField(null=True)
     new_service = BooleanField(default=True)
 
+    send_button = BooleanField(default=True)
+
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
 
@@ -50,4 +52,5 @@ class Customer(Document):
             "new_service": self.new_service,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
+            "send_button": self.send_button,
         }

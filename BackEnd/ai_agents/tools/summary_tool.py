@@ -126,30 +126,30 @@ class SummaryTool(ITool, FunctionCallMixin):
             "last_interaction_at": datetime.utcnow(),
         }
 
-    def sends_unregister_request(self, customer_phone: dict, customer_name: str, arguments: dict) -> None:
-        phone = os.getenv("REGISTER_PHONE", "").strip()
+    # def sends_unregister_request(self, customer_phone: dict, customer_name: str, arguments: dict) -> None:
+    #     phone = os.getenv("REGISTER_PHONE", "").strip()
 
-        lines = ["⚠️ *Nova solicitação* ⚠️\n"]
+    #     lines = ["⚠️ *Nova solicitação* ⚠️\n"]
 
-        for key, value in arguments.items():
-            if value:
-                label = key.replace("_", " ").capitalize()
-                lines.append(f"*{label}*")
-                lines.append(f"{value}\n")
+    #     for key, value in arguments.items():
+    #         if value:
+    #             label = key.replace("_", " ").capitalize()
+    #             lines.append(f"*{label}*")
+    #             lines.append(f"{value}\n")
 
-        first_message = "\n".join(lines)
-        # second_message = "Link para formulario: https://docs.google.com/forms/d/e/1FAIpQLSe5KwuvXlPCKsT1gLtB_0agbidLPTDDueXvqZnMDpB600CDuQ/viewform?pli=1&pli=1"
+    #     first_message = "\n".join(lines)
+    #     # second_message = "Link para formulario: https://docs.google.com/forms/d/e/1FAIpQLSe5KwuvXlPCKsT1gLtB_0agbidLPTDDueXvqZnMDpB600CDuQ/viewform?pli=1&pli=1"
 
-        self.chat.send_message(
-                phone=phone,
-                message=first_message,
-            )
+    #     self.chat.send_message(
+    #             phone=phone,
+    #             message=first_message,
+    #         )
 
-        self.chat.send_contact(
-            phone=phone,
-            name=customer_name,
-            contact_phone=customer_phone or "",
-        )
+    #     self.chat.send_contact(
+    #         phone=phone,
+    #         name=customer_name,
+    #         contact_phone=customer_phone or "",
+    #     )
 
     def _block_customer_and_mark_budget(self, customer: dict) -> None:
         blocked_until = datetime.utcnow() + timedelta(hours=24)
@@ -205,11 +205,11 @@ class SummaryTool(ITool, FunctionCallMixin):
                 data=customer_attributes,
             )
 
-        Thread(
-            target=self.sends_unregister_request,
-            args=(phone, name, arguments),
-            daemon=False,
-        ).start()
+        # Thread(
+        #     target=self.sends_unregister_request,
+        #     args=(phone, name, arguments),
+        #     daemon=False,
+        # ).start()
 
         tasks = [
             asyncio.to_thread(

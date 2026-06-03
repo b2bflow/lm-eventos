@@ -1,4 +1,7 @@
+from datetime import datetime
 from typing import Optional
+from database.client.mongodb_client import MongoDBClient
+from crm.repositories.customer_repository import CustomerRepository
 from utils.logger import logger
 from chat.repositories.conversation_repository import ConversationRepository
 from chat.repositories.message_repository import MessageRepository
@@ -11,6 +14,8 @@ class ConversationService(IConversationService):
         self.conversation_repo = ConversationRepository()
         self.message_repo = MessageRepository()
         self.quote_service = QuoteService()
+        self.db = MongoDBClient()
+        self.customer_repo = CustomerRepository(self.db)
 
     def get_all_conversations(self):
         try:
@@ -35,7 +40,20 @@ class ConversationService(IConversationService):
                 conversation.status = data['status']
                 if data['status'] == 'CLOSED':
                     final_status = data.get('final_customer_status') or getattr(conversation.customer, 'customer_state_now', 'ANALYSIS')
-                    conversation.final_customer_status = final_status
+                    conversation.final_customer_status = final_status 
+
+                    print('>>>>',self.db)
+
+                    self.customer_repo.update(
+                        id=str(conversation.customer.id),
+                        attributes={
+                            "blocked_until": datetime.now(),
+                            "send_button": True,
+                            "new_service": True,
+                            "agent": "response_orchestrator"
+                        },
+                    )
+
                     if not getattr(conversation, 'quote', None) and final_status in ['WON', 'LOST']:
                         from crm.models.quote_model import Quote
                         quote = self.quote_service.get_or_create_active_quote_for_customer(str(conversation.customer.id))

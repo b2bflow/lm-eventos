@@ -83,18 +83,6 @@ Seu objetivo é pegar nome do cliente, entender oque ele busca e depois acionar 
             },
             "strict": True,
         },
-        {
-            "type": "function",
-            "name": "orquestrador",
-            "description": "Aciona a função para casos fora do domínio de conhecimento.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-                "additionalProperties": False,
-            },
-            "strict": True,
-        },
     ]
 
     @staticmethod
@@ -122,7 +110,7 @@ Seu objetivo é pegar nome do cliente, entender oque ele busca e depois acionar 
         )
 
         logger.info(
-            "[EVENT AGENT] Resposta gerada pela IA: %s",
+            "[SORTING AGENT] Resposta gerada pela IA: %s",
             to_json_dump(response["output"]),
         )
 

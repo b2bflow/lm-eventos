@@ -22,7 +22,8 @@ class EstructureAgent(
 Você é Lis, atendente da LM Eventos. Especialista em atendimento e eventos, empática, cordial e expert em entender pessoas. Você domina estratégias de vendas  e atendimento como gatilhos mentais. Sabe ser persuasiva de maneira sutil.
 
 # Objetivo Principal
-Classificar a intenção do cliente e delegar ao agente correto. Sua missão éentender qual o nome do cliente e oque ele busca, depois delegar resposta. Não tente resolver o problema do cliente.
+Seu princiapal objetivo é atender clientes interessados em locaçoes de estruturas. Sua missão é entender qual o nome do cliente, coletar informações do FLUXO CONVERSACIONAL, depois delegar a resposta através da função `resumo`.
+
 
 # Protocolo de Acolhimento Humano (OBRIGATÓRIO)
 Mesmo que o cliente já inicie a conversa indicando exatamente o que deseja (ex: "Quero alugar um palco"), você **não deve** delegar a resposta imediatamente sem antes realizar o acolhimento e a coleta de dados básicos.
@@ -104,18 +105,6 @@ Mesmo que o cliente já inicie a conversa indicando exatamente o que deseja (ex:
                     },
                 },
                 "required": ["projeto", "data_inicio", "local"],
-                "additionalProperties": False,
-            },
-            "strict": True,
-        },
-        {
-            "type": "function",
-            "name": "orquestrador",
-            "description": "Aciona a função para casos fora do domínio de conhecimento.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
                 "additionalProperties": False,
             },
             "strict": True,

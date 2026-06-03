@@ -1,4 +1,5 @@
 from typing import Dict, Any
+
 from ai_agents.mixins.agent_orchestration_mixin import AgentOrchestrationMixin
 from ai_agents.mixins.function_call_mixin import FunctionCallMixin
 from ai_agents.containers.repository_container import RepositoryContainer
@@ -7,9 +8,7 @@ from utils.logger import logger
 from ai_agents.interfaces.tool_interface import ITool
 
 
-
 class HumanTransferTool(ITool, FunctionCallMixin, AgentOrchestrationMixin):
-    name = "human_transfer_tool"
     model = "gpt-5.1"
     _function_call_input = ""
 
@@ -22,49 +21,88 @@ class HumanTransferTool(ITool, FunctionCallMixin, AgentOrchestrationMixin):
         self._client_container = client_container
         self._repository_container = repository_container
         self._agents = agent_container
+
     @property
     def name(self) -> str:
         return "human_transfer_tool"
 
     @property
     def schema(self) -> Dict[str, Any]:
-        return (
-            {
-                "type": "function",
-                "name": "human_transfer_tool",
-                "description": "Encaminha o atendimento para um humano",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "nome_completo": {
-                            "description": "Nome completo do cliente",
-                            "type": "string",
-                        }
-                    },
-                    "required": ["nome_completo"],
-                    "additionalProperties": False,
+        return {
+            "type": "function",
+            "name": "human_transfer_tool",
+            "description": "Encaminha o atendimento para outro agente",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "agent": {
+                        "description": "Identificador do agente que receberá o atendimento",
+                        "type": "string",
+                    }
                 },
-                "strict": True,
+                "required": ["agent"],
+                "additionalProperties": False,
             },
-        )
+            "strict": True,
+        }
+
+    def _clean_agent_context(self, context: list) -> list:
+        """
+        Remove prompts de system/developer do agente anterior.
+        Mantém apenas o histórico real da conversa.
+        """
+
+        allowed_roles = {
+            "user",
+            "assistant",
+            "tool",
+            "function",
+        }
+
+        return [
+            message
+            for message in context
+            if message.get("role") in allowed_roles
+        ]
 
     async def execute(self, **kwargs) -> list[dict]:
         try:
-            logger.info(f"EXECUTOU FUNCTION HUMAN TRANSFER TOOL {kwargs}")
-
-            self._repository_container.customer.update(
-                id=kwargs['customer'].get('id'),
-                attributes={
-                    "agent": kwargs['arguments']['agent']
-                }
+            logger.info(
+                "[HUMAN_TRANSFER_TOOL] Executando transferência: %s",
+                kwargs,
             )
 
-            result = await self._agents.get(kwargs['arguments']['agent']).execute(
-                kwargs['context'], kwargs['customer']
+            target_agent = kwargs["arguments"]["agent"]
+
+            self._repository_container.customer.update(
+                id=kwargs["customer"].get("id"),
+                attributes={
+                    "agent": target_agent,
+                },
+            )
+
+            clean_context = self._clean_agent_context(
+                kwargs.get("context", [])
+            )
+
+            logger.info(
+                "[HUMAN_TRANSFER_TOOL] Contexto limpo enviado para %s: %s",
+                target_agent,
+                clean_context,
+            )
+
+            result = await self._agents.get(target_agent).execute(
+                clean_context,
+                kwargs["customer"],
             )
 
             if isinstance(result, str):
-                return [{"role": "assistant", "content": result}]
+                return [
+                    {
+                        "role": "assistant",
+                        "content": result,
+                    }
+                ]
 
             if isinstance(result, dict):
                 return [result]
@@ -72,7 +110,10 @@ class HumanTransferTool(ITool, FunctionCallMixin, AgentOrchestrationMixin):
             return result
 
         except Exception as e:
-            logger.error(f"[HumanTransferTool] Falha crítica na execução da ferramenta: {e}")
+            logger.exception(
+                "[HumanTransferTool] Falha crítica na execução da ferramenta"
+            )
+
             return [
                 {
                     "role": "assistant",

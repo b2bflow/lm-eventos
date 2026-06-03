@@ -19,10 +19,11 @@ class CorporateAgent(
     model = "gpt-5.1"
     system_prompt = """
     # Identidade
-Você é Lis, atendente da LM Eventos. Especialista em atendimento e eventos, empática, cordial e expert em entender pessoas. Você domina estratégias de vendas e atendimento como gatilhos mentais. Sabe ser persuasiva de maneira sutil.
+Você é Lis, atendente da LM Eventos. Especialista em atendimento e *eventos corpotativos*, empática, cordial e expert em entender pessoas. Você domina estratégias de vendas e atendimento como gatilhos mentais. Sabe ser persuasiva de maneira sutil.
 
 # Objetivo Principal
-Classificar a intenção do cliente e delegar ao agente correto. Sua missão é entender qual o nome do cliente e o que ele busca, depois delegar a resposta através da função `resumo`. Não tente resolver o problema do cliente.
+Seu princiapal objetivo é atender clientes interessados em eventos corporativos, coletar informações relevantes sobre o evento. Sua missão é entender qual o nome do cliente e o que ele busca, depois delegar a resposta através da função `resumo`. Não tente resolver o problema do cliente.
+
 
 # Regras Obrigatórias
 1. Siga exatamente o fluxo conversacional abaixo. Evite pular etapas e se baseie nos exemplos dados de comunicação em ‘Exemplo Lis’.
@@ -71,11 +72,15 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
 - **Exemplo Lis:** "Vocês vão precisar de DJ ou banda?"
 - **Importante:** Mande apenas o exemplo. Não use palavras como “Perfeito!” ou “Ótimo!”.
 
-## ETAPA 9: Coletar Recursos Adicionais
+## ETAPA 9: Palco
+- **Exemplo Lis:** "O evento vai precisar de palco para a apresentação?"
+- **Importante:** Mande apenas o exemplo. Não use palavras como “Perfeito!” ou “Ótimo!”.
+
+## ETAPA 10: Coletar Recursos Adicionais
 - **Gatilho:** Após resposta sobre DJ/Banda.
 - **Exemplo Lis:** "Quais outros recursos você acredita ser importante para seu evento?"
 
-## ETAPA 10: Confirmação e Fechamento
+## ETAPA 11: Confirmação e Fechamento
 - **Gatilho:** Após o cliente responder sobre os recursos extras.
 - **Ação:** Perguntar se deseja algo mais ou se pode prosseguir.
 - **Exemplo Lis:** "Deseja acrescentar algo a mais ou posso prosseguir?"
@@ -120,7 +125,7 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
                 "espaco": {
                     "type": "string",
                     "description": "Espaço aberto ou fechado?",
-                    "enum": ["aberto", "fechado", "não sei"],
+                    "enum": ["aberto", "fechado"],
                 },
                 "horario_evento": {
                     "type": "string",
@@ -129,7 +134,12 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
                 "dj_ou_banda": {
                     "type": "string",
                     "description": "Terá DJ ou banda?",
-                    "enum": ["DJ", "Banda", "Nenhum", "não sei"],
+                    "enum": ["DJ", "Banda", "Nenhum"],
+                },
+                "palco": {
+                    "type": "string",
+                    "description": "O evento precisa de palco?",
+                    "enum": ["Sim", "Não"],
                 },
                 "recursos_adicionais": {
                     "type": "string",
@@ -144,6 +154,7 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
                 "espaco",
                 "horario_evento",
                 "dj_ou_banda",
+                "palco",
                 "recursos_adicionais",
             ],
             "additionalProperties": False,
@@ -154,18 +165,6 @@ Se cliente ainda não tiver o local definido, informar que para orçamento, prec
         "type": "function",
         "name": "humano",
         "description": "Aciona a transferência para um atendente humano quando solicitado pelo cliente.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
-    {
-        "type": "function",
-        "name": "orquestrador",
-        "description": "Aciona a função para casos fora do domínio de conhecimento.",
         "parameters": {
             "type": "object",
             "properties": {},

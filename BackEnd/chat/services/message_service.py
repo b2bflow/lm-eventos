@@ -139,6 +139,11 @@ class MessageService(IMessageService):
                     phone=phone, message=msg_text, buttons=buttons
                 )
 
+                self.customer_repository.update(
+                    id=customer.get('id'),
+                    attributes={"send_button": False}
+                )
+
                 return True
             
             if vals[1] == "5":
@@ -159,6 +164,12 @@ class MessageService(IMessageService):
                 return True
 
             else:
+
+                self.customer_repository.update(
+                    id=customer.get('id'),
+                    attributes={"send_button": False}
+                )
+
                 return False
 
         return False
@@ -299,6 +310,16 @@ class MessageService(IMessageService):
                 vals, phone, customer)
             
             if leave_execution:
+                return message
+            
+            if customer.get("send_button", True):
+                msm_text = "Por favor, para que eu possa te ajudar melhor, selecione uma das opções enviadas anteriormente."
+
+                self.chat.send_message(
+                    phone=phone, 
+                    message=msm_text
+                )
+
                 return message
 
             if should_trigger_ai:
