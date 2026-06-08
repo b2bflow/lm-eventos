@@ -17,6 +17,7 @@ class CustomerService(ICustomerService):
 
     def __init__(self):
         self.customer_repo = CustomerRepository(MongoDBClient())
+        self.zapi_client = ZAPIClient()
 
     def _parse_datetime(self, value):
         if not value:
@@ -156,7 +157,7 @@ class CustomerService(ICustomerService):
                 logger.warning("[CustomerService] FINANCE_PHONE não configurado. Resumo financeiro não enviado.")
                 return
 
-            ZAPIClient().send_message(
+            self.zapi_client.send_message(
                 phone=finance_phone,
                 message=self._build_financial_summary(customer),
             )
@@ -273,3 +274,88 @@ class CustomerService(ICustomerService):
         except Exception as e:
             logger.error(f"[CustomerService] Erro ao deletar lead: {str(e)}")
             raise e
+
+    def get_customer_needs_follow_up(self) -> List[dict]:
+        
+        try:
+            return self.customer_repo.get_customers_needing_follow_up()
+
+        except Exception:
+            logger.exception(
+                "[CustomerService] Erro ao buscar clientes para follow-up"
+            )
+            return []
+        
+    FOLLOW_UP_TEMPLATE = (
+        "Olá{customer_name}! Eu sou a clara 😊.\n\n"
+        "Percebi que nossa conversa ficou parada e gostaria de saber "
+        "se ainda posso ajudar você com alguma informação ou dúvida.\n\n"
+        "Fico à disposição!"
+    )
+
+    def _build_follow_up_message(self, customer: dict) -> str:
+        name = customer.get("name")
+
+        customer_name = f", {name}" if name else ""
+
+        return self.FOLLOW_UP_TEMPLATE.format(
+            customer_name=customer_name
+        )
+
+    def _send_follow_up_message(self, customer: dict) -> bool:
+        customer_id = customer.get("id")
+        phone = customer.get("phone")
+
+        if not customer_id:
+            logger.warning(
+                "[CustomerService] Cliente sem id. Follow-up cancelado."
+            )
+            return False
+
+        if not phone:
+            logger.warning(
+                f"[CustomerService] Cliente {customer_id} sem telefone. "
+                "Follow-up cancelado."
+            )
+            return False
+
+        try:
+            message = self._build_follow_up_message(customer)
+
+            self.zapi_client.send_message(
+                phone=phone,
+                message=message,
+            )
+
+            self.customer_repo.update(
+                id=customer_id,
+                attributes={
+                    "followup_sent": True,
+                    "updated_at": datetime.now(),
+                    "agent": "follow_up_agent",
+                    "send_button": False,
+                    # "new_service": False,
+                },
+            )
+
+            logger.info(
+                f"[CustomerService] Follow-up enviado para cliente {customer_id}"
+            )
+
+            return True
+
+        except Exception:
+            logger.exception(
+                f"[CustomerService] Erro ao enviar follow-up para cliente {customer_id}"
+            )
+            return False
+        
+    def process_follow_ups(self) -> None:
+        customers = self.get_customer_needs_follow_up()
+
+        logger.info(
+            f"[CustomerService] {len(customers)} clientes encontrados para follow-up"
+        )
+
+        for customer in customers:
+            self._send_follow_up_message(customer)

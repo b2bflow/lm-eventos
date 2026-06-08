@@ -33,6 +33,9 @@ class Customer(Document):
 
     send_button = BooleanField(default=True)
 
+    last_message_attendant = DateTimeField(null=True)
+    followup_sent = BooleanField(default=False)
+
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
 
@@ -53,4 +56,6 @@ class Customer(Document):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "send_button": self.send_button,
+            "last_message_attendant": self.last_message_attendant.isoformat() if self.last_message_attendant else None,
+            "followup_sent": self.followup_sent,
         }

@@ -417,6 +417,13 @@ class GenerateResponseService:
                 blocked_until,
             )
             return
+        
+        self.customer_repository.update(
+            id=customer.get("id"),
+            attributes={
+                "last_message_attendant": datetime.now(),
+            },
+        )
 
         active_conversation = self.conversation_repository.get_active_conversation(customer=customer.get("id"))
         if active_conversation and (

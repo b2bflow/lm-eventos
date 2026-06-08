@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from crm.models.custumer_model import Customer
 from crm.interfaces.customer_repository_interface import ICustomerRepository
 from database.client.mongodb_client import MongoDBClient
@@ -121,6 +123,8 @@ class CustomerRepository(ICustomerRepository):
                     "blocked_until",
                     "new_service",
                     "send_button",
+                    "last_message_attendant",
+                    "followup_sent",
                 ]:
                     setattr(customer, key, value)
 
@@ -133,19 +137,16 @@ class CustomerRepository(ICustomerRepository):
             return Customer.objects(phone=phone).count() > 0
 
     def get_customers_needing_follow_up(self) -> list[dict]:
-        """
-        Retorna todos os customers que precisam de follow-up.
 
-        Critérios:
-        - needs_follow_up = True
-        - follow_up_done = False
+        four_hours_ago = datetime.now() - timedelta(hours=4)
 
-        A lógica de negócio para determinar se uma conversa foi realmente abandonada
-        é feita em um serviço específico.
-        """
         with self.db.get_connection_context():
-            customers = Customer.objects(needs_follow_up=True, follow_up_done=False)
-            return [customer.to_dict() for customer in customers]
+            customers = Customer.objects(
+                last_message_attendant__lte=four_hours_ago,
+                followup_sent=False,
+            )
+
+        return [customer.to_dict() for customer in customers]
 
     def get_by_id(self, id: str) -> dict | None:
         with self.db.get_connection_context():

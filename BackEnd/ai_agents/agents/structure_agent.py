@@ -136,7 +136,7 @@ Mesmo que o cliente já inicie a conversa indicando exatamente o que deseja (ex:
         )
 
         logger.info(
-            "[EVENT AGENT] Resposta gerada pela IA: %s",
+            "[STRUCTURE AGENT] Resposta gerada pela IA: %s",
             to_json_dump(response["output"]),
         )
 

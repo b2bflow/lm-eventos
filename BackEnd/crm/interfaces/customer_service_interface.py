@@ -27,3 +27,8 @@ class ICustomerService(ABC):
     @abstractmethod
     def get_customer_by_phone(phone: str) -> Any:
         pass
+
+    @staticmethod
+    @abstractmethod
+    def process_follow_ups(self) -> None:
+        pass

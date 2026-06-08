@@ -141,7 +141,10 @@ class MessageService(IMessageService):
 
                 self.customer_repository.update(
                     id=customer.get('id'),
-                    attributes={"send_button": False}
+                    attributes={
+                        "send_button": False,
+                        "last_message_attendant": datetime.now(),
+                    }
                 )
 
                 return True
@@ -159,6 +162,13 @@ class MessageService(IMessageService):
 
                 self.chat.send_message_with_button(
                     phone=phone, message=msg_text, buttons=buttons
+                )
+
+                self.customer_repository.update(
+                    id=customer.get("id"),
+                    attributes={
+                        "last_message_attendant": datetime.now(),
+                    },
                 )
 
                 return True
@@ -298,6 +308,13 @@ class MessageService(IMessageService):
                 b = self.customer_repository.update(
                     id=customer.get('id'),
                     attributes={"new_service": False}
+                )
+
+                self.customer_repository.update(
+                    id=customer.get("id"),
+                    attributes={
+                        "last_message_attendant": datetime.now(),
+                    },
                 )
 
                 print("Atualização do campo new_service:", b)
