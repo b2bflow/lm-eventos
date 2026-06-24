@@ -6,6 +6,14 @@ class IConversationService(ABC):
     def update_conversation(self, conversation_id: str, data: dict, user: Any = None) -> Any:
         pass
 
+    @abstractmethod
+    def search_contacts(self, search_term: str, status: str) -> list[dict]:
+        pass
+
+    @abstractmethod
+    def start_conversation(self, customer_id: str) -> tuple[Any, bool]:
+        pass
+
 class IMessageService(ABC):
     @abstractmethod
     def process_incoming_message(self, phone: str, content: str, external_id: str = None, raw_metadata: dict = None) -> Any:

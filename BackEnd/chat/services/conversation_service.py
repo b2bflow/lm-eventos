@@ -7,6 +7,8 @@ from chat.repositories.conversation_repository import ConversationRepository
 from chat.repositories.message_repository import MessageRepository
 from chat.interfaces.chat_service_interface import IConversationService
 from crm.services.quote_service import QuoteService
+from crm.models.custumer_model import Customer
+from mongoengine.errors import DoesNotExist, ValidationError
 
 
 class ConversationService(IConversationService):
@@ -23,6 +25,30 @@ class ConversationService(IConversationService):
         except Exception as e:
             logger.error(f"[ConversationService] Erro ao listar conversas: {e}")
             raise e
+
+    def search_contacts(self, search_term: str, status: str) -> list[dict]:
+        normalized_term = (search_term or '').strip()
+        if len(normalized_term) < 2:
+            raise ValueError("Informe ao menos 2 caracteres para buscar.")
+        if status not in ['OPEN', 'CLOSED']:
+            raise ValueError("Status de conversa inválido.")
+
+        return self.conversation_repo.search_contacts(normalized_term, status, limit=10)
+
+    def start_conversation(self, customer_id: str):
+        if not customer_id:
+            raise ValueError("ID do contato é obrigatório.")
+
+        try:
+            customer = Customer.objects.get(id=customer_id)
+        except (DoesNotExist, ValidationError):
+            raise ValueError("Contato não encontrado.")
+
+        existing = self.conversation_repo.get_active_conversation(customer)
+        if existing:
+            return existing, False
+
+        return self.conversation_repo.create_conversation(customer), True
 
     def update_conversation(self, conversation_id: str, data: dict, user=None):
         try:

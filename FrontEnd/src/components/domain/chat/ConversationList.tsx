@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Tag, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Tag, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-interface Conversation {
+export interface ConversationListItem {
   id: string;
+  customerId: string;
   phone: string;
   name: string;
   lastMessage: string;
@@ -15,13 +16,17 @@ interface Conversation {
   finished?: boolean;
   customer_status?: string;
   needs_attention?: boolean; 
+  contactOnly?: boolean;
 }
 
 interface ConversationListProps {
-  conversations: Conversation[];
+  conversations: ConversationListItem[];
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (conversation: ConversationListItem) => void;
   onToggleTag?: (id: string, currentTag: string) => void;
+  onRemoteSearch: (term: string, status: "OPEN" | "CLOSED") => Promise<void>;
+  isRemoteSearching?: boolean;
+  remoteSearchError?: boolean;
 }
 
 const getStatusDisplay = (status: string | undefined) => {
@@ -36,31 +41,62 @@ const getStatusDisplay = (status: string | undefined) => {
   }
 };
 
-export function ConversationList({ conversations, selectedId, onSelect, onToggleTag }: ConversationListProps) {
+const normalizeSearch = (value: string) => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .trim();
+
+export function ConversationList({
+  conversations,
+  selectedId,
+  onSelect,
+  onToggleTag,
+  onRemoteSearch,
+  isRemoteSearching = false,
+  remoteSearchError = false,
+}: ConversationListProps) {
   const [activeTab, setActiveTab] = useState<"OPEN" | "CLOSED">("OPEN");
   const [modeFilter, setModeFilter] = useState<"all" | "ai" | "manual">("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const lastRemoteSearch = useRef("");
 
-  const isAiMode = (conversation: Conversation) => conversation.tag === "AGENTE" && conversation.ai_active === true;
+  const normalizedTerm = normalizeSearch(searchTerm);
+  const phoneTerm = searchTerm.replace(/\D/g, "");
+  const isAiMode = (conversation: ConversationListItem) => conversation.tag === "AGENTE" && conversation.ai_active === true;
 
-  const filteredConversations = conversations.filter(c => {
-    const matchesStatus = activeTab === "OPEN" ? !c.finished : c.finished;
-    const matchesMode =
-      modeFilter === "all" ||
-      (modeFilter === "ai" && isAiMode(c)) ||
-      (modeFilter === "manual" && !isAiMode(c));
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-    const matchesName = !normalizedSearch || c.name.toLowerCase().includes(normalizedSearch);
-    return matchesStatus && matchesMode && matchesName;
-  });
+  const filteredConversations = useMemo(() => conversations.filter((conversation) => {
+    const belongsToTab = activeTab === "OPEN" ? !conversation.finished : conversation.finished;
+    const belongsToMode = modeFilter === "all"
+      || (modeFilter === "ai" && isAiMode(conversation))
+      || (modeFilter === "manual" && !isAiMode(conversation));
+    if (!belongsToTab || !belongsToMode || (conversation.contactOnly && normalizedTerm.length < 2)) return false;
+    if (!normalizedTerm) return true;
+
+    const nameMatches = normalizeSearch(conversation.name).includes(normalizedTerm);
+    const normalizedPhone = conversation.phone.replace(/\D/g, "");
+    const phoneMatches = phoneTerm.length > 0 && normalizedPhone.includes(phoneTerm);
+    return nameMatches || phoneMatches;
+  }), [activeTab, conversations, modeFilter, normalizedTerm, phoneTerm]);
 
   const getModeLabel = (isActive: boolean) => isActive ? "AGENTE IA ATIVO" : "OPERADOR MANUAL";
+  const getModeStyle = (isActive: boolean) => isActive
+    ? "bg-purple-500 text-white border-purple-400 hover:bg-purple-600 shadow-purple-500/20"
+    : "bg-blue-600 text-white border-blue-500 hover:bg-blue-700 shadow-blue-600/20";
 
-  const getModeStyle = (isActive: boolean) => (
-    isActive
-      ? "bg-purple-500 text-white border-purple-400 hover:bg-purple-600 shadow-purple-500/20"
-      : "bg-blue-600 text-white border-blue-500 hover:bg-blue-700 shadow-blue-600/20"
-  );
+  useEffect(() => {
+    if (normalizedTerm.length < 2 || filteredConversations.length > 0) return;
+
+    const searchKey = `${activeTab}:${normalizedTerm}`;
+    if (lastRemoteSearch.current === searchKey) return;
+
+    const timeoutId = window.setTimeout(() => {
+      lastRemoteSearch.current = searchKey;
+      void onRemoteSearch(searchTerm.trim(), activeTab);
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeTab, filteredConversations.length, normalizedTerm, onRemoteSearch, searchTerm]);
 
   return (
     <div className="h-full flex flex-col bg-background/50 backdrop-blur-xl border-r border-border/50">
@@ -112,9 +148,12 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
             type="search"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Pesquisar cliente pelo nome"
-            className="h-9 w-full rounded-md border border-border/50 bg-background pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
+            placeholder="Buscar por nome ou telefone"
+            className="h-10 w-full rounded-lg border border-border/60 bg-background/70 pl-9 pr-9 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/60"
           />
+          {isRemoteSearching && (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />
+          )}
         </div>
       </div>
 
@@ -122,7 +161,9 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
         {filteredConversations.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             <CheckCircle2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">Nenhuma conversa encontrada</p>
+            <p className="text-sm">
+              {remoteSearchError ? "Não foi possível buscar no banco" : isRemoteSearching ? "Buscando contatos..." : "Nenhuma conversa encontrada"}
+            </p>
           </div>
         ) : (
           filteredConversations.map((conv) => {
@@ -132,7 +173,7 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
             return (
               <div
                 key={conv.id}
-                onClick={() => onSelect(conv.id)}
+                onClick={() => onSelect(conv)}
                 className={cn(
                   "p-3 rounded-xl cursor-pointer transition-all group border",
                   selectedId === conv.id
@@ -176,7 +217,7 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
                     {/* LINHA INFERIOR: Tags (Esquerda) e Horário (Direita) */}
                     <div className="flex items-end justify-between gap-2 mt-auto">
                       <div className="flex flex-wrap items-center gap-2">
-                        {!conv.finished && (
+                        {!conv.finished && !conv.contactOnly && (
                           <>
                             <button
                               onClick={(e) => {
@@ -202,6 +243,11 @@ export function ConversationList({ conversations, selectedId, onSelect, onToggle
                               {statusInfo.label}
                             </div>
                           </>
+                        )}
+                        {conv.contactOnly && (
+                          <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] font-bold text-primary">
+                            INICIAR CONVERSA
+                          </div>
                         )}
                       </div>
 

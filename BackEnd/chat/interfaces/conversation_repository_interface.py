@@ -26,3 +26,7 @@ class IConversationRepository:
     @staticmethod
     def get_closed_conversations_in_period(start_dt, end_dt):
         ...
+
+    @staticmethod
+    def search_contacts(search_term: str, status: str, limit: int = 10):
+        ...

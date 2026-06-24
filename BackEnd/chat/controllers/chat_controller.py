@@ -66,6 +66,53 @@ class ConversationViewSet(ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    def search_contacts(self, request, *args, **kwargs) -> Response:
+        try:
+            search_term = request.query_params.get('search', '')
+            conversation_status = request.query_params.get('status', 'OPEN').upper()
+            conversation_service = ChatContainer.get_conversation_service()
+            matches = conversation_service.search_contacts(search_term, conversation_status)
+
+            results = []
+            for match in matches:
+                customer = match['customer']
+                conversation = match['conversation']
+                results.append({
+                    'customer': str(customer.id),
+                    'customer_name': customer.name or 'Desconhecido',
+                    'customer_phone': customer.phone or 'Sem Número',
+                    'customer_status': customer.customer_state_now or 'ANALYSIS',
+                    'conversation': ConversationSerializer(conversation).data if conversation else None,
+                })
+
+            return Response({'results': results}, status=status.HTTP_200_OK)
+        except ValueError as ve:
+            return Response({'detail': str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"[ChatController] Erro na busca de contatos: {e}")
+            return Response({'detail': 'Erro interno.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def start_conversation(self, request, *args, **kwargs) -> Response:
+        try:
+            customer_id = request.data.get('customer_id')
+            if not customer_id:
+                return Response(
+                    {'detail': 'ID do contato é obrigatório.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            conversation_service = ChatContainer.get_conversation_service()
+            conversation, created = conversation_service.start_conversation(customer_id)
+            serializer = self.get_serializer(conversation)
+            return Response(
+                serializer.data,
+                status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            )
+        except ValueError as ve:
+            return Response({'detail': str(ve)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"[ChatController] Erro ao iniciar conversa: {e}")
+            return Response({'detail': 'Erro interno.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class MessageViewSet(ModelViewSet):
     serializer_class = MessageSerializer
@@ -128,8 +175,6 @@ class MessageViewSet(ModelViewSet):
                 {"detail": "Erro interno ao processar solicitação."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
-
 class MessageFileUploadView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 

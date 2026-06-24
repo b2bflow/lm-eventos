@@ -28,10 +28,15 @@ message_detail = MessageViewSet.as_view({
     'delete': 'destroy'
 })
 
+contact_search = ConversationViewSet.as_view({'get': 'search_contacts'})
+conversation_start = ConversationViewSet.as_view({'post': 'start_conversation'})
+
 # 4. Declaramos as URLs mapeando para as variáveis acima
 urlpatterns = [
     # --- Rotas Oficiais (Inglês) ---
     path('conversations/', conversation_list, name='conversation-list'),
+    path('contacts/search/', contact_search, name='chat-contact-search'),
+    path('conversations/start/', conversation_start, name='conversation-start'),
     path('conversations/<str:pk>/', conversation_detail, name='conversation-detail'),
     
     path('messages/', message_list, name='message-list'),

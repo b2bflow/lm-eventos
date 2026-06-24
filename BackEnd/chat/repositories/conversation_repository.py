@@ -5,6 +5,8 @@ from mongoengine.errors import DoesNotExist
 from chat.interfaces.conversation_repository_interface import IConversationRepository
 from utils.logger import logger
 from datetime import datetime
+from mongoengine.queryset.visitor import Q
+import re
 
 
 class ConversationRepository(IConversationRepository):
@@ -82,4 +84,37 @@ class ConversationRepository(IConversationRepository):
             )
         except Exception as e:
             logger.error(f"[ConversationRepository] Erro ao buscar conversas fechadas no período: {e}")
+            raise e
+    @staticmethod
+    def search_contacts(search_term: str, status: str, limit: int = 10):
+        """Busca contatos e associa a conversa mais recente da aba solicitada."""
+        try:
+            customer_filter = Q(name__icontains=search_term) | Q(phone__icontains=search_term)
+            phone_term = re.sub(r'\D', '', search_term)
+            if phone_term and phone_term != search_term:
+                customer_filter |= Q(phone__icontains=phone_term)
+
+            customers = Customer.objects(customer_filter).order_by('-updated_at')
+
+            results = []
+            for customer in customers:
+                conversation = ConversationModel.objects(
+                    customer=customer,
+                    status=status,
+                ).order_by('-updated_at').first()
+
+                # Na aba de fechadas, contatos sem conversa fechada não são úteis.
+                if status == 'CLOSED' and conversation is None:
+                    continue
+
+                results.append({
+                    'customer': customer,
+                    'conversation': conversation,
+                })
+                if len(results) >= limit:
+                    break
+
+            return results
+        except Exception as e:
+            logger.error(f"[ConversationRepository] Erro ao buscar contatos do chat: {e}")
             raise e

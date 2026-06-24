@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { ConversationList } from "@/components/domain/chat/ConversationList";
+import { ConversationList, ConversationListItem } from "@/components/domain/chat/ConversationList";
 import { ChatArea } from "@/components/domain/chat/ChatArea";
 import { ClientProfile } from "@/components/domain/chat/ClientProfile";
 import { EditLeadDialog } from "@/components/domain/crm/EditLeadDialog";
@@ -46,6 +46,26 @@ export interface Conversa {
   needs_attention?: boolean;
 }
 
+interface ContactSearchResult {
+  customer: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_status: string;
+  conversation: Conversa | null;
+}
+
+interface ChatMessage {
+  id: string;
+  content: string;
+  created_at: string;
+  direction?: string;
+  role?: string;
+  conversation_id?: string;
+  conversation?: string;
+  time?: string;
+  [key: string]: unknown;
+}
+
 export default function WhatsApp() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showFullHistory, setShowFullHistory] = useState(false);
@@ -56,6 +76,11 @@ export default function WhatsApp() {
   const [closeStatus, setCloseStatus] = useState<"WON" | "LOST">("WON");
   const [closeContractValue, setCloseContractValue] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
+  const [supplementalConversations, setSupplementalConversations] = useState<Conversa[]>([]);
+  const [contactCandidates, setContactCandidates] = useState<ContactSearchResult[]>([]);
+  const [isRemoteSearching, setIsRemoteSearching] = useState(false);
+  const [remoteSearchError, setRemoteSearchError] = useState(false);
+  const [startingCustomerId, setStartingCustomerId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -68,7 +93,14 @@ export default function WhatsApp() {
     refetchInterval: 30000, 
   });
 
-  const selectedConversationObj = conversations.find(c => c.id === selectedConversationId);
+  const allConversations = useMemo(() => {
+    const byId = new Map<string, Conversa>();
+    supplementalConversations.forEach((conversation) => byId.set(conversation.id, conversation));
+    conversations.forEach((conversation) => byId.set(conversation.id, conversation));
+    return Array.from(byId.values());
+  }, [conversations, supplementalConversations]);
+
+  const selectedConversationObj = allConversations.find(c => c.id === selectedConversationId);
   const isClosed = selectedConversationObj?.status === "CLOSED" || selectedConversationObj?.status === "ARCHIVED";
 
   const { data: messages = [], isLoading: isLoadingMessages, isFetching: isFetchingMessages } = useQuery({
@@ -82,8 +114,8 @@ export default function WhatsApp() {
       }
 
       const response = await api.get(url);
-      const msgs = response.data.results || response.data || [];
-      return msgs.map((msg: any) => ({
+      const msgs = (response.data.results || response.data || []) as ChatMessage[];
+      return msgs.map((msg) => ({
         id: msg.id,
         content: normalizeChatMessageContent(msg.content),
         direction: msg.direction,
@@ -114,9 +146,9 @@ export default function WhatsApp() {
       
       if (!convId) return;
 
-      queryClient.setQueryData(["messages", convId, showFullHistory], (oldMessages: any) => {
+      queryClient.setQueryData<ChatMessage[]>(["messages", convId, showFullHistory], (oldMessages) => {
         if (!oldMessages) return [data];
-        const exists = oldMessages.some((m: any) => String(m.id) === String(data.id));
+        const exists = oldMessages.some((message) => String(message.id) === String(data.id));
         if (exists) return oldMessages;
         return [...oldMessages, {
           ...data,
@@ -234,14 +266,12 @@ export default function WhatsApp() {
     if (window.innerWidth < 1024) {
       setIsProfileOpen(false);
     }
-    queryClient.setQueryData(["conversations"], (old: any) => {
-      if (!old || !old.results) return old;
-      return {
-        ...old,
-        results: old.results.map((c: any) =>
-          c.id === id ? { ...c, unread_count: 0, needs_attention: false } : c
-        ),
-      };
+    queryClient.setQueryData<Conversa[]>(["conversations"], (old = []) => {
+      return old.map((conversation) =>
+        conversation.id === id
+          ? { ...conversation, unread_count: 0, needs_attention: false }
+          : conversation
+      );
     });
     api.patch(`/chat/conversations/${id}/`, { mark_read: true });   
     api.patch(`/chat/conversations/${id}/`, { needs_attention: false });
@@ -257,6 +287,100 @@ export default function WhatsApp() {
     });
   };
 
+  const handleRemoteSearch = useCallback(async (term: string, status: "OPEN" | "CLOSED") => {
+    setIsRemoteSearching(true);
+    setRemoteSearchError(false);
+    try {
+      const response = await api.get('/chat/contacts/search/', {
+        params: { search: term, status },
+      });
+      const results: ContactSearchResult[] = response.data.results || [];
+      const foundConversations = results
+        .map((result) => result.conversation)
+        .filter((conversation): conversation is Conversa => conversation !== null);
+      const foundCandidates = results.filter((result) => result.conversation === null);
+
+      setSupplementalConversations((current) => {
+        const byId = new Map(current.map((conversation) => [conversation.id, conversation]));
+        foundConversations.forEach((conversation) => byId.set(conversation.id, conversation));
+        return Array.from(byId.values());
+      });
+      setContactCandidates((current) => {
+        const byCustomer = new Map(current.map((result) => [result.customer, result]));
+        foundCandidates.forEach((result) => byCustomer.set(result.customer, result));
+        return Array.from(byCustomer.values());
+      });
+    } catch {
+      setRemoteSearchError(true);
+    } finally {
+      setIsRemoteSearching(false);
+    }
+  }, []);
+
+  const handleSelectListItem = async (item: ConversationListItem) => {
+    if (!item.contactOnly) {
+      handleSelectConversation(item.id);
+      return;
+    }
+
+    if (startingCustomerId === item.customerId) return;
+    setStartingCustomerId(item.customerId);
+    try {
+      const response = await api.post<Conversa>('/chat/conversations/start/', {
+        customer_id: item.customerId,
+      });
+      const conversation = response.data;
+      setSupplementalConversations((current) => {
+        const withoutDuplicate = current.filter((entry) => entry.id !== conversation.id);
+        return [conversation, ...withoutDuplicate];
+      });
+      setContactCandidates((current) => current.filter((entry) => entry.customer !== item.customerId));
+      handleSelectConversation(conversation.id);
+    } catch {
+      toast.error("Falha ao iniciar a conversa.");
+    } finally {
+      setStartingCustomerId(null);
+    }
+  };
+
+  const conversationListItems = useMemo<ConversationListItem[]>(() => {
+    const conversationItems = allConversations.map((conversation) => ({
+      id: conversation.id,
+      customerId: conversation.customer,
+      phone: conversation.customer_phone,
+      name: conversation.customer_name,
+      lastMessage: normalizeChatMessageContent(conversation.last_message_content),
+      time: conversation.last_interaction_at ? new Date(conversation.last_interaction_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+      tag: conversation.tag as "AGENTE" | "OPERADOR",
+      ai_active: conversation.ai_active,
+      unread: (conversation.unread_count || 0) > 0,
+      finished: conversation.status === "CLOSED",
+      customer_status: conversation.final_customer_status || conversation.customer_state_now || conversation.customer_status,
+      needs_attention: conversation.needs_attention,
+    }));
+
+    const customersWithOpenConversation = new Set(
+      allConversations
+        .filter((conversation) => conversation.status === "OPEN")
+        .map((conversation) => conversation.customer)
+    );
+    const candidateItems = contactCandidates
+      .filter((candidate) => !customersWithOpenConversation.has(candidate.customer))
+      .map((candidate) => ({
+        id: `contact:${candidate.customer}`,
+        customerId: candidate.customer,
+        phone: candidate.customer_phone,
+        name: candidate.customer_name,
+        lastMessage: "Contato sem conversa ativa",
+        time: "",
+        tag: "OPERADOR" as const,
+        finished: false,
+        customer_status: candidate.customer_status,
+        contactOnly: true,
+      }));
+
+    return [...conversationItems, ...candidateItems];
+  }, [allConversations, contactCandidates]);
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
       <Sidebar />
@@ -269,22 +393,13 @@ export default function WhatsApp() {
               selectedConversationId ? "hidden md:flex flex-col" : "flex flex-col"
             )}>
               <ConversationList 
-                conversations={conversations.map((c: Conversa) => ({
-                  id: c.id,
-                  phone: c.customer_phone,
-                  name: c.customer_name,
-                  lastMessage: normalizeChatMessageContent(c.last_message_content),
-                  time: c.last_interaction_at ? new Date(c.last_interaction_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
-                  tag: c.tag,
-                  ai_active: c.ai_active,
-                  unread: (c.unread_count || 0) > 0,
-                  finished: c.status === "CLOSED",
-                  customer_status: c.final_customer_status || c.customer_state_now || c.customer_status,
-                  needs_attention: c.needs_attention 
-                }))}
+                conversations={conversationListItems}
                 selectedId={selectedConversationId}
-                onSelect={handleSelectConversation}
+                onSelect={handleSelectListItem}
                 onToggleTag={handleToggleTag}
+                onRemoteSearch={handleRemoteSearch}
+                isRemoteSearching={isRemoteSearching || !!startingCustomerId}
+                remoteSearchError={remoteSearchError}
               />
             </div>
 
