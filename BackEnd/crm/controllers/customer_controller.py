@@ -35,13 +35,16 @@ class CustomerController(ViewSet):
             status_filter = request.query_params.get(
                 "actual_status"
             ) or request.query_params.get("tag")
+            custom_tag_filter = request.query_params.get("customer_custom_tag")
             search_term = request.query_params.get("search")
             page = int(request.query_params.get("page", 1))
             page_size = 10
 
             customer_service = CrmContainer.get_customer_service()
             customers = customer_service.get_active_customers(
-                status_filter=status_filter, search_term=search_term
+                status_filter=status_filter,
+                search_term=search_term,
+                custom_tag_filter=custom_tag_filter,
             )
 
             total_count = len(customers)

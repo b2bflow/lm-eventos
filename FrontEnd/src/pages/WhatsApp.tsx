@@ -31,6 +31,7 @@ export interface Conversa {
   ai_active?: boolean;
   unread_count?: number;
   customer_status?: string;
+  customer_custom_tag?: string | null;
   customer_state_now?: string;
   celebration_type?: string | null;
   event_title?: string | null;
@@ -356,6 +357,7 @@ export default function WhatsApp() {
       unread: (conversation.unread_count || 0) > 0,
       finished: conversation.status === "CLOSED",
       customer_status: conversation.final_customer_status || conversation.customer_state_now || conversation.customer_status,
+      customer_custom_tag: conversation.customer_custom_tag,
       needs_attention: conversation.needs_attention,
     }));
 
@@ -376,6 +378,7 @@ export default function WhatsApp() {
         tag: "OPERADOR" as const,
         finished: false,
         customer_status: candidate.customer_status,
+        customer_custom_tag: undefined,
         contactOnly: true,
       }));
 

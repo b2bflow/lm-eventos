@@ -7,6 +7,7 @@ class ConversationSerializer(DocumentSerializer):
     customer_name = serializers.CharField(source='customer.name', read_only=True, default="Desconhecido")
     customer_phone = serializers.CharField(source='customer.phone', read_only=True, default="Sem Número")
     customer_status = serializers.CharField(source='customer.customer_state_now', read_only=True, default="ANALYSIS")
+    customer_custom_tag = serializers.CharField(source='customer.customer_custom_tag', read_only=True, allow_null=True)
     blocked_until = serializers.DateTimeField(source='customer.blocked_until', read_only=True, allow_null=True)
     quote_id = serializers.CharField(source='quote.id', read_only=True, allow_null=True)
     customer_state_now = serializers.CharField(source='quote.status', read_only=True, allow_null=True)
@@ -33,6 +34,7 @@ class ConversationSerializer(DocumentSerializer):
         model = ConversationModel
         fields = [
             'id', 'customer', 'quote_id', 'customer_name', 'customer_phone', 'customer_status', 
+            'customer_custom_tag',
             'customer_state_now', 'celebration_type', 'event_title', 'event_date', 'event_time',
             'guest_count', 'quoted_amount', 'contract_value', 'venue', 'notes',
             'operator_requests', 'next_step',

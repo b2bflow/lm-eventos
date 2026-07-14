@@ -69,7 +69,7 @@ class ContinuarTool(ITool, FunctionCallMixin):
 
         self.chat.send_message(
             phone=phone,
-            message="Olá eu sou a Liz, atendente da LM Eventos. Para continuarmos, me informe qual seu nome. ",
+            message="Olá eu sou a Lins, atendente da LM Eventos. Para continuarmos, me informe qual seu nome. ",
         )
 
         tasks = [

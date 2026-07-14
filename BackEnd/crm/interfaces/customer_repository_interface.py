@@ -5,7 +5,12 @@ class ICustomerRepository(ABC):
     def get_customers(self, ids: list[str]) -> list[dict]:
         pass
 
-    def get_all_customers(self) -> list[dict]:
+    def get_all_customers(
+        self,
+        status_filter: str | None = None,
+        search_term: str | None = None,
+        custom_tag_filter: str | None = None,
+    ) -> list[dict]:
         """Retrieve all customers."""
         pass
 

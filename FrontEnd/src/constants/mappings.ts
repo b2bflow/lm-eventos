@@ -25,6 +25,20 @@ export const LEAD_STATUS_OPTIONS = [
   "LOST",
 ] as const;
 
+export const CUSTOMER_TAG_LABELS: Record<string, string> = {
+  "visita tecnica": "Visita técnica",
+  "operador humano": "Operador humano",
+  "orcamento": "Orçamento",
+};
+
+export const CUSTOMER_TAG_STYLES: Record<string, string> = {
+  "visita tecnica": "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  "operador humano": "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  "orcamento": "bg-amber-500/10 text-amber-600 border-amber-500/20",
+};
+
+export const CUSTOMER_TAG_OPTIONS = ["visita tecnica", "operador humano", "orcamento"] as const;
+
 // --- STATUS DE COLABORADOR ---
 export const USER_STATUS_LABELS: Record<string, string> = {
   ONLINE: "Online",

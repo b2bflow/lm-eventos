@@ -27,12 +27,20 @@ class CustomerRepository(ICustomerRepository):
             customers = Customer.objects(id__in=object_ids)
             return [customer.to_dict() for customer in customers]
 
-    def get_all_customers(self, status_filter: str | None = None, search_term: str | None = None) -> list[dict]:
+    def get_all_customers(
+        self,
+        status_filter: str | None = None,
+        search_term: str | None = None,
+        custom_tag_filter: str | None = None,
+    ) -> list[dict]:
         with self.db.get_connection_context():
             customers = Customer.objects()
 
             if status_filter and status_filter != 'all':
                 customers = customers.filter(customer_state_now=status_filter)
+
+            if custom_tag_filter and custom_tag_filter != 'all':
+                customers = customers.filter(customer_custom_tag=custom_tag_filter)
 
             if search_term:
                 customers = customers.filter(
@@ -120,6 +128,7 @@ class CustomerRepository(ICustomerRepository):
                     "phone",
                     "agent",
                     "customer_state_now",
+                    "customer_custom_tag",
                     "blocked_until",
                     "new_service",
                     "send_button",

@@ -40,15 +40,17 @@ export const useLeads = () => {
   const [page, setPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [customTagFilter, setCustomTagFilter] = useState("all");
 
   const { data, isLoading, isError, refetch } = useQuery<LeadsResponse>({
-    queryKey: ["leads", page, searchTerm, statusFilter],
+    queryKey: ["leads", page, searchTerm, statusFilter, customTagFilter],
     queryFn: async () => {
       const response = await api.get("/crm/quotes/", {
         params: {
           page,
           search: searchTerm || undefined,
           tag: statusFilter === "all" ? undefined : statusFilter,
+          customer_custom_tag: customTagFilter === "all" ? undefined : customTagFilter,
         },
       });
       return response.data;
@@ -69,6 +71,8 @@ export const useLeads = () => {
     setSearchTerm,
     statusFilter,      
     setStatusFilter,   
+    customTagFilter,
+    setCustomTagFilter,
     refetch,
   };
 };

@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Tag, Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  CUSTOMER_TAG_LABELS,
+  CUSTOMER_TAG_OPTIONS,
+  CUSTOMER_TAG_STYLES,
+  LEAD_STATUS_LABELS,
+  LEAD_STATUS_OPTIONS,
+} from "@/constants/mappings";
 
 export interface ConversationListItem {
   id: string;
@@ -15,6 +22,7 @@ export interface ConversationListItem {
   unread?: boolean;
   finished?: boolean;
   customer_status?: string;
+  customer_custom_tag?: string | null;
   needs_attention?: boolean; 
   contactOnly?: boolean;
 }
@@ -58,6 +66,7 @@ export function ConversationList({
 }: ConversationListProps) {
   const [activeTab, setActiveTab] = useState<"OPEN" | "CLOSED">("OPEN");
   const [modeFilter, setModeFilter] = useState<"all" | "ai" | "manual">("all");
+  const [customTagFilter, setCustomTagFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const lastRemoteSearch = useRef("");
 
@@ -70,14 +79,19 @@ export function ConversationList({
     const belongsToMode = modeFilter === "all"
       || (modeFilter === "ai" && isAiMode(conversation))
       || (modeFilter === "manual" && !isAiMode(conversation));
-    if (!belongsToTab || !belongsToMode || (conversation.contactOnly && normalizedTerm.length < 2)) return false;
+    const matchesCustomTag =
+      customTagFilter === "all" ||
+      conversation.customer_status === customTagFilter ||
+      conversation.customer_custom_tag === customTagFilter;
+
+    if (!belongsToTab || !belongsToMode || !matchesCustomTag || (conversation.contactOnly && normalizedTerm.length < 2)) return false;
     if (!normalizedTerm) return true;
 
     const nameMatches = normalizeSearch(conversation.name).includes(normalizedTerm);
     const normalizedPhone = conversation.phone.replace(/\D/g, "");
     const phoneMatches = phoneTerm.length > 0 && normalizedPhone.includes(phoneTerm);
     return nameMatches || phoneMatches;
-  }), [activeTab, conversations, modeFilter, normalizedTerm, phoneTerm]);
+  }), [activeTab, conversations, modeFilter, customTagFilter, normalizedTerm, phoneTerm]);
 
   const getModeLabel = (isActive: boolean) => isActive ? "AGENTE IA ATIVO" : "OPERADOR MANUAL";
   const getModeStyle = (isActive: boolean) => isActive
@@ -117,6 +131,25 @@ export function ConversationList({
               <option value="all">Todos os modos</option>
               <option value="ai">Agente IA Ativo</option>
               <option value="manual">Operador Manual</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Tag className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={customTagFilter}
+              onChange={(event) => setCustomTagFilter(event.target.value)}
+              className="h-8 w-full rounded-md border border-border/50 bg-background px-2 text-xs font-medium text-foreground outline-none focus:border-primary"
+            >
+              <option value="all">Filtrar por tag</option>
+              {LEAD_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {LEAD_STATUS_LABELS[status] || status}
+                </option>
+              ))}
+              <option value="visita tecnica">
+                {CUSTOMER_TAG_LABELS["visita tecnica"] || "Visita técnica"}
+              </option>
             </select>
           </div>
         </div>
@@ -216,7 +249,7 @@ export function ConversationList({
 
                     {/* LINHA INFERIOR: Tags (Esquerda) e Horário (Direita) */}
                     <div className="flex items-end justify-between gap-2 mt-auto">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex min-w-0 flex-col items-start gap-1.5">
                         {!conv.finished && !conv.contactOnly && (
                           <>
                             <button
@@ -236,11 +269,22 @@ export function ConversationList({
                               )}
                             </button>
 
-                            <div className={cn(
-                              "flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border shadow-sm",
-                              statusInfo.color
-                            )}>
-                              {statusInfo.label}
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                              <div className={cn(
+                                "flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border shadow-sm",
+                                statusInfo.color
+                              )}>
+                                {statusInfo.label}
+                              </div>
+
+                              {conv.customer_custom_tag && (
+                                <div className={cn(
+                                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border shadow-sm",
+                                  CUSTOMER_TAG_STYLES[conv.customer_custom_tag] || "bg-secondary text-secondary-foreground border-border"
+                                )}>
+                                  {CUSTOMER_TAG_LABELS[conv.customer_custom_tag] || conv.customer_custom_tag}
+                                </div>
+                              )}
                             </div>
                           </>
                         )}

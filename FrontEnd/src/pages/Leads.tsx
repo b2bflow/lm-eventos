@@ -11,14 +11,21 @@ import { LeadsTable } from "@/components/domain/crm/LeadsTable";
 import { DateFilterProvider } from "@/contexts/DateFilterContext";
 import { RegisterLead } from "@/components/features/leads/RegisterLead";
 import { EditLeadDialog } from "@/components/domain/crm/EditLeadDialog";
-import { LEAD_STATUS_LABELS, LEAD_STATUS_OPTIONS, LEAD_STATUS_STYLES } from "@/constants/mappings";
+import {
+  CUSTOMER_TAG_LABELS,
+  CUSTOMER_TAG_OPTIONS,
+  CUSTOMER_TAG_STYLES,
+  LEAD_STATUS_LABELS,
+  LEAD_STATUS_OPTIONS,
+  LEAD_STATUS_STYLES,
+} from "@/constants/mappings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 
 const Leads = () => {
   const { 
     leads, isLoading, page, setPage, totalPages, refetch,
-    statusFilter, setStatusFilter, searchTerm, setSearchTerm } = useLeads();
+    statusFilter, setStatusFilter, customTagFilter, setCustomTagFilter, searchTerm, setSearchTerm } = useLeads();
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -95,30 +102,47 @@ const Leads = () => {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant={statusFilter === "all" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      setStatusFilter("all");
-                      setPage(1);
-                    }}
-                  >
-                    Todas as Tags
-                  </Button>
-                  {LEAD_STATUS_OPTIONS.map((status) => (
-                    <button
-                      key={status}
+                    <Button
+                      variant={statusFilter === "all" && customTagFilter === "all" ? "default" : "outline"}
+                      size="sm"
                       onClick={() => {
-                        setStatusFilter(status);
+                        setStatusFilter("all");
+                        setCustomTagFilter("all");
                         setPage(1);
                       }}
-                      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
-                        statusFilter === status ? "scale-[1.02] shadow-sm" : "opacity-80 hover:opacity-100"
-                      } ${LEAD_STATUS_STYLES[status]}`}
                     >
-                      {LEAD_STATUS_LABELS[status]}
-                    </button>
-                  ))}
+                      Todos os filtros
+                    </Button>
+                    {LEAD_STATUS_OPTIONS.map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => {
+                          setStatusFilter(status);
+                          setCustomTagFilter("all");
+                          setPage(1);
+                        }}
+                        className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
+                          statusFilter === status && customTagFilter === "all" ? "scale-[1.02] shadow-sm" : "opacity-80 hover:opacity-100"
+                        } ${LEAD_STATUS_STYLES[status]}`}
+                      >
+                        {LEAD_STATUS_LABELS[status]}
+                      </button>
+                    ))}
+                    {CUSTOMER_TAG_OPTIONS.filter((tag) => tag !== "operador humano").map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => {
+                          setStatusFilter("all");
+                          setCustomTagFilter(tag);
+                          setPage(1);
+                        }}
+                        className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-all ${
+                          customTagFilter === tag && statusFilter === "all" ? "scale-[1.02] shadow-sm" : "opacity-80 hover:opacity-100"
+                        } ${CUSTOMER_TAG_STYLES[tag]}`}
+                      >
+                        {CUSTOMER_TAG_LABELS[tag]}
+                      </button>
+                    ))}
                 </div>
 
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">

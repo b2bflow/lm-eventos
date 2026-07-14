@@ -26,12 +26,17 @@ class QuoteController(ViewSet):
     def list(self, request) -> Response:
         try:
             status_filter = request.query_params.get("actual_status") or request.query_params.get("tag")
+            custom_tag_filter = request.query_params.get("customer_custom_tag")
             search_term = request.query_params.get("search")
             page = int(request.query_params.get("page", 1))
             page_size = 10
 
             quote_service = CrmContainer.get_quote_service()
-            quotes = quote_service.list_quotes(status_filter=status_filter, search_term=search_term)
+            quotes = quote_service.list_quotes(
+                status_filter=status_filter,
+                search_term=search_term,
+                custom_tag_filter=custom_tag_filter,
+            )
 
             total_count = len(quotes)
             start = (page - 1) * page_size

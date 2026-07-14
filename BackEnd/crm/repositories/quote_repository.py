@@ -55,11 +55,20 @@ class QuoteRepository:
         quote.save()
         return quote.to_dict()
 
-    def list(self, status_filter: str | None = None, search_term: str | None = None) -> list[dict]:
+    def list(
+        self,
+        status_filter: str | None = None,
+        search_term: str | None = None,
+        custom_tag_filter: str | None = None,
+    ) -> list[dict]:
         quotes = Quote.objects()
 
         if status_filter and status_filter != "all":
             quotes = quotes.filter(status=status_filter)
+
+        if custom_tag_filter and custom_tag_filter != "all":
+            matching_customers = Customer.objects(customer_custom_tag=custom_tag_filter).only("id")
+            quotes = quotes.filter(customer__in=list(matching_customers))
 
         if search_term:
             matching_customers = Customer.objects(

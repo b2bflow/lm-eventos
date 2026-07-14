@@ -290,10 +290,19 @@ class QuoteService:
         quote_data["status"] = self._infer_stage(None, quote_data)
         return self.quote_repo.create(customer_doc, quote_data)
 
-    def list_quotes(self, status_filter: str | None = None, search_term: str | None = None) -> list[dict]:
+    def list_quotes(
+        self,
+        status_filter: str | None = None,
+        search_term: str | None = None,
+        custom_tag_filter: str | None = None,
+    ) -> list[dict]:
         for customer in self.customer_repo.get_all_customers():
             self.ensure_quote_for_legacy_customer(customer["id"])
-        return self.quote_repo.list(status_filter=status_filter, search_term=search_term)
+        return self.quote_repo.list(
+            status_filter=status_filter,
+            search_term=search_term,
+            custom_tag_filter=custom_tag_filter,
+        )
 
     def update_quote(self, quote_id: str, data: dict, user: Any = None) -> dict:
         data = self.normalize_quote_data(data)

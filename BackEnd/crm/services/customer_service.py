@@ -199,9 +199,18 @@ class CustomerService(ICustomerService):
             logger.error(f"[CustomerService] Erro ao registar lead: {str(e)}")
             raise e
 
-    def get_active_customers(self, status_filter: Optional[str] = None, search_term: Optional[str] = None) -> List[Any]:
+    def get_active_customers(
+        self,
+        status_filter: Optional[str] = None,
+        search_term: Optional[str] = None,
+        custom_tag_filter: Optional[str] = None,
+    ) -> List[Any]:
         try:
-            return self.customer_repo.get_all_customers(status_filter=status_filter, search_term=search_term)
+            return self.customer_repo.get_all_customers(
+                status_filter=status_filter,
+                search_term=search_term,
+                custom_tag_filter=custom_tag_filter,
+            )
         except Exception as e:
             logger.error(f"[CustomerService] Erro ao listar leads: {str(e)}")
             return []

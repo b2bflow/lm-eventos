@@ -292,7 +292,7 @@ class MessageService(IMessageService):
 
             if customer.get("new_service", True):
                 print(f"Enviando mensagem de boas-vindas para {phone} com ID do paciente {customer.get('id')}")
-                msg_text = "Olá! Bem-vindo à LM Eventos. Sou a Lis. Seu contato é sobre?"
+                msg_text = "Olá! Bem-vindo à LM Eventos. Sou a Lins. Seu contato é sobre?"
 
                 buttons = [
                     {"id": "1", "label": "Solicitar orçamento"},

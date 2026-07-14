@@ -8,7 +8,9 @@ import {
 } from "lucide-react";
 import { 
   LEAD_STATUS_LABELS, 
-  LEAD_STATUS_STYLES
+  LEAD_STATUS_STYLES,
+  CUSTOMER_TAG_LABELS,
+  CUSTOMER_TAG_STYLES
 } from "@/constants/mappings";
 
 interface Lead {
@@ -105,12 +107,22 @@ export function LeadsTable({ data, isLoading, onEdit, onDelete }: LeadsTableProp
                 </div>
               </TableCell>
               <TableCell>
-                <Badge 
-                  variant="outline"
-                  className={LEAD_STATUS_STYLES[lead.customer_state_now] || "bg-secondary"}
-                >
-                  {LEAD_STATUS_LABELS[lead.customer_state_now] || lead.customer_state_now}
-                </Badge>
+                <div className="flex flex-col items-start gap-1.5">
+                  <Badge 
+                    variant="outline"
+                    className={LEAD_STATUS_STYLES[lead.customer_state_now] || "bg-secondary"}
+                  >
+                    {LEAD_STATUS_LABELS[lead.customer_state_now] || lead.customer_state_now}
+                  </Badge>
+                  {lead.customer_custom_tag && (
+                    <Badge
+                      variant="outline"
+                      className={CUSTOMER_TAG_STYLES[lead.customer_custom_tag] || "bg-secondary"}
+                    >
+                      {CUSTOMER_TAG_LABELS[lead.customer_custom_tag] || lead.customer_custom_tag}
+                    </Badge>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
                 <div className="flex flex-col gap-1">
