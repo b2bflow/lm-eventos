@@ -181,8 +181,10 @@ class CustomerService(ICustomerService):
                 phone=phone,
                 agent="response_orchestrator",
             )
+            name_collected = True if user else False
             customer = self.customer_repo.update(id=customer['id'], attributes={
                 **data,
+                'name_collected': name_collected,
                 'updated_at': datetime.utcnow(),
             })
             
@@ -296,7 +298,7 @@ class CustomerService(ICustomerService):
             return []
         
     FOLLOW_UP_TEMPLATE = (
-        "Olá{customer_name}! Eu sou a clara 😊.\n\n"
+        "Olá{customer_name}! Eu sou a Lins 😊.\n\n"
         "Percebi que nossa conversa ficou parada e gostaria de saber "
         "se ainda posso ajudar você com alguma informação ou dúvida.\n\n"
         "Fico à disposição!"

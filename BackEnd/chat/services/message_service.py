@@ -173,14 +173,56 @@ class MessageService(IMessageService):
 
                 return True
 
-            else:
+            elif vals[1] == "3":
+                msg_text = (
+                    "Esse é o grupo central de oportunidades. Sempre que surgir uma vaga, "
+                    "publicamos por aqui para buscar os melhores profissionais para a posição. "
+                    "Fique à vontade para entrar e acompanhar!\n\n"
+                    "https://chat.whatsapp.com/G2JH9A0kp9O6ErGDlOyVlI?s=cl&p=i&ilr=2&amv=0"
+                )
+                self.chat.send_message(phone=phone, message=msg_text)
 
                 self.customer_repository.update(
                     id=customer.get('id'),
                     attributes={"send_button": False}
                 )
 
-                return False
+                customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
+                conversation = self.conversation_repo.get_active_conversation(customer_id)
+                if conversation:
+                    conversation.ai_active = False
+                    conversation.tag = 'vagas'
+                    self.conversation_repo.update_conversation(conversation)
+
+                return True
+
+            else:
+                customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
+                
+                if customer.get("name_collected", False):
+                    self.customer_repository.update(
+                        id=customer_id,
+                        attributes={"send_button": False}
+                    )
+                    return False
+
+                conversation = self.conversation_repo.get_active_conversation(customer_id)
+                if conversation:
+                    self._process_outgoing_message(
+                        conversation_id=str(conversation.id),
+                        content="Antes de continuarmos, qual o seu nome, por favor?",
+                        sender_role="assistant"
+                    )
+
+                self.customer_repository.update(
+                    id=customer_id,
+                    attributes={
+                        "send_button": False,
+                        "waiting_for_name": True
+                    }
+                )
+
+                return True
 
         return False
 
@@ -225,6 +267,17 @@ class MessageService(IMessageService):
 
             # 1. Extraimos apenas o ID do dicionario/objeto
             customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
+
+            if customer.get("waiting_for_name", False):
+                customer = self.customer_repository.update(
+                    id=customer_id,
+                    attributes={
+                        "name": content,
+                        "waiting_for_name": False,
+                        "name_collected": True
+                    }
+                )
+
             active_quote = quote_service.get_or_create_active_quote_for_customer(customer_id)
 
             # 2. Passamos a variavel patient_id para as duas funcoes do repositorio
@@ -297,7 +350,7 @@ class MessageService(IMessageService):
                 buttons = [
                     {"id": "1", "label": "Solicitar orçamento"},
                     {"id": "2", "label": "Financeiro"},
-                    {"id": "3", "label": "Suporte"},
+                    {"id": "3", "label": "Vaga de emprego"},
                     {"id": "4", "label": "Outros"},
                 ]
 

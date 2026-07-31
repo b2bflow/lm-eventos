@@ -132,6 +132,8 @@ class CustomerRepository(ICustomerRepository):
                     "blocked_until",
                     "new_service",
                     "send_button",
+                    "waiting_for_name",
+                    "name_collected",
                     "last_message_attendant",
                     "followup_sent",
                 ]:

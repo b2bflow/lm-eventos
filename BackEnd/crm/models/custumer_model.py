@@ -32,6 +32,8 @@ class Customer(Document):
     new_service = BooleanField(default=True)
 
     send_button = BooleanField(default=True)
+    waiting_for_name = BooleanField(default=False)
+    name_collected = BooleanField(default=False)
 
     last_message_attendant = DateTimeField(null=True)
     followup_sent = BooleanField(default=False)
@@ -56,6 +58,8 @@ class Customer(Document):
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "send_button": self.send_button,
+            "waiting_for_name": self.waiting_for_name,
+            "name_collected": self.name_collected,
             "last_message_attendant": self.last_message_attendant.isoformat() if self.last_message_attendant else None,
             "followup_sent": self.followup_sent,
         }
