@@ -79,7 +79,8 @@ class MessageService(IMessageService):
                 transcribed_message = self.audio_transcription_service.transcribe(**kwargs)
                 message = transcribed_message or self.chat.get_message(**kwargs)
 
-            return {'phone':phone, 'content':message, 'raw_data':kwargs}
+            external_id = kwargs.get("messageId") or kwargs.get("id")
+            return {'phone':phone, 'content':message, 'external_id':external_id, 'raw_data':kwargs}
 
         except Exception as e:
             print_error_details(e)
@@ -236,6 +237,12 @@ class MessageService(IMessageService):
             if not phone or not content:
                 logger.warning("[MessageService] Dados de mensagem recebida incompletos.")
                 return None
+
+            if external_id:
+                from chat.models.message_model import MessageModel
+                if MessageModel.objects(external_id=external_id).first():
+                    logger.info(f"[MessageService] Mensagem com external_id {external_id} já processada. Ignorando duplicata.")
+                    return None
 
             customer_service = CrmContainer.get_customer_service()
             quote_service = CrmContainer.get_quote_service()
