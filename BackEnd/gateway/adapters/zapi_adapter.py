@@ -201,6 +201,9 @@ class ZAPIClient(IChat):
         if not phone:
             return False
 
+        if kwargs.get("fromMe", False):
+            return False
+
         if 'sticker' in kwargs:
             return False
 
