@@ -183,16 +183,21 @@ class MessageService(IMessageService):
                 )
                 self.chat.send_message(phone=phone, message=msg_text)
 
+                customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
                 self.customer_repository.update(
-                    id=customer.get('id'),
-                    attributes={"send_button": False}
+                    id=customer_id,
+                    attributes={
+                        "send_button": True,
+                        "new_service": True,
+                        "agent": "response_orchestrator"
+                    }
                 )
 
-                customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
                 conversation = self.conversation_repo.get_active_conversation(customer_id)
                 if conversation:
                     conversation.ai_active = False
                     conversation.tag = 'vagas'
+                    conversation.status = 'CLOSED'
                     self.conversation_repo.update_conversation(conversation)
 
                 return True
@@ -352,7 +357,7 @@ class MessageService(IMessageService):
 
             if customer.get("new_service", True):
                 print(f"Enviando mensagem de boas-vindas para {phone} com ID do paciente {customer.get('id')}")
-                msg_text = "Olá! Bem-vindo à LM Eventos. Sou a Lins. Seu contato é sobre?"
+                msg_text = "Olá bem vindo, a LM Eventos, me chamo Lins e vou dar início ao seu atendimento. Seu contato é sobre?"
 
                 buttons = [
                     {"id": "1", "label": "Solicitar orçamento"},

@@ -298,7 +298,7 @@ class CustomerService(ICustomerService):
             return []
         
     FOLLOW_UP_TEMPLATE = (
-        "Olá{customer_name}! Eu sou a Lins 😊.\n\n"
+        "Olá{customer_name}! Eu sou a Lins.\n\n"
         "Percebi que nossa conversa ficou parada e gostaria de saber "
         "se ainda posso ajudar você com alguma informação ou dúvida.\n\n"
         "Fico à disposição!"
