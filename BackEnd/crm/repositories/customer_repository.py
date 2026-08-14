@@ -130,6 +130,7 @@ class CustomerRepository(ICustomerRepository):
                     "customer_state_now",
                     "customer_custom_tag",
                     "blocked_until",
+                    "silenced_until",
                     "new_service",
                     "send_button",
                     "waiting_for_name",

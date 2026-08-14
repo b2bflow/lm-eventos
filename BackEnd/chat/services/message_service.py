@@ -14,7 +14,7 @@ from ai_agents.clients.openai_client import OpenIAClient
 from chat.gateways.adapters.socket_adapter import SocketAdapter
 from crm.repositories.customer_repository import CustomerRepository
 from gateway.adapters.zapi_adapter import ZAPIClient
-from datetime import datetime
+from datetime import datetime, timedelta
 from crm.container import CrmContainer
 from database.client.mongodb_client import MongoDBClient
 from gateway.service.unsupported_media_handler_service import UnsupportedMediaHandlerService
@@ -189,7 +189,8 @@ class MessageService(IMessageService):
                     attributes={
                         "send_button": True,
                         "new_service": True,
-                        "agent": "response_orchestrator"
+                        "agent": "response_orchestrator",
+                        "silenced_until": datetime.now() + timedelta(minutes=5)
                     }
                 )
 
@@ -277,6 +278,12 @@ class MessageService(IMessageService):
             is_blocked = bool(blocked_until and blocked_until.replace(tzinfo=None) > datetime.utcnow())
             is_employee = is_employee_phone(phone)
 
+            silenced_until = customer.get("silenced_until") if isinstance(customer, dict) else None
+            if isinstance(silenced_until, str):
+                silenced_until = datetime.fromisoformat(silenced_until.replace("Z", "+00:00"))
+
+            is_silenced = bool(silenced_until and silenced_until.replace(tzinfo=None) > datetime.utcnow())
+
             # 1. Extraimos apenas o ID do dicionario/objeto
             customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
 
@@ -336,6 +343,14 @@ class MessageService(IMessageService):
                 logger.info(
                     "[MessageService] Telefone %s está em EMPLOYEE_PHONES. Mensagem salva; IA não será acionada.",
                     phone,
+                )
+                return message
+
+            if is_silenced:
+                logger.info(
+                    "[MessageService] Cliente %s silenciado até %s. Mensagem salva; IA não será acionada.",
+                    phone,
+                    silenced_until,
                 )
                 return message
 

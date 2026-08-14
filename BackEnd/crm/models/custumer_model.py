@@ -29,6 +29,7 @@ class Customer(Document):
     customer_state_now = StringField(choices=STATE_CHOICES, default='ANALYSIS')
     customer_custom_tag = StringField(null=True)
     blocked_until = DateTimeField(null=True)
+    silenced_until = DateTimeField(null=True)
     new_service = BooleanField(default=True)
 
     send_button = BooleanField(default=True)
@@ -54,6 +55,7 @@ class Customer(Document):
             "actual_status": self.customer_state_now,
             "customer_custom_tag": self.customer_custom_tag,
             "blocked_until": self.blocked_until.isoformat() if self.blocked_until else None,
+            "silenced_until": self.silenced_until.isoformat() if self.silenced_until else None,
             "new_service": self.new_service,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
