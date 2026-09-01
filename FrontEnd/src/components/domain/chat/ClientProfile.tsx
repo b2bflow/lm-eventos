@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { formatSafeDate } from "@/lib/dateUtils";
 
 interface PastConversation {
   id: string;
@@ -80,10 +81,10 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
         <div className="flex flex-col items-center text-center">
           <Avatar className="w-24 h-24 border-2 border-primary/20 mb-4 shadow-xl">
             <AvatarFallback className="bg-secondary text-secondary-foreground text-2xl font-bold">
-              {customer.customer_name.substring(0, 2).toUpperCase()}
+              {(customer.customer_name || "Desconhecido").substring(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <h2 className="text-xl font-bold text-foreground mb-1">{customer.customer_name}</h2>
+          <h2 className="text-xl font-bold text-foreground mb-1">{customer.customer_name || "Desconhecido"}</h2>
         </div>
 
         <Separator className="bg-border/50" />
@@ -149,7 +150,7 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
                     >
                       <div className="flex justify-between items-center mb-1.5">
                         <span className="text-[11px] font-bold text-foreground">
-                          {new Date(conv.created_at).toLocaleDateString()}
+                          {formatSafeDate(conv.created_at, "dd/MM/yyyy")}
                         </span>
                         <span className={cn(
                           "text-[9px] font-bold px-1.5 py-0.5 rounded",
@@ -160,9 +161,9 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] text-muted-foreground font-mono">
-                          #{conv.id.slice(-6)}
+                          #{String(conv.id || "").slice(-6)}
                         </span>
-                        <span className={cn("text-[9px] font-bold", pastStatusInfo.color.split(" ")[0])}>
+                        <span className={cn("text-[9px] font-bold", (pastStatusInfo.color || "").split(" ")[0])}>
                           {pastStatusInfo.label}
                         </span>
                       </div>
@@ -192,12 +193,12 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
                         <span className="text-[11px] font-bold text-foreground truncate">
                           {quote.event_title || "Cotação sem título"}
                         </span>
-                        <span className={cn("text-[9px] font-bold", quoteStatusInfo.color.split(" ")[0])}>
+                        <span className={cn("text-[9px] font-bold", (quoteStatusInfo.color || "").split(" ")[0])}>
                           {quoteStatusInfo.label}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-[10px] text-muted-foreground">
-                        <span>{new Date(quote.created_at).toLocaleDateString()}</span>
+                        <span>{formatSafeDate(quote.created_at, "dd/MM/yyyy")}</span>
                         <span>
                           {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount)}
                         </span>

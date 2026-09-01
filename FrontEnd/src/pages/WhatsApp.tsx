@@ -10,6 +10,7 @@ import { socket } from "@/services/socket";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { normalizeChatMessageContent } from "@/lib/chatMessage";
+import { formatSafeTime } from "@/lib/dateUtils";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,7 +126,7 @@ export default function WhatsApp() {
         media_url: msg.media_url,
         raw_metadata: msg.raw_metadata,
         created_at: msg.created_at,
-        time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+        time: formatSafeTime(msg.created_at),
         conversation: msg.conversation_id || msg.conversation
       }));
     },
@@ -154,7 +155,7 @@ export default function WhatsApp() {
         return [...oldMessages, {
           ...data,
           content: normalizeChatMessageContent(data.content),
-          time: new Date(data.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          time: formatSafeTime(data.created_at)
         }];
       });      
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -348,11 +349,11 @@ export default function WhatsApp() {
     const conversationItems = allConversations.map((conversation) => ({
       id: conversation.id,
       customerId: conversation.customer,
-      phone: conversation.customer_phone,
-      name: conversation.customer_name,
+      phone: conversation.customer_phone || "",
+      name: conversation.customer_name || "Desconhecido",
       lastMessage: normalizeChatMessageContent(conversation.last_message_content),
-      time: conversation.last_interaction_at ? new Date(conversation.last_interaction_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
-      tag: conversation.tag as "AGENTE" | "OPERADOR",
+      time: formatSafeTime(conversation.last_interaction_at),
+      tag: (conversation.tag || "OPERADOR") as "AGENTE" | "OPERADOR",
       ai_active: conversation.ai_active,
       unread: (conversation.unread_count || 0) > 0,
       finished: conversation.status === "CLOSED",
@@ -371,8 +372,8 @@ export default function WhatsApp() {
       .map((candidate) => ({
         id: `contact:${candidate.customer}`,
         customerId: candidate.customer,
-        phone: candidate.customer_phone,
-        name: candidate.customer_name,
+        phone: candidate.customer_phone || "",
+        name: candidate.customer_name || "Contato",
         lastMessage: "Contato sem conversa ativa",
         time: "",
         tag: "OPERADOR" as const,
@@ -384,6 +385,13 @@ export default function WhatsApp() {
 
     return [...conversationItems, ...candidateItems];
   }, [allConversations, contactCandidates]);
+
+  const isCurrentConversationAI = Boolean(
+    selectedConversationObj &&
+    selectedConversationObj.tag === "AGENTE" &&
+    selectedConversationObj.ai_active === true
+  );
+
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
       <Sidebar />
@@ -421,10 +429,10 @@ export default function WhatsApp() {
                   onSendFile={handleSendFile}
                   isSending={isSending}
                   isUploadingFile={sendFileMutation.isPending}
-                  isAIActive={selectedConversationObj.tag === "AGENTE" && selectedConversationObj.ai_active === true}
+                  isAIActive={isCurrentConversationAI}
                   onToggleAI={() => handleToggleTag(
                     selectedConversationId,
-                    selectedConversationObj.tag === "AGENTE" && selectedConversationObj.ai_active === true ? "AGENTE" : "OPERADOR"
+                    isCurrentConversationAI ? "AGENTE" : "OPERADOR"
                   )}
                   isProfileOpen={isProfileOpen}
                   onToggleProfile={() => setIsProfileOpen(!isProfileOpen)}

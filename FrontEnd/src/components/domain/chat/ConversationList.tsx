@@ -49,7 +49,7 @@ const getStatusDisplay = (status: string | undefined) => {
   }
 };
 
-const normalizeSearch = (value: string) => value
+const normalizeSearch = (value?: string | null) => (value || "")
   .normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "")
   .toLowerCase()
@@ -71,8 +71,9 @@ export function ConversationList({
   const lastRemoteSearch = useRef("");
 
   const normalizedTerm = normalizeSearch(searchTerm);
-  const phoneTerm = searchTerm.replace(/\D/g, "");
-  const isAiMode = (conversation: ConversationListItem) => conversation.tag === "AGENTE" && conversation.ai_active === true;
+  const phoneTerm = (searchTerm || "").replace(/\D/g, "");
+  const isAiMode = (conversation: ConversationListItem) =>
+    conversation.tag === "AGENTE" && conversation.ai_active === true;
 
   const filteredConversations = useMemo(() => conversations.filter((conversation) => {
     const belongsToTab = activeTab === "OPEN" ? !conversation.finished : conversation.finished;
@@ -88,7 +89,7 @@ export function ConversationList({
     if (!normalizedTerm) return true;
 
     const nameMatches = normalizeSearch(conversation.name).includes(normalizedTerm);
-    const normalizedPhone = conversation.phone.replace(/\D/g, "");
+    const normalizedPhone = (conversation.phone || "").replace(/\D/g, "");
     const phoneMatches = phoneTerm.length > 0 && normalizedPhone.includes(phoneTerm);
     return nameMatches || phoneMatches;
   }), [activeTab, conversations, modeFilter, customTagFilter, normalizedTerm, phoneTerm]);
@@ -223,7 +224,7 @@ export function ConversationList({
                       "font-bold",
                       selectedId === conv.id ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
                     )}>
-                      {conv.name.substring(0, 2).toUpperCase()}
+                      {(conv.name || "Desconhecido").substring(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   
@@ -231,7 +232,7 @@ export function ConversationList({
                     {/* LINHA SUPERIOR: Nome (Esquerda) e Notificação (Direita) */}
                     <div className="flex justify-between items-start mb-0.5">
                       <h3 className="text-sm font-bold text-foreground truncate pr-2">
-                        {conv.name}
+                        {conv.name || "Desconhecido"}
                       </h3>
                       <div className="shrink-0 pt-1">
                         {conv.needs_attention && !conv.finished && selectedId !== conv.id ? (

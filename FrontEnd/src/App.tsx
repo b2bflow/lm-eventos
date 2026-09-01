@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 
 import Login from "./pages/LoginScreen";
 import Index from "./pages/Index";
@@ -33,25 +34,27 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
 const isAuthenticated = () => !!localStorage.getItem("accessToken");
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={isAuthenticated() ? <Navigate to="/admin" /> : <Navigate to="/login" />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/admin" element={<PrivateRoute adminOnly><Index /></PrivateRoute>} />
-          <Route path="/user" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
-          <Route path="/whatsapp" element={<PrivateRoute><WhatsApp /></PrivateRoute>} />
-          <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
-          <Route path="/configuracoes" element={<PrivateRoute><Settings /></PrivateRoute>} />
-          
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={isAuthenticated() ? <Navigate to="/admin" /> : <Navigate to="/login" />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/admin" element={<PrivateRoute adminOnly><Index /></PrivateRoute>} />
+            <Route path="/user" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
+            <Route path="/whatsapp" element={<PrivateRoute><WhatsApp /></PrivateRoute>} />
+            <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
+            <Route path="/configuracoes" element={<PrivateRoute><Settings /></PrivateRoute>} />
+            
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format, isToday, isYesterday, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { parseSafeDate, formatSafeTime } from "@/lib/dateUtils";
 
 export interface Message {
     id: string;
@@ -98,12 +99,20 @@ export function ChatArea({
         onSendFile?.(file);
     };
 
-    const formatMessageDate = (dateString: string) => {
-        const date = new Date(dateString);
-        if (isToday(date)) return "Hoje";
-        if (isYesterday(date)) return "Ontem";
-        if (differenceInDays(new Date(), date) < 7) return format(date, 'EEEE', { locale: ptBR });
-        return format(date, "dd 'de' MMM", { locale: ptBR });
+    const formatMessageDate = (dateString?: string | null) => {
+        const date = parseSafeDate(dateString);
+        if (!date) return "";
+
+        try {
+            if (isToday(date)) return "Hoje";
+            if (isYesterday(date)) return "Ontem";
+            if (Math.abs(differenceInDays(new Date(), date)) < 7) {
+                return format(date, 'EEEE', { locale: ptBR });
+            }
+            return format(date, "dd 'de' MMM", { locale: ptBR });
+        } catch {
+            return "";
+        }
     };
 
     let lastDateLabel = "";
@@ -195,12 +204,15 @@ export function ChatArea({
                     </div>
                 )}
 
-                {messages.map((msg, idx) => {
+                {messages.map((msg) => {
                     const currentDateLabel = formatMessageDate(msg.created_at);
-                    const showDateSeparator = currentDateLabel !== lastDateLabel;
-                    lastDateLabel = currentDateLabel;
+                    const showDateSeparator = !!currentDateLabel && currentDateLabel !== lastDateLabel;
+                    if (currentDateLabel) {
+                        lastDateLabel = currentDateLabel;
+                    }
                     
                     const isIncoming = msg.direction === "INCOMING";
+                    const displayTime = msg.time || formatSafeTime(msg.created_at);
 
                     return (
                         <div key={msg.id} className="flex flex-col">
@@ -231,7 +243,7 @@ export function ChatArea({
                                             <div className="flex items-center gap-2 font-medium">
                                                 <Paperclip className="h-4 w-4 shrink-0" />
                                                 <span className="break-all">
-                                                    {msg.raw_metadata?.file_name || msg.content.replace("[Arquivo] ", "")}
+                                                    {msg.raw_metadata?.file_name || (msg.content || "").replace("[Arquivo] ", "")}
                                                 </span>
                                             </div>
                                             {msg.content && !msg.content.startsWith("[Arquivo]") && (
@@ -239,13 +251,13 @@ export function ChatArea({
                                             )}
                                         </div>
                                     ) : (
-                                        <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+                                        <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{msg.content || ""}</p>
                                     )}
                                     <span className={cn(
                                         "text-[10px] mt-1.5 block font-medium opacity-60 text-right",
                                         isIncoming ? "text-muted-foreground" : "text-white/80"
                                     )}>
-                                        {msg.time}
+                                        {displayTime}
                                     </span>
                                 </div>
                             </div>
