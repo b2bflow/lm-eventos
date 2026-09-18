@@ -58,6 +58,11 @@ class ICustomerRepository(ABC):
         pass
 
     @abstractmethod
+    def claim_new_service(self, customer_id: str) -> bool:
+        """Atomically claim new service greeting to prevent duplicate welcome messages."""
+        pass
+
+    @abstractmethod
     def exists(self, phone: str) -> bool:
         """Check if a customer exists by phone number."""
         pass

@@ -144,6 +144,21 @@ class CustomerRepository(ICustomerRepository):
             customer.save()
             return customer.to_dict()
 
+    def claim_new_service(self, customer_id: str) -> bool:
+        """
+        Tenta marcar new_service como False atomicamente.
+        Retorna True apenas para o primeiro processo concorrente que conseguir alterar.
+        """
+        with self.db.get_connection_context():
+            try:
+                result = Customer.objects(
+                    id=ObjectId(customer_id),
+                    new_service=True
+                ).update_one(set__new_service=False)
+                return bool(result > 0)
+            except Exception:
+                return False
+
     def exists(self, phone: str) -> bool:
         with self.db.get_connection_context():
             return Customer.objects(phone=phone).count() > 0

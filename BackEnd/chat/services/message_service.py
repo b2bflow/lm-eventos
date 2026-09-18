@@ -370,8 +370,8 @@ class MessageService(IMessageService):
                 )
                 return message
 
-            if customer.get("new_service", True):
-                print(f"Enviando mensagem de boas-vindas para {phone} com ID do paciente {customer.get('id')}")
+            if self.customer_repository.claim_new_service(customer_id):
+                logger.info(f"[MessageService] Enviando mensagem de boas-vindas para {phone} com ID do cliente {customer_id}")
                 msg_text = "Olá bem vindo, a LM Eventos, me chamo Lins e vou dar início ao seu atendimento. Seu contato é sobre?"
 
                 buttons = [
@@ -381,23 +381,16 @@ class MessageService(IMessageService):
                     {"id": "4", "label": "Outros"},
                 ]
 
-                self.chat.send_message_with_button(
-                    phone=phone, message=msg_text, buttons=buttons
-                )
-
-                b = self.customer_repository.update(
-                    id=customer.get('id'),
-                    attributes={"new_service": False}
-                )
-
                 self.customer_repository.update(
-                    id=customer.get("id"),
+                    id=customer_id,
                     attributes={
                         "last_message_attendant": datetime.now(),
                     },
                 )
 
-                print("Atualização do campo new_service:", b)
+                self.chat.send_message_with_button(
+                    phone=phone, message=msg_text, buttons=buttons
+                )
 
                 return message
             
@@ -410,6 +403,18 @@ class MessageService(IMessageService):
                 return message
             
             if customer.get("send_button", True):
+                last_attendant = customer.get("last_message_attendant")
+                if isinstance(last_attendant, str):
+                    try:
+                        last_attendant = datetime.fromisoformat(last_attendant.replace("Z", "+00:00")).replace(tzinfo=None)
+                    except Exception:
+                        last_attendant = None
+
+                # Se a mensagem com opções foi enviada há menos de 10 segundos, não reenvia o aviso enquanto o usuário digita
+                if last_attendant and (datetime.utcnow() - last_attendant).total_seconds() < 10:
+                    logger.info(f"[MessageService] Menu enviado recentemente para {phone}. Ignorando reenvio imediato do aviso de opções.")
+                    return message
+
                 msm_text = "Por favor, para que eu possa te ajudar melhor, selecione uma das opções enviadas anteriormente."
 
                 self.chat.send_message(
