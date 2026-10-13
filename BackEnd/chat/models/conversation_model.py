@@ -1,4 +1,4 @@
-from mongoengine import Document, ReferenceField, StringField, BooleanField, DateTimeField, IntField
+from mongoengine import NULLIFY, Document, ReferenceField, StringField, BooleanField, DateTimeField, IntField
 from datetime import datetime
 from crm.models.custumer_model import Customer
 from crm.models.quote_model import Quote
@@ -10,7 +10,7 @@ class ConversationModel(Document):
     }
 
     customer = ReferenceField(Customer, required=True)
-    quote = ReferenceField(Quote, null=True)
+    quote = ReferenceField(Quote, null=True, reverse_delete_rule=NULLIFY)
     status = StringField(choices=('OPEN', 'CLOSED', 'ARCHIVED'), default='OPEN')
     tag = StringField(default='OPERADOR')
     ai_active = BooleanField(default=False)

@@ -1,8 +1,10 @@
+from __future__ import annotations
 from datetime import datetime
 from bson import ObjectId
 from mongoengine.queryset.visitor import Q
 from crm.models.quote_model import Quote
 from crm.models.custumer_model import Customer
+from utils.logger import logger
 
 
 class QuoteRepository:
@@ -55,12 +57,12 @@ class QuoteRepository:
         quote.save()
         return quote.to_dict()
 
-    def list(
+    def _build_queryset(
         self,
         status_filter: str | None = None,
         search_term: str | None = None,
         custom_tag_filter: str | None = None,
-    ) -> list[dict]:
+    ):
         quotes = Quote.objects()
 
         if status_filter and status_filter != "all":
@@ -81,7 +83,50 @@ class QuoteRepository:
                 | Q(customer__in=list(matching_customers))
             )
 
-        return [quote.to_dict() for quote in quotes.order_by("-updated_at")]
+        return quotes
+
+    def _serialize(self, quotes) -> list[dict]:
+        quotes = list(quotes)
+        customer_ids = {quote.customer_ref_id() for quote in quotes} - {None}
+        customers = {customer.id: customer for customer in Customer.objects(id__in=list(customer_ids))}
+
+        results = []
+        for quote in quotes:
+            customer = customers.get(quote.customer_ref_id())
+            if not customer:
+                logger.warning(f"[QuoteRepository] Ignorando cotação órfã {quote.id}: cliente inexistente.")
+                continue
+            results.append(quote.to_dict(customer=customer))
+        return results
+
+    def list(
+        self,
+        status_filter: str | None = None,
+        search_term: str | None = None,
+        custom_tag_filter: str | None = None,
+    ) -> list[dict]:
+        quotes = self._build_queryset(status_filter, search_term, custom_tag_filter).order_by("-updated_at")
+        return self._serialize(quotes)
+
+    def list_page(
+        self,
+        status_filter: str | None = None,
+        search_term: str | None = None,
+        custom_tag_filter: str | None = None,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> tuple[int, list[dict]]:
+        quotes = self._build_queryset(status_filter, search_term, custom_tag_filter)
+        total_count = quotes.count()
+        page_quotes = quotes.order_by("-updated_at").skip((page - 1) * page_size).limit(page_size)
+        return total_count, self._serialize(page_quotes)
+
+    def list_created_between(self, start_dt: datetime, end_dt: datetime) -> list[dict]:
+        quotes = Quote.objects(created_at__gte=start_dt, created_at__lte=end_dt)
+        return self._serialize(quotes)
+
+    def count(self) -> int:
+        return Quote.objects().count()
 
     def delete(self, quote_id: str) -> bool:
         quote = self.get_document_by_id(quote_id)

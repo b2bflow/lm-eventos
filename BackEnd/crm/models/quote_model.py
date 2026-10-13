@@ -1,5 +1,6 @@
 from datetime import datetime
 from mongoengine import (
+    CASCADE,
     DateTimeField,
     Document,
     FloatField,
@@ -7,6 +8,7 @@ from mongoengine import (
     ReferenceField,
     StringField,
 )
+from mongoengine.errors import DoesNotExist
 from crm.models.custumer_model import Customer
 
 
@@ -17,7 +19,7 @@ class Quote(Document):
         "strict": False,
     }
 
-    customer = ReferenceField(Customer, required=True)
+    customer = ReferenceField(Customer, required=True, reverse_delete_rule=CASCADE)
 
     STATUS_CHOICES = (
         ("ANALYSIS", "Analise"),
@@ -47,18 +49,31 @@ class Quote(Document):
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)
 
-    def to_dict(self) -> dict:
+    def has_valid_customer(self) -> bool:
+        try:
+            return self.customer is not None
+        except DoesNotExist:
+            return False
+
+    def customer_ref_id(self):
+        # Lê o id bruto da referência sem disparar consulta ao banco
+        ref = self._data.get("customer")
+        return getattr(ref, "id", None)
+
+    def to_dict(self, customer: Customer | None = None) -> dict:
+        if customer is None:
+            customer = self.customer if self.has_valid_customer() else None
         return {
             "id": str(self.id),
             "quote_id": str(self.id),
-            "customer": str(self.customer.id) if self.customer else None,
-            "customer_id": str(self.customer.id) if self.customer else None,
-            "name": getattr(self.customer, "name", None),
-            "phone": getattr(self.customer, "phone", None),
+            "customer": str(customer.id) if customer else None,
+            "customer_id": str(customer.id) if customer else None,
+            "name": getattr(customer, "name", None),
+            "phone": getattr(customer, "phone", None),
             "customer_state_now": self.status,
             "actual_status": self.status,
             "status": self.status,
-            "customer_custom_tag": getattr(self.customer, "customer_custom_tag", None),
+            "customer_custom_tag": getattr(customer, "customer_custom_tag", None),
             "celebration_type": self.celebration_type,
             "event_title": self.event_title,
             "event_date": self.event_date.isoformat() if self.event_date else None,

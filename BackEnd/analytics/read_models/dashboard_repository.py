@@ -18,8 +18,8 @@ class DashboardRepository:
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
 
             quote_service = CrmContainer.get_quote_service()
-            quotes = quote_service.list_quotes()
-            total_leads_general = len(quotes)
+            quotes = quote_service.list_quotes_created_between(start_dt, end_dt)
+            total_leads_general = quote_service.count_quotes()
             filtered_quotes = []
             upcoming_window_end = datetime.utcnow() + timedelta(days=30)
             occupied_dates = set()

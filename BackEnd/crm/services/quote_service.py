@@ -296,13 +296,33 @@ class QuoteService:
         search_term: str | None = None,
         custom_tag_filter: str | None = None,
     ) -> list[dict]:
-        for customer in self.customer_repo.get_all_customers():
-            self.ensure_quote_for_legacy_customer(customer["id"])
         return self.quote_repo.list(
             status_filter=status_filter,
             search_term=search_term,
             custom_tag_filter=custom_tag_filter,
         )
+
+    def list_quotes_page(
+        self,
+        status_filter: str | None = None,
+        search_term: str | None = None,
+        custom_tag_filter: str | None = None,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> tuple[int, list[dict]]:
+        return self.quote_repo.list_page(
+            status_filter=status_filter,
+            search_term=search_term,
+            custom_tag_filter=custom_tag_filter,
+            page=page,
+            page_size=page_size,
+        )
+
+    def list_quotes_created_between(self, start_dt: datetime, end_dt: datetime) -> list[dict]:
+        return self.quote_repo.list_created_between(start_dt, end_dt)
+
+    def count_quotes(self) -> int:
+        return self.quote_repo.count()
 
     def update_quote(self, quote_id: str, data: dict, user: Any = None) -> dict:
         data = self.normalize_quote_data(data)

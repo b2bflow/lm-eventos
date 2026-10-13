@@ -32,16 +32,14 @@ class QuoteController(ViewSet):
             page_size = 10
 
             quote_service = CrmContainer.get_quote_service()
-            quotes = quote_service.list_quotes(
+            total_count, quotes = quote_service.list_quotes_page(
                 status_filter=status_filter,
                 search_term=search_term,
                 custom_tag_filter=custom_tag_filter,
+                page=max(page, 1),
+                page_size=page_size,
             )
-
-            total_count = len(quotes)
-            start = (page - 1) * page_size
-            end = start + page_size
-            serializer = QuoteDTO(quotes[start:end], many=True)
+            serializer = QuoteDTO(quotes, many=True)
             return Response({"count": total_count, "results": serializer.data}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"[QuoteController] Falha ao listar cotações: {e}")

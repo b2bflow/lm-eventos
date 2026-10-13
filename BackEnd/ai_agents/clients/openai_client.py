@@ -13,7 +13,7 @@ load_dotenv()
 
 
 class OpenIAClient(IAI):
-    MAX_AUDIO_TRANSCRIBE_MB = os.getenv("OPENAI_MAX_AUDIO_TRANSCRIBE_MB")
+    MAX_AUDIO_TRANSCRIBE_MB = int(os.getenv("OPENAI_MAX_AUDIO_TRANSCRIBE_MB", "25"))
 
     def __init__(self):
         self.assistant_id = os.getenv("OPENAI_ASSISTANT_ID")
