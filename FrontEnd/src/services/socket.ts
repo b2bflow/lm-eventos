@@ -1,8 +1,8 @@
 import { io } from "socket.io-client";
 
-const baseUrl = import.meta.env.BASE_URL;
-
-const SOCKET_URL = `${baseUrl}`;
+// O Socket.IO roda no backend (mesma URL da API). BASE_URL do Vite é o caminho do próprio painel
+// ("/"), o que fazia o socket tentar conectar no domínio do front.
+const SOCKET_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
 export const socket = io(SOCKET_URL, {
   autoConnect: false, 
