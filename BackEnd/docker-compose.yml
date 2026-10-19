@@ -1,10 +1,12 @@
+# Ambiente de DESENVOLVIMENTO. Portas presas a 127.0.0.1: Mongo e Redis sem senha forte (e o
+# mongo-express) não podem ficar abertos na rede. Em produção use senhas próprias e rede interna.
 services:
   mongo:
     image: mongo:7
     container_name: mongo_lm
     restart: always
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
@@ -17,14 +19,14 @@ services:
     container_name: redis_lm
     restart: always
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   mongo-express:
     image: mongo-express:1.0.0-alpha.4
     container_name: mongo_container_express
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       ME_CONFIG_MONGODB_SERVER: mongo_lm
       ME_CONFIG_MONGODB_PORT: 27017

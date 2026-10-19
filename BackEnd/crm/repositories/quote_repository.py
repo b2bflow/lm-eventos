@@ -5,6 +5,7 @@ from mongoengine.queryset.visitor import Q
 from crm.models.quote_model import Quote
 from crm.models.custumer_model import Customer
 from utils.logger import logger
+from crm.services.quote_sync import sync_customer_from_quote
 
 
 class QuoteRepository:
@@ -17,6 +18,7 @@ class QuoteRepository:
                 setattr(quote, key, value)
         quote.updated_at = datetime.utcnow()
         quote.save()
+        sync_customer_from_quote(quote)
         return quote.to_dict()
 
     def create_document(self, customer, attributes: dict | None = None) -> Quote:
@@ -26,6 +28,7 @@ class QuoteRepository:
                 setattr(quote, key, value)
         quote.updated_at = datetime.utcnow()
         quote.save()
+        sync_customer_from_quote(quote)
         return quote
 
     def get_by_id(self, quote_id: str) -> dict | None:
@@ -55,6 +58,7 @@ class QuoteRepository:
 
         quote.updated_at = attributes.get("updated_at", datetime.utcnow())
         quote.save()
+        sync_customer_from_quote(quote)
         return quote.to_dict()
 
     def _build_queryset(

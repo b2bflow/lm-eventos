@@ -6,6 +6,7 @@ from chat.interfaces.chat_service_interface import IConversationService, IMessag
 class ChatContainer:
     _conversation_service = None
     _message_service = None
+    _handover_service = None
 
     @classmethod
     def get_conversation_service(self) -> IConversationService:
@@ -28,6 +29,14 @@ class ChatContainer:
         except Exception as e:
             logger.error(f"[ChatContainer] Erro ao instanciar MessageService: {e}")
             raise e
+
+    @classmethod
+    def get_handover_service(cls):
+        """Retomar IA, assumir, atribuir, nota interna e ligação (aba WhatsApp)."""
+        if not cls._handover_service:
+            from chat.services.handover_service import ConversationHandoverService
+            cls._handover_service = ConversationHandoverService()
+        return cls._handover_service
 
     @property
     def message_service(self) -> IMessageService:

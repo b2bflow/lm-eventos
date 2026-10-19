@@ -10,20 +10,17 @@ export function WelcomeCard({ userName }: WelcomeCardProps) {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
-  // Busca as conversas na API com polling de 5 segundos para manter a dashboard viva
-  const { data: conversations = [] } = useQuery({
+  // Conta no backend as conversas abertas que pedem atenção (não só a primeira página)
+  const { data: priorityCount = 0 } = useQuery({
     queryKey: ['conversations-priority'],
     queryFn: async () => {
-      const { data } = await api.get('/chat/conversations/');
-      return data.results || [];
+      const { data } = await api.get('/chat/conversations/', {
+        params: { needs_attention: true, status: 'OPEN', page_size: 1 },
+      });
+      return (data.total as number) ?? 0;
     },
-    refetchInterval: 5000 
+    refetchInterval: 30000
   });
-
-  // Conta quantas conversas estão abertas e com a flag de prioridade ativada pela IA
-  const priorityCount = conversations.filter(
-    (c: any) => c.needs_attention && c.status !== 'CLOSED'
-  ).length;
 
   return (
     <div className="relative overflow-hidden rounded-xl gradient-primary p-6 glow-accent">

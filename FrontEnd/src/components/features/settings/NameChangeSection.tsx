@@ -1,3 +1,4 @@
+import type { ApiError } from "@/services/api";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ export function NameChangeSection({ currentName }: { currentName: string }) {
       setNewName("");
       queryClient.invalidateQueries({ queryKey: ["pending-name-request"] });
     },
-    onError: (error: any) => {
+    onError: (error: ApiError) => {
       toast.error(error.response?.data?.detail || "Erro ao solicitar alteração.");
     }
   });

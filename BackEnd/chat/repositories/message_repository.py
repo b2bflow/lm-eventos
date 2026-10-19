@@ -27,6 +27,7 @@ class MessageRepository(IMessageRepository):
         raw_metadata: dict = None,
         message_type: str = 'text',
         media_url: str = None,
+        hidden_from_ai: bool = False,
     ) -> MessageModel:
         
         if not role:
@@ -41,8 +42,9 @@ class MessageRepository(IMessageRepository):
             content=content,
             external_id=external_id,
             raw_metadata=raw_metadata or {},
-            message_type=message_type,
+            message_type=message_type or 'text',
             media_url=media_url,
+            hidden_from_ai=hidden_from_ai,
         )
         
         try:
@@ -55,7 +57,7 @@ class MessageRepository(IMessageRepository):
     @staticmethod
     def get_recent_context(conversation_id: str, limit: int = 100) -> list:
         try:
-            messages = MessageModel.objects(conversation=conversation_id).order_by('-created_at')[:limit]
+            messages = MessageModel.objects(conversation=conversation_id, hidden_from_ai__ne=True).order_by('-created_at')[:limit]
             return list(messages)[::-1]
         except Exception as e:
             logger.error(f"[MessageRepository] Erro ao buscar contexto recente da conversa {conversation_id}: {e}")
@@ -83,6 +85,14 @@ class MessageRepository(IMessageRepository):
         except Exception as e:
             logger.error(f"[MessageRepository] Erro ao buscar mensagens da conversa {conversation_id}: {e}")
             raise e
+
+    @staticmethod
+    def queryset_for(conversation_id: str | None = None, customer_id: str | None = None):
+        if customer_id:
+            return MessageModel.objects(customer=customer_id)
+        if conversation_id:
+            return MessageModel.objects(conversation=conversation_id)
+        return MessageModel.objects.none()
 
     @staticmethod
     def get_messages_by_customer(customer_id: str):
@@ -115,7 +125,7 @@ class MessageRepository(IMessageRepository):
         try:
             # 1. Filtra diretamente no MessageModel usando o campo 'customer'
             # 2. Ordena de forma decrescente para que o limit corte as mensagens mais recentes
-            messages_query = MessageModel.objects(customer=customer_id).order_by("-created_at")
+            messages_query = MessageModel.objects(customer=customer_id, hidden_from_ai__ne=True).order_by("-created_at")
 
             if limit:
                 messages_query = messages_query.limit(limit)

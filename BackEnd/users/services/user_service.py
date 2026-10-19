@@ -2,6 +2,8 @@ from utils.logger import logger
 from datetime import timedelta
 from django.utils import timezone
 from typing import Optional, List, Dict
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from users.repositories.user_repository import UserRepository
 from users.models import User
 
@@ -12,6 +14,10 @@ class UserService:
     def create_user(self, data: dict) -> User:
         if not data.get('username') or not data.get('password'):
             raise ValueError("Username e Password são obrigatórios.")
+        try:
+            validate_password(data['password'], user=User(username=data.get('username'), email=data.get('email') or ''))
+        except DjangoValidationError as e:
+            raise ValueError(" ".join(e.messages))
 
         user = UserRepository.create_user(data)
         if not user:
@@ -68,8 +74,10 @@ class UserService:
         if not user.check_password(old_password):
             raise ValueError("A senha atual informada está incorreta.")
             
-        if len(new_password) < 6:
-            raise ValueError("A nova senha deve ter pelo menos 6 caracteres.")
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            raise ValueError(" ".join(e.messages))
             
         success = UserRepository.update_password(user.id, new_password)
         if not success:
@@ -96,11 +104,17 @@ class UserService:
     def toggle_user_access(self, user_id: int, data: dict) -> Dict:
         is_staff = data.get('is_staff')
         is_active = data.get('is_active')
-        
-        if is_staff is None and is_active is None:
+        role = data.get('role')
+
+        if is_staff is None and is_active is None and role is None:
             raise ValueError("Nenhum parâmetro de atualização foi fornecido.")
-            
-        updated_user = UserRepository.update_user_access(user_id, is_staff=is_staff, is_active=is_active)
+        if role is not None and role not in dict(User.ROLE_CHOICES):
+            raise ValueError("Papel inválido. Use admin, sdr, porta ou b2bflow.")
+        for flag in (is_staff, is_active):
+            if flag is not None and not isinstance(flag, bool):
+                raise ValueError("is_staff e is_active devem ser verdadeiro ou falso.")
+
+        updated_user = UserRepository.update_user_access(user_id, is_staff=is_staff, is_active=is_active, role=role)
         
         if not updated_user:
             raise ValueError("Usuário não encontrado.")
@@ -110,6 +124,7 @@ class UserService:
         return {
             "id": updated_user.id,
             "role": "ADMIN" if updated_user.is_staff else "OPERATOR",
+            "lm_role": updated_user.role,
             "status": "ACTIVE" if updated_user.is_active else "INACTIVE"
         }
     

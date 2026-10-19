@@ -215,3 +215,19 @@
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
+
+/* Telas autenticadas no celular: o Sidebar vira uma barra fixa no topo (h-14) e o conteúdo,
+   irmão dele, começa logo abaixo. Vale para toda tela que renderiza <Sidebar />. */
+@media (max-width: 767.98px) {
+  div[data-app-sidebar] + * {
+    margin-top: 3.5rem;
+    height: calc(100% - 3.5rem);
+  }
+}
+
+/* Altura da tela visível no celular (sem a barra de endereço por baixo do conteúdo). */
+@supports (height: 100dvh) {
+  .h-screen {
+    height: 100dvh;
+  }
+}

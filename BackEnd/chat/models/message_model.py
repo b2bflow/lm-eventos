@@ -1,5 +1,5 @@
 import json
-from mongoengine import Document, ReferenceField, StringField, DateTimeField, DictField
+from mongoengine import Document, ReferenceField, StringField, DateTimeField, DictField, BooleanField
 from datetime import datetime
 from .conversation_model import ConversationModel
 from crm.models.custumer_model import Customer
@@ -27,7 +27,8 @@ class MessageModel(Document):
 
     DIRECTION_CHOICES = (
         ('INCOMING', 'Entrada (Paciente)'), 
-        ('OUTGOING', 'Saída (Operador/IA)')
+        ('OUTGOING', 'Saída (Operador/IA)'),
+        ('INTERNAL', 'Interna (nota ou evento da equipe; nunca vai ao cliente nem à IA)'),
     )
     direction = StringField(choices=DIRECTION_CHOICES, required=True)
 
@@ -43,13 +44,18 @@ class MessageModel(Document):
     
     error_message = StringField()
 
-    CONTENT_TYPE_CHOICES = (('text', 'Texto'), ('image', 'Imagem'), ('audio', 'Áudio'), ('video', 'Vídeo'), ('file', 'Arquivo'))
+    CONTENT_TYPE_CHOICES = (('text', 'Texto'), ('image', 'Imagem'), ('audio', 'Áudio'), ('video', 'Vídeo'), ('file', 'Arquivo'),
+                            ('note', 'Nota interna'), ('event', 'Evento do atendimento'))
     message_type = StringField(choices=CONTENT_TYPE_CHOICES, default='text')
     
     content = StringField(required=True)  
     media_url = StringField() 
 
     raw_metadata = DictField()
+
+    # Mensagens do menu de boas-vindas e cliques de navegação: aparecem no painel, mas ficam
+    # fora do histórico enviado à IA (mantém o contexto da IA igual ao de antes de salvá-las).
+    hidden_from_ai = BooleanField(default=False)
 
     created_at = DateTimeField(default=datetime.utcnow)
     updated_at = DateTimeField(default=datetime.utcnow)

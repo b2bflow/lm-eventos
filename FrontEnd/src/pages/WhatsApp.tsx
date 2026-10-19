@@ -1,51 +1,43 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { ConversationList, ConversationListItem } from "@/components/domain/chat/ConversationList";
 import { ChatArea } from "@/components/domain/chat/ChatArea";
 import { ClientProfile } from "@/components/domain/chat/ClientProfile";
 import { EditLeadDialog } from "@/components/domain/crm/EditLeadDialog";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/services/api";
-import { socket } from "@/services/socket"; 
+import { socket } from "@/services/socket";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { normalizeChatMessageContent } from "@/lib/chatMessage";
-import { formatSafeTime } from "@/lib/dateUtils";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { normalizeChatMessageContent } from "@/lib/chatMessage";
+import { CallDialog } from "@/components/domain/funnel/LeadDialogs";
+import { quickRepliesFor, useLmSettings } from "@/hooks/useLmSettings";
+import { useCurrentUser } from "@/hooks/useFunnel";
+import { formatDateTime } from "@/lib/format";
+import {
+  appendMessageToCache,
+  messagesKey,
+  patchConversationInCache,
+  useConversations,
+  useMessages,
+  type Conversa,
+  type ConversationTab,
+  type NewMessageEvent,
+} from "@/hooks/useConversations";
 
-export interface Conversa {
-  final_customer_status?: string;
-  past_conversations?: { id: string, created_at: string, status: string, final_customer_status?: string }[];
-  past_quotes?: { id: string, created_at: string, status?: string, customer_state_now?: string, event_title?: string | null, quoted_amount?: number, contract_value?: number }[];
-  id: string;
-  customer: string; 
-  quote_id?: string | null;
-  customer_name: string; 
-  customer_phone: string; 
-  last_message_content: string;
-  last_interaction_at: string;
-  status: "OPEN" | "CLOSED" | "ARCHIVED";
-  tag: string;
-  ai_active?: boolean;
-  unread_count?: number;
-  customer_status?: string;
-  customer_custom_tag?: string | null;
-  customer_state_now?: string;
-  celebration_type?: string | null;
-  event_title?: string | null;
-  event_date?: string | null;
-  event_time?: string | null;
-  guest_count?: number;
-  quoted_amount?: number;
-  contract_value?: number;
-  venue?: string | null;
-  notes?: string | null;
-  operator_requests?: string | null;
-  next_step?: string | null;
-  needs_attention?: boolean;
+export type { Conversa };
+
+function useDebounced<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
 }
 
 interface ContactSearchResult {
@@ -68,150 +60,197 @@ interface ChatMessage {
   [key: string]: unknown;
 }
 
+const CONTACT_PREFIX = "contact:";
+
 export default function WhatsApp() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  // Guarda a conversa aberta: ela pode sair da lista filtrada (busca/aba) sem fechar o chat.
+  const [selectedSnapshot, setSelectedSnapshot] = useState<Conversa | null>(null);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isEditLeadOpen, setIsEditLeadOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [activeTab, setActiveTab] = useState<ConversationTab>("OPEN");
+  const [searchInput, setSearchInput] = useState("");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [callOpen, setCallOpen] = useState(false);
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [closeStatus, setCloseStatus] = useState<"WON" | "LOST">("WON");
   const [closeContractValue, setCloseContractValue] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
-  const [supplementalConversations, setSupplementalConversations] = useState<Conversa[]>([]);
   const [contactCandidates, setContactCandidates] = useState<ContactSearchResult[]>([]);
-  const [isRemoteSearching, setIsRemoteSearching] = useState(false);
-  const [remoteSearchError, setRemoteSearchError] = useState(false);
   const [startingCustomerId, setStartingCustomerId] = useState<string | null>(null);
+  const { data: lmSettings } = useLmSettings();
+  const { data: me } = useCurrentUser();
+  const search = useDebounced(searchInput.trim(), 400);
 
   const queryClient = useQueryClient();
 
-  const { data: conversations = [], isLoading: isLoadingConversations } = useQuery<Conversa[]>({
-    queryKey: ["conversations"],
-    queryFn: async () => {
-      const response = await api.get("/chat/conversations/");
-      return response.data.results || response.data || []; 
-    },
-    refetchInterval: 30000, 
-  });
+  const {
+    conversations,
+    isLoading: isLoadingConversations,
+    fetchNextPage: fetchMoreConversations,
+    hasNextPage: hasMoreConversations,
+    isFetchingNextPage: isFetchingMoreConversations,
+  } = useConversations(activeTab, search, assigneeFilter);
 
-  const allConversations = useMemo(() => {
-    const byId = new Map<string, Conversa>();
-    supplementalConversations.forEach((conversation) => byId.set(conversation.id, conversation));
-    conversations.forEach((conversation) => byId.set(conversation.id, conversation));
-    return Array.from(byId.values());
-  }, [conversations, supplementalConversations]);
-
-  const selectedConversationObj = allConversations.find(c => c.id === selectedConversationId);
+  const selectedConversationObj =
+    conversations.find((c) => c.id === selectedConversationId) ??
+    (selectedSnapshot?.id === selectedConversationId ? selectedSnapshot : undefined);
   const isClosed = selectedConversationObj?.status === "CLOSED" || selectedConversationObj?.status === "ARCHIVED";
 
-  const { data: messages = [], isLoading: isLoadingMessages, isFetching: isFetchingMessages } = useQuery({
-    queryKey: ["messages", selectedConversationId, showFullHistory],
-    queryFn: async () => {
-      if (!selectedConversationId) return [];
-      
-      let url = `/chat/messages/?conversation=${selectedConversationId}`;
-      if (showFullHistory && selectedConversationObj?.customer) {
-        url = `/chat/messages/?customer=${selectedConversationObj.customer}`;
-      }
-
-      const response = await api.get(url);
-      const msgs = (response.data.results || response.data || []) as ChatMessage[];
-      return msgs.map((msg) => ({
-        id: msg.id,
-        content: normalizeChatMessageContent(msg.content),
-        direction: msg.direction,
-        role: msg.role,
-        message_type: msg.message_type,
-        media_url: msg.media_url,
-        raw_metadata: msg.raw_metadata,
-        created_at: msg.created_at,
-        time: formatSafeTime(msg.created_at),
-        conversation: msg.conversation_id || msg.conversation
-      }));
-    },
-    enabled: !!selectedConversationId,
-  });
-
-  const markAsReadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await api.patch(`/chat/conversations/${id}/`, { mark_read: true });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    }
-  });
-
   useEffect(() => {
-    socket.on("new_message", (data) => {
+    const fresh = conversations.find((c) => c.id === selectedConversationId);
+    if (fresh) setSelectedSnapshot(fresh);
+  }, [conversations, selectedConversationId]);
+
+  const {
+    messages,
+    fetchNextPage: fetchOlderMessages,
+    hasNextPage: hasOlderMessages,
+    isFetchingNextPage: isFetchingOlderMessages,
+  } = useMessages(selectedConversationId, selectedConversationObj?.customer, showFullHistory);
+
+  const markAsRead = useCallback(
+    (id: string) => {
+      patchConversationInCache(queryClient, id, { unread_count: 0, needs_attention: false });
+      api.patch(`/chat/conversations/${id}/`, { mark_read: true });
+    },
+    [queryClient]
+  );
+
+  // A lista de conversas é atualizada pelo Sidebar (sobe a conversa para o topo);
+  // aqui só entram as mensagens da conversa aberta.
+  useEffect(() => {
+    function onNewMessage(data: NewMessageEvent) {
       const convId = data.conversation_id || data.conversation;
-      
       if (!convId) return;
-
-      queryClient.setQueryData<ChatMessage[]>(["messages", convId, showFullHistory], (oldMessages) => {
-        if (!oldMessages) return [data];
-        const exists = oldMessages.some((message) => String(message.id) === String(data.id));
-        if (exists) return oldMessages;
-        return [...oldMessages, {
-          ...data,
-          content: normalizeChatMessageContent(data.content),
-          time: formatSafeTime(data.created_at)
-        }];
-      });      
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      if (convId === selectedConversationId) {
-        markAsReadMutation.mutate(convId);
+      appendMessageToCache(queryClient, data);
+      if (convId === selectedConversationId && data.direction === "INCOMING") {
+        markAsRead(convId);
       }
-    });
-
+    }
+    socket.on("new_message", onNewMessage);
     return () => {
-      socket.off("new_message");
+      socket.off("new_message", onNewMessage);
     };
-  }, [queryClient, selectedConversationId, showFullHistory, markAsReadMutation]);
+  }, [queryClient, selectedConversationId, markAsRead]);
 
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, message }: { conversationId: string, message: string }) => {
-      await api.post('/chat/messages/', {
+    mutationFn: async ({ conversationId, message }: { conversationId: string; message: string }) => {
+      await api.post("/chat/messages/", {
         conversation_id: conversationId,
-        content: message
+        content: message,
       });
     },
     onMutate: () => setIsSending(true),
     onSettled: () => setIsSending(false),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId, showFullHistory] });
+      queryClient.invalidateQueries({ queryKey: messagesKey(selectedConversationId, "conversation") });
     },
-    onError: () => toast.error("Falha ao enviar mensagem.")
+    onError: () => toast.error("Falha ao enviar mensagem."),
   });
 
   const sendFileMutation = useMutation({
-    mutationFn: async ({ conversationId, file }: { conversationId: string, file: File }) => {
+    mutationFn: async ({ conversationId, file }: { conversationId: string; file: File }) => {
       const formData = new FormData();
       formData.append("conversation_id", conversationId);
       formData.append("file", file);
-
       await api.post("/chat/messages/files/", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
     },
-    onMutate: () => setIsSending(true),
-    onSettled: () => setIsSending(false),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["messages", selectedConversationId, showFullHistory] });
+      queryClient.invalidateQueries({ queryKey: messagesKey(selectedConversationId, "conversation") });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
-    onError: () => toast.error("Falha ao enviar arquivo.")
+    onError: () => toast.error("Falha ao enviar arquivo."),
   });
 
-  const toggleTagMutation = useMutation({
-    mutationFn: async ({ id, newTag }: { id: string, newTag: string }) => {
-      await api.patch(`/chat/conversations/${id}/`, { tag: newTag });
-    },
-    onSuccess: () => {
-      toast.success("Modo de atendimento alterado!");
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  // Contato sem conversa: a busca no backend não acha conversa, então procura o contato para iniciar uma.
+  useEffect(() => {
+    if (search.length < 2 || isLoadingConversations || conversations.length > 0) {
+      setContactCandidates([]);
+      return;
     }
+    let cancelled = false;
+    api
+      .get("/chat/contacts/search/", { params: { search, status: activeTab } })
+      .then(({ data }) => {
+        if (cancelled) return;
+        const results: ContactSearchResult[] = data.results || [];
+        setContactCandidates(results.filter((result) => result.conversation === null));
+      })
+      .catch(() => {
+        if (!cancelled) setContactCandidates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [search, activeTab, isLoadingConversations, conversations.length]);
+
+  /** Aplica a conversa devolvida pelo backend na lista e na conversa aberta. */
+  const applyConversation = (updated: Conversa) => {
+    patchConversationInCache(queryClient, updated.id, updated);
+    setSelectedSnapshot((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+    queryClient.invalidateQueries({ queryKey: messagesKey(updated.id, "conversation") });
+  };
+
+  const apiError = (error: unknown, fallback: string) =>
+    toast.error((error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || fallback);
+
+  // Retomar IA / assumir: registra quem fez (mensagem interna e linha do tempo do card).
+  const toggleTagMutation = useMutation({
+    mutationFn: async ({ id, newTag }: { id: string; newTag: "AGENTE" | "OPERADOR" }) =>
+      (await api.post<Conversa>(`/chat/conversations/${id}/mode/`, { mode: newTag })).data,
+    onSuccess: (updated) => {
+      toast.success(updated.tag === "AGENTE" ? "IA retomada nesta conversa." : "Você assumiu a conversa. IA pausada.");
+      applyConversation(updated);
+    },
+    onError: (error) => apiError(error, "Não foi possível mudar o modo de atendimento."),
   });
+
+  const assignMutation = useMutation({
+    mutationFn: async ({ id, assignee }: { id: string; assignee: string | null }) =>
+      (await api.post<Conversa>(`/chat/conversations/${id}/assign/`, { assignee })).data,
+    onSuccess: (updated) => {
+      toast.success("Responsável atualizado.");
+      applyConversation(updated);
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+    onError: (error) => apiError(error, "Não foi possível atribuir a conversa."),
+  });
+
+  const noteMutation = useMutation({
+    mutationFn: async ({ id, text }: { id: string; text: string }) => {
+      await api.post(`/chat/conversations/${id}/notes/`, { text });
+      return id;
+    },
+    onSuccess: (id) => {
+      toast.success("Nota interna salva.");
+      queryClient.invalidateQueries({ queryKey: messagesKey(id, "conversation") });
+    },
+    onError: (error) => apiError(error, "Não foi possível salvar a nota."),
+  });
+
+  const callMutation = useMutation({
+    mutationFn: async ({ id, outcome, notes }: { id: string; outcome: string; notes?: string }) => {
+      await api.post(`/chat/conversations/${id}/calls/`, { outcome, notes });
+      return id;
+    },
+    onSuccess: (id) => {
+      toast.success("Ligação registrada.");
+      queryClient.invalidateQueries({ queryKey: messagesKey(id, "conversation") });
+    },
+    onError: (error) => apiError(error, "Não foi possível registrar a ligação."),
+  });
+
+  /** Botão Ligar: abre o discador (tel:) e pede o resultado para a linha do tempo. */
+  const handleCall = () => {
+    const digits = (selectedConversationObj?.customer_phone || "").replace(/\D/g, "");
+    if (digits) window.location.href = `tel:+${digits}`;
+    setCallOpen(true);
+  };
 
   const closeConversationMutation = useMutation({
     mutationFn: async ({ id, finalStatus, contractValue, notes }: { id: string, finalStatus: "WON" | "LOST", contractValue?: string, notes?: string }) => {
@@ -228,20 +267,23 @@ export default function WhatsApp() {
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       setIsCloseDialogOpen(false);
-      setSelectedConversationId(null);
       setCloseContractValue("");
       setCloseNotes("");
-    }
+      setSelectedConversationId(null);
+    },
   });
 
   const openConversationMutation = useMutation({
     mutationFn: async (id: string) => {
       await api.patch(`/chat/conversations/${id}/`, { status: "OPEN" });
+      return id;
     },
-    onSuccess: () => {
+    onSuccess: (id) => {
       toast.success("Conversa reaberta!");
+      patchConversationInCache(queryClient, id, { status: "OPEN" });
+      setSelectedSnapshot((prev) => (prev && prev.id === id ? { ...prev, status: "OPEN" } : prev));
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-    }
+    },
   });
 
   const handleSendMessage = (message: string) => {
@@ -256,29 +298,6 @@ export default function WhatsApp() {
     }
   };
 
-  const handleToggleTag = (id: string, currentTag: string) => {
-    const newTag = currentTag === "AGENTE" ? "OPERADOR" : "AGENTE";
-    toggleTagMutation.mutate({ id, newTag });
-  };
-
-  const handleSelectConversation = (id: string) => {
-    setSelectedConversationId(id);
-    setShowFullHistory(false);
-    
-    if (window.innerWidth < 1024) {
-      setIsProfileOpen(false);
-    }
-    queryClient.setQueryData<Conversa[]>(["conversations"], (old = []) => {
-      return old.map((conversation) =>
-        conversation.id === id
-          ? { ...conversation, unread_count: 0, needs_attention: false }
-          : conversation
-      );
-    });
-    api.patch(`/chat/conversations/${id}/`, { mark_read: true });   
-    api.patch(`/chat/conversations/${id}/`, { needs_attention: false });
-  };
-
   const handleCloseConversation = () => {
     if (!selectedConversationId) return;
     closeConversationMutation.mutate({
@@ -289,108 +308,101 @@ export default function WhatsApp() {
     });
   };
 
-  const handleRemoteSearch = useCallback(async (term: string, status: "OPEN" | "CLOSED") => {
-    setIsRemoteSearching(true);
-    setRemoteSearchError(false);
-    try {
-      const response = await api.get('/chat/contacts/search/', {
-        params: { search: term, status },
-      });
-      const results: ContactSearchResult[] = response.data.results || [];
-      const foundConversations = results
-        .map((result) => result.conversation)
-        .filter((conversation): conversation is Conversa => conversation !== null);
-      const foundCandidates = results.filter((result) => result.conversation === null);
+  const handleToggleTag = (id: string, currentTag: string) => {
+    if (id.startsWith(CONTACT_PREFIX)) return;
+    const newTag = currentTag === "AGENTE" ? "OPERADOR" : "AGENTE";
+    toggleTagMutation.mutate({ id, newTag });
+  };
 
-      setSupplementalConversations((current) => {
-        const byId = new Map(current.map((conversation) => [conversation.id, conversation]));
-        foundConversations.forEach((conversation) => byId.set(conversation.id, conversation));
-        return Array.from(byId.values());
-      });
-      setContactCandidates((current) => {
-        const byCustomer = new Map(current.map((result) => [result.customer, result]));
-        foundCandidates.forEach((result) => byCustomer.set(result.customer, result));
-        return Array.from(byCustomer.values());
-      });
-    } catch {
-      setRemoteSearchError(true);
-    } finally {
-      setIsRemoteSearching(false);
+  const handleSelectConversation = (id: string) => {
+    setSelectedConversationId(id);
+    setShowFullHistory(false);
+    const conv = conversations.find((c) => c.id === id);
+    if (conv) {
+      setSelectedSnapshot(conv);
+    } else {
+      // Conversa fora da lista carregada (ex.: conversa anterior aberta pelo perfil do cliente)
+      api.get<Conversa>(`/chat/conversations/${id}/`)
+        .then(({ data }) => setSelectedSnapshot(data))
+        .catch(() => toast.error("Não foi possível abrir a conversa."));
     }
-  }, []);
 
-  const handleSelectListItem = async (item: ConversationListItem) => {
-    if (!item.contactOnly) {
-      handleSelectConversation(item.id);
+    if (window.innerWidth < 1280) {
+      setIsProfileOpen(false);
+    }
+    markAsRead(id);
+  };
+
+  const handleSelectListItem = async (id: string) => {
+    if (!id.startsWith(CONTACT_PREFIX)) {
+      handleSelectConversation(id);
       return;
     }
-
-    if (startingCustomerId === item.customerId) return;
-    setStartingCustomerId(item.customerId);
+    const customerId = id.slice(CONTACT_PREFIX.length);
+    if (startingCustomerId === customerId) return;
+    setStartingCustomerId(customerId);
     try {
-      const response = await api.post<Conversa>('/chat/conversations/start/', {
-        customer_id: item.customerId,
-      });
-      const conversation = response.data;
-      setSupplementalConversations((current) => {
-        const withoutDuplicate = current.filter((entry) => entry.id !== conversation.id);
-        return [conversation, ...withoutDuplicate];
-      });
-      setContactCandidates((current) => current.filter((entry) => entry.customer !== item.customerId));
-      handleSelectConversation(conversation.id);
+      const { data } = await api.post<Conversa>("/chat/conversations/start/", { customer_id: customerId });
+      setSelectedConversationId(data.id);
+      setSelectedSnapshot(data);
+      setShowFullHistory(false);
+      setSearchInput("");
+      setContactCandidates([]);
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
     } catch {
-      toast.error("Falha ao iniciar a conversa.");
+      toast.error("Não foi possível iniciar a conversa com este contato.");
     } finally {
       setStartingCustomerId(null);
     }
   };
 
-  const conversationListItems = useMemo<ConversationListItem[]>(() => {
-    const conversationItems = allConversations.map((conversation) => ({
-      id: conversation.id,
-      customerId: conversation.customer,
-      phone: conversation.customer_phone || "",
-      name: conversation.customer_name || "Desconhecido",
-      lastMessage: normalizeChatMessageContent(conversation.last_message_content),
-      time: formatSafeTime(conversation.last_interaction_at),
-      tag: (conversation.tag || "OPERADOR") as "AGENTE" | "OPERADOR",
-      ai_active: conversation.ai_active,
-      unread: (conversation.unread_count || 0) > 0,
-      finished: conversation.status === "CLOSED",
-      customer_status: conversation.final_customer_status || conversation.customer_state_now || conversation.customer_status,
-      customer_custom_tag: conversation.customer_custom_tag,
-      needs_attention: conversation.needs_attention,
+  // Atalho vindo de outras páginas (ex.: Contatos): /whatsapp?conversa=<id>
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get("conversa");
+    if (!id) return;
+    handleSelectConversation(id);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const listItems: ConversationListItem[] = useMemo(() => {
+    const items: ConversationListItem[] = conversations.map((c: Conversa) => ({
+      id: c.id,
+      phone: c.customer_phone,
+      name: c.customer_name,
+      lastMessage: normalizeChatMessageContent(c.last_message_content),
+      time: c.last_interaction_at ? new Date(c.last_interaction_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      tag: c.tag as "AGENTE" | "OPERADOR",
+      unread: (c.unread_count || 0) > 0,
+      finished: c.status === "CLOSED" || c.status === "ARCHIVED",
+      customer_status: c.final_customer_status || c.customer_status,
+      needs_attention: c.needs_attention,
+      assignee: c.assignee,
     }));
-
-    const customersWithOpenConversation = new Set(
-      allConversations
-        .filter((conversation) => conversation.status === "OPEN")
-        .map((conversation) => conversation.customer)
-    );
-    const candidateItems = contactCandidates
-      .filter((candidate) => !customersWithOpenConversation.has(candidate.customer))
-      .map((candidate) => ({
-        id: `contact:${candidate.customer}`,
-        customerId: candidate.customer,
-        phone: candidate.customer_phone || "",
-        name: candidate.customer_name || "Contato",
-        lastMessage: "Contato sem conversa ativa",
+    contactCandidates.forEach((contact) =>
+      items.push({
+        id: `${CONTACT_PREFIX}${contact.customer}`,
+        phone: contact.customer_phone,
+        name: contact.customer_name,
+        lastMessage: "Iniciar conversa com este contato",
         time: "",
-        tag: "OPERADOR" as const,
+        tag: "OPERADOR",
+        unread: false,
         finished: false,
-        customer_status: candidate.customer_status,
-        customer_custom_tag: undefined,
-        contactOnly: true,
-      }));
+        customer_status: contact.customer_status,
+      })
+    );
+    return items;
+  }, [conversations, contactCandidates]);
 
-    return [...conversationItems, ...candidateItems];
-  }, [allConversations, contactCandidates]);
+  const handleLoadMoreConversations = useCallback(() => {
+    if (hasMoreConversations && !isFetchingMoreConversations) fetchMoreConversations();
+  }, [hasMoreConversations, isFetchingMoreConversations, fetchMoreConversations]);
 
-  const isCurrentConversationAI = Boolean(
-    selectedConversationObj &&
-    selectedConversationObj.tag === "AGENTE" &&
-    selectedConversationObj.ai_active === true
-  );
+  const handleLoadOlderMessages = useCallback(() => {
+    if (hasOlderMessages && !isFetchingOlderMessages) fetchOlderMessages();
+  }, [hasOlderMessages, isFetchingOlderMessages, fetchOlderMessages]);
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
@@ -398,19 +410,26 @@ export default function WhatsApp() {
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <main className="flex-1 p-0 md:p-6 overflow-hidden flex flex-col h-full">
           <div className="flex-1 glass md:rounded-2xl border-x-0 md:border border-border/50 overflow-hidden flex relative shadow-xl">
-            
+
             <div className={cn(
               "w-full md:w-80 lg:w-96 flex-shrink-0 border-r border-border/50 transition-all duration-300",
               selectedConversationId ? "hidden md:flex flex-col" : "flex flex-col"
             )}>
-              <ConversationList 
-                conversations={conversationListItems}
+              <ConversationList
+                conversations={listItems}
                 selectedId={selectedConversationId}
                 onSelect={handleSelectListItem}
                 onToggleTag={handleToggleTag}
-                onRemoteSearch={handleRemoteSearch}
-                isRemoteSearching={isRemoteSearching || !!startingCustomerId}
-                remoteSearchError={remoteSearchError}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                search={searchInput}
+                onSearchChange={setSearchInput}
+                onLoadMore={handleLoadMoreConversations}
+                assignee={assigneeFilter}
+                onAssigneeChange={setAssigneeFilter}
+                hasMore={!!hasMoreConversations}
+                isLoading={isLoadingConversations}
+                isLoadingMore={isFetchingMoreConversations || !!startingCustomerId}
               />
             </div>
 
@@ -418,10 +437,11 @@ export default function WhatsApp() {
               "flex-1 min-w-0 bg-background/50 transition-all duration-300",
               selectedConversationId && !isProfileOpen ? "flex flex-col" : "hidden",
               !isProfileOpen ? "md:flex md:flex-col" : "md:hidden",
-              "lg:flex lg:flex-col"
+              "xl:flex xl:flex-col"
             )}>
               {selectedConversationId && selectedConversationObj ? (
-                <ChatArea 
+                <ChatArea
+                  key={`${selectedConversationId}-${showFullHistory ? "all" : "conv"}`}
                   conversationId={selectedConversationId}
                   conversationData={{ name: selectedConversationObj.customer_name || "Desconhecido", phone: selectedConversationObj.customer_phone || "Sem Número" }}
                   messages={messages}
@@ -429,20 +449,27 @@ export default function WhatsApp() {
                   onSendFile={handleSendFile}
                   isSending={isSending}
                   isUploadingFile={sendFileMutation.isPending}
-                  isAIActive={isCurrentConversationAI}
-                  onToggleAI={() => handleToggleTag(
-                    selectedConversationId,
-                    isCurrentConversationAI ? "AGENTE" : "OPERADOR"
-                  )}
+                  isAIActive={selectedConversationObj.tag === "AGENTE"}
+                  onToggleAI={(mode) => toggleTagMutation.mutate({ id: selectedConversationId, newTag: mode })}
+                  aiBlocked={!!selectedConversationObj.customer_human_operator}
+                  handoverInfo={selectedConversationObj.handover_by_name
+                    ? `${selectedConversationObj.tag === "AGENTE" ? "IA retomada" : "Assumida"} por ${selectedConversationObj.handover_by_name} em ${formatDateTime(selectedConversationObj.handover_at)}`
+                    : undefined}
+                  onAddNote={(text) => noteMutation.mutate({ id: selectedConversationId, text })}
+                  onCall={handleCall}
+                  quickReplies={quickRepliesFor(lmSettings, selectedConversationObj.customer_product,
+                    selectedConversationObj.customer_name, me?.first_name || (lmSettings?.sdr_name as string) || "")}
                   isProfileOpen={isProfileOpen}
                   onToggleProfile={() => setIsProfileOpen(!isProfileOpen)}
                   onBack={() => setSelectedConversationId(null)}
                   isClosed={isClosed}
                   onCloseConversation={() => setIsCloseDialogOpen(true)}
-                  onOpenConversation={() => openConversationMutation.mutate(selectedConversationId!)} 
+                  onOpenConversation={() => openConversationMutation.mutate(selectedConversationId!)}
+                  onLoadOlder={handleLoadOlderMessages}
+                  hasOlder={!!hasOlderMessages}
+                  isLoadingOlder={isFetchingOlderMessages}
                   onLoadHistory={() => setShowFullHistory(true)}
-                  isLoadingHistory={isFetchingMessages && showFullHistory} 
-                  hasMoreHistory={!showFullHistory} 
+                  hasMoreHistory={!showFullHistory && (selectedConversationObj.past_conversations?.length ?? 0) > 0}
                 />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-muted-foreground bg-background/50 h-full">
@@ -455,19 +482,21 @@ export default function WhatsApp() {
               <div className={cn(
                   "flex-shrink-0 border-l border-border/50 bg-background/50 animate-in slide-in-from-right-10 duration-300",
                   isProfileOpen ? "block md:flex md:flex-col" : "hidden",
-                  "w-full md:w-auto md:flex-1 lg:flex-none lg:w-80"
+                  "w-full md:w-auto md:flex-1 xl:flex-none xl:w-80"
               )}>
-                <ClientProfile 
-                  customer={{ 
+                <ClientProfile
+                  customer={{
                       ...selectedConversationObj,
-                      id: selectedConversationObj.customer, 
+                      id: selectedConversationObj.customer,
                       conversation_id: selectedConversationObj.id
-                  }} 
+                  }}
                   onEdit={() => setIsEditLeadOpen(true)}
                   onCloseMobile={() => setIsProfileOpen(false)}
                   onCloseConversation={() => setIsCloseDialogOpen(true)}
                   isClosed={isClosed}
-                  onSelectConversation={handleSelectConversation} 
+                  onSelectConversation={handleSelectConversation}
+                  onAssign={(assignee) => assignMutation.mutate({ id: selectedConversationObj.id, assignee })}
+                  onCall={handleCall}
                 />
               </div>
             )}
@@ -475,17 +504,20 @@ export default function WhatsApp() {
         </main>
       </div>
 
+      <CallDialog
+        open={callOpen}
+        onClose={() => setCallOpen(false)}
+        onConfirm={(outcome, notes) => {
+          setCallOpen(false);
+          if (selectedConversationId) callMutation.mutate({ id: selectedConversationId, outcome, notes });
+        }}
+      />
+
       {selectedConversationObj && (
-        <EditLeadDialog 
-          lead={{
-            ...selectedConversationObj,
-            id: selectedConversationObj.customer,
-            quote_id: selectedConversationObj.quote_id || undefined,
-            name: selectedConversationObj.customer_name,
-            phone: selectedConversationObj.customer_phone,
-          }}
-          isOpen={isEditLeadOpen} 
-          onClose={() => setIsEditLeadOpen(false)} 
+        <EditLeadDialog
+          lead={{ ...selectedConversationObj, id: selectedConversationObj.customer }}
+          isOpen={isEditLeadOpen}
+          onClose={() => setIsEditLeadOpen(false)}
         />
       )}
 

@@ -21,7 +21,8 @@ class UserRepository:
                     password=data.get('password'),
                     first_name=data.get('first_name', ''),
                     is_staff=data.get('is_staff', False),
-                    is_active=data.get('is_active', True)
+                    is_active=data.get('is_active', True),
+                    role=data.get('role') or 'sdr',
                 )
             return user
         except IntegrityError as e:
@@ -112,7 +113,8 @@ class UserRepository:
             return []
 
     @classmethod
-    def update_user_access(self, user_id: int, is_staff: bool = None, is_active: bool = None) -> Optional[UserModel]:
+    def update_user_access(self, user_id: int, is_staff: bool = None, is_active: bool = None,
+                           role: str = None) -> Optional[UserModel]:
         try:
             user = self.get_by_id(user_id)
             if not user:
@@ -122,6 +124,8 @@ class UserRepository:
                 user.is_staff = is_staff
             if is_active is not None:
                 user.is_active = is_active
+            if role is not None:
+                user.role = role
                 
             user.save()
             return user

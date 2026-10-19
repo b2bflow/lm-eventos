@@ -3,6 +3,15 @@ from django.conf import settings
 from django.db import models
 
 class User(AbstractUser):
+    ROLE_CHOICES = [
+        ('admin', 'Administrador (Erica)'),
+        ('sdr', 'SDR'),
+        ('porta', 'Locação de porta (Lúcia)'),
+        ('b2bflow', 'b2bflow'),
+    ]
+    # Papel na operação comercial. Até o P2, is_staff continua valendo como admin.
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='sdr')
+
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='custom_user_set',

@@ -9,7 +9,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/services/api";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { LEAD_STATUS_LABELS, LEAD_STATUS_OPTIONS } from "@/constants/mappings";
+import { LEAD_STATUS_LABELS, QUOTE_STATUS_OPTIONS } from "@/constants/mappings";
 
 interface LeadData {
   id: string | number;
@@ -233,7 +233,7 @@ export function EditLeadDialog({ lead, isOpen, onClose }: EditLeadDialogProps) {
                 <SelectValue placeholder="Selecione o status" />
               </SelectTrigger>
               <SelectContent className="glass border-border/50">
-                {LEAD_STATUS_OPTIONS.map((status) => (
+                {QUOTE_STATUS_OPTIONS.map((status) => (
                   <SelectItem key={status} value={status}>
                     {LEAD_STATUS_LABELS[status]}
                   </SelectItem>

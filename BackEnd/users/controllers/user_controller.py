@@ -9,7 +9,9 @@ from users.services.user_service import UserService
 class UserController(viewsets.ViewSet): 
     
     def get_permissions(self):
-        if self.request.method == 'POST':
+        # Só criar usuário é de admin. change_password também é POST e vale para qualquer usuário
+        # logado (antes a SDR recebia 403 ao trocar a própria senha).
+        if self.action == 'create':
             return [permissions.IsAdminUser()]
         return [permissions.IsAuthenticated()]
 

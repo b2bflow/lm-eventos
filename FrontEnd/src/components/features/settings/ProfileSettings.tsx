@@ -1,3 +1,4 @@
+import type { ApiError } from "@/services/api";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +31,7 @@ export function ProfileSettings() {
       setPasswords({ old_password: "", new_password: "" });
       toast.success("Sua senha foi alterada com segurança!");
     },
-    onError: (error: any) => {
+    onError: (error: ApiError) => {
       const msg = error.response?.data?.detail || "Erro ao alterar senha.";
       toast.error(msg);
     },

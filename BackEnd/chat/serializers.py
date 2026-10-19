@@ -28,6 +28,9 @@ class ConversationSerializer(DocumentSerializer):
     past_quotes = serializers.SerializerMethodField()
     final_customer_status = serializers.CharField(read_only=True)
     needs_attention = serializers.BooleanField(read_only=True) 
+    customer_product = serializers.CharField(source='customer.product', read_only=True, default=None)
+    customer_human_operator = serializers.BooleanField(source='customer.human_operator', read_only=True, default=False)
+    handover_by_name = serializers.SerializerMethodField()
     
 
     class Meta:
@@ -41,8 +44,19 @@ class ConversationSerializer(DocumentSerializer):
             'status', 'tag', 'ai_active', 'last_message_content', 
             'last_interaction_at', 'unread_count', 'created_at',
             'final_customer_status', 'past_conversations', 'past_quotes',
-            'needs_attention', 'blocked_until'
+            'needs_attention', 'blocked_until', 'assignee', 'handover_by', 'handover_by_name', 'handover_at',
+            'customer_product', 'customer_human_operator',
         ]
+
+    def get_handover_by_name(self, obj):
+        """Nome de quem retomou a IA ou assumiu a conversa por último."""
+        user_id = getattr(obj, 'handover_by', None)
+        if not user_id:
+            return None
+        from chat.services.handover_service import user_display_name
+        from users.models.user_model import User
+        user = User.objects.filter(id=user_id).first() if str(user_id).isdigit() else None
+        return user_display_name(user) if user else None
 
     def get_past_conversations(self, obj):
         try:
@@ -73,10 +87,50 @@ class ConversationSerializer(DocumentSerializer):
 
 class MessageSerializer(DocumentSerializer):
     conversation_id = serializers.CharField(source='conversation.id', read_only=True)
+    buttons = serializers.SerializerMethodField()
+    author_name = serializers.SerializerMethodField()
+
     class Meta:
         model = MessageModel
         fields = [
             'id', 'conversation_id', 'role', 'direction', 
-            'status', 'message_type', 'content', 'media_url',
-            'raw_metadata', 'created_at'
+            'status', 'message_type', 'content', 'media_url', 'raw_metadata', 'buttons', 'author_name', 'created_at'
         ]
+
+    def get_author_name(self, obj):
+        """Quem escreveu a nota interna ou fez a ação (mensagens INTERNAL)."""
+        if getattr(obj, 'direction', None) != 'INTERNAL':
+            return None
+        return (getattr(obj, 'raw_metadata', None) or {}).get('operator_name')
+
+    def get_buttons(self, obj):
+        """Botões enviados no menu (só para exibição no painel)."""
+        buttons = (getattr(obj, 'raw_metadata', None) or {}).get('buttons')
+        return buttons if isinstance(buttons, list) else None
+
+
+SECRET_MASK = "••••"
+
+
+def mask_secret(value: str | None) -> str:
+    if not value:
+        return ""
+    return f"{SECRET_MASK}{value[-4:]}" if len(value) > 4 else SECRET_MASK
+
+
+class SystemConfigDTO(serializers.Serializer):
+    """Configurações globais. Segredos saem mascarados; o front reenvia o valor mascarado sem alterar."""
+    webhook_token = serializers.SerializerMethodField()
+    zapi_instance_id = serializers.CharField(allow_blank=True, required=False)
+    zapi_token = serializers.SerializerMethodField()
+    openai_api_key = serializers.SerializerMethodField()
+    ai_active = serializers.BooleanField(required=False)
+
+    def get_webhook_token(self, obj) -> str:
+        return mask_secret(getattr(obj, 'webhook_token', ''))
+
+    def get_zapi_token(self, obj) -> str:
+        return mask_secret(getattr(obj, 'zapi_token', ''))
+
+    def get_openai_api_key(self, obj) -> str:
+        return mask_secret(getattr(obj, 'openai_api_key', ''))

@@ -12,6 +12,11 @@ import WhatsApp from "./pages/WhatsApp";
 import Leads from "./pages/Leads"; 
 import NotFound from "./pages/NotFound";
 import Settings from "@/pages/Settings";
+import Funil from "@/pages/Funil";
+import Contatos from "@/pages/Contatos";
+import Calculadora from "@/pages/Calculadora";
+import Estoque from "@/pages/Estoque";
+import Agenda from "@/pages/Agenda";
 
 const queryClient = new QueryClient();
 
@@ -47,8 +52,13 @@ const App = () => (
             <Route path="/user" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
             <Route path="/whatsapp" element={<PrivateRoute><WhatsApp /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
+            <Route path="/funil" element={<PrivateRoute><Funil /></PrivateRoute>} />
+            <Route path="/contatos" element={<PrivateRoute><Contatos /></PrivateRoute>} />
+            <Route path="/calculadora" element={<PrivateRoute><Calculadora /></PrivateRoute>} />
+            <Route path="/estoque" element={<PrivateRoute><Estoque /></PrivateRoute>} />
+            <Route path="/agenda" element={<PrivateRoute><Agenda /></PrivateRoute>} />
             <Route path="/configuracoes" element={<PrivateRoute><Settings /></PrivateRoute>} />
-            
+          
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

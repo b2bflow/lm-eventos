@@ -5,19 +5,29 @@ from rest_framework.permissions import AllowAny
 from utils.logger import logger
 from events.bus import EventBus
 from gateway.adapters.zapi_adapter import ZAPIClient
+from gateway.service.webhook_guard_service import WebhookGuardService
 from chat.services.message_service import MessageService
 
 
 class FakeWebhookController(ViewSet):
+    # Autenticação é o token do webhook (WebhookGuardService), não JWT.
     permission_classes = [AllowAny]
+    authentication_classes = []
+    # A Z-API envia de poucos IPs: o throttle anônimo global (10/min) derrubaria mensagens.
+    throttle_classes = []
 
-    permission_classes = [AllowAny]
+    guard = WebhookGuardService()
 
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.client = ZAPIClient()
         self.message_service = MessageService()
 
     def receive_message(self, request) -> Response:
+        if not self.guard.is_authorized(request):
+            logger.warning("[ZApiWebhook] Requisição recusada: token do webhook ausente ou inválido.")
+            return Response({"detail": "Unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+
         try:
             data: dict = request.data or {}
 
@@ -25,10 +35,13 @@ class FakeWebhookController(ViewSet):
 
             logger.info(f"[ENDPOINT RECEIVE MESSAGE] Requisição recebida")
 
+            if self.guard.is_duplicate(data):
+                logger.info(f"[ZApiWebhook] Mensagem repetida de {phone} ignorada.")
+                return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
+
             payload: dict = self.message_service.handle(**data)
             if not payload:
                 logger.info(f"[FAKE ZApiWebhookController] Mensagem de {phone} ignorada pelas regras de validação.")
-                logger.info(f"payload valido: {payload}")
                 return Response({"status": "ignored"}, status=status.HTTP_200_OK)
 
             EventBus.publish_sync("WHATSAPP_MESSAGE_RECEIVED", payload)

@@ -16,7 +16,7 @@ import {
   CUSTOMER_TAG_OPTIONS,
   CUSTOMER_TAG_STYLES,
   LEAD_STATUS_LABELS,
-  LEAD_STATUS_OPTIONS,
+  QUOTE_STATUS_OPTIONS,
   LEAD_STATUS_STYLES,
 } from "@/constants/mappings";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
@@ -113,7 +113,7 @@ const Leads = () => {
                     >
                       Todos os filtros
                     </Button>
-                    {LEAD_STATUS_OPTIONS.map((status) => (
+                    {QUOTE_STATUS_OPTIONS.map((status) => (
                       <button
                         key={status}
                         onClick={() => {

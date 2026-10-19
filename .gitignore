@@ -1,0 +1,29 @@
+# Credenciais: nunca versionar (ler por variável de ambiente)
+client_secret*.json
+*client_secret*
+Links LM.txt
+credentials*.json
+token*.json
+.env
+.env.*
+!.example.env
+!.env.example
+
+# Dependências, builds e cache
+node_modules/
+dist/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Dados locais
+db.sqlite3
+*.sqlite3
+BackEnd/logs/
+
+# Logs gerados ao rodar comandos a partir da raiz
+logs/
+
+# Ferramentas locais
+.claude/

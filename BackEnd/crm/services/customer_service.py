@@ -8,12 +8,26 @@ from crm.repositories.customer_repository import CustomerRepository
 from crm.repositories.log_service_repository import ServiceLogRepository
 from chat.models.conversation_model import ConversationModel
 from gateway.adapters.zapi_adapter import ZAPIClient
+from crm import domain
+from crm.phones import normalize_phone
+
+# Campos que o cadastro e a edição pela visão em tabela (/leads) gravam. O resto do lead tem regra
+# própria: sinalizações, anexos, qualificação e operador humano têm endpoints do card; datas de
+# proposta, qualificação e primeiro contato são gravadas pelos fluxos que as originam.
+FORM_FIELDS = frozenset([
+    "name", "phone", "celebration_type", "event_title", "event_date", "guest_count", "quoted_amount",
+    "contract_value", "venue", "notes", "next_step", "last_interaction_at", "customer_custom_tag",
+    "email", "company", "role", "contact_type", "origin", "owner", "product",
+])
+
+FORM_CHOICES = {
+    "contact_type": domain.CONTACT_TYPES, "origin": domain.ORIGINS, "owner": domain.OWNERS,
+    "product": domain.PRODUCTS,
+}
 
 
 class CustomerService(ICustomerService):
-    MANUAL_STAGES = {'WON', 'LOST'}
-    AUTO_STAGES = {'ANALYSIS', 'BUDGET', 'NEGOTIATING'}
-    INTERACTION_FIELDS = {'notes', 'last_interaction_at', 'next_step'}
+    """Cadastro e edição do lead. Mudança de etapa é explícita (PipelineService.change_stage)."""
 
     def __init__(self):
         self.customer_repo = CustomerRepository(MongoDBClient())
@@ -49,7 +63,7 @@ class CustomerService(ICustomerService):
 
     def _normalize_event_data(self, data: dict) -> dict:
         numeric_fields = {'guest_count': int, 'quoted_amount': float, 'contract_value': float}
-        datetime_fields = {'event_date', 'proposal_sent_at', 'last_interaction_at'}
+        datetime_fields = {'event_date', 'proposal_sent_at', 'last_interaction_at', 'next_action_at'}
 
         for field, caster in numeric_fields.items():
             if field in data and data[field] not in (None, ''):
@@ -61,58 +75,35 @@ class CustomerService(ICustomerService):
 
         return data
 
-    def _infer_stage(self, existing_customer: Optional[dict], payload: dict) -> str:
-        requested_stage = payload.get('customer_state_now')
-        current_stage = existing_customer.get('customer_state_now') if existing_customer else None
+    def _form_data(self, data: dict) -> dict:
+        """Só os campos do formulário, com listas de valores conferidas e vazio virando None."""
+        cleaned = {}
+        for key in FORM_FIELDS:
+            if key not in data:
+                continue
+            value = data[key]
+            if isinstance(value, str):
+                value = value.strip()
+            if key in FORM_CHOICES:
+                if value in (None, ''):
+                    value = None if key in ('origin', 'product') else ('lead' if key == 'contact_type' else 'sdr')
+                elif value not in FORM_CHOICES[key]:
+                    raise ValueError(f"Valor inválido para {key}: {value}.")
+            elif value == '' and key not in ('name',):
+                value = None
+            cleaned[key] = value
+        return cleaned
 
-        if requested_stage in self.MANUAL_STAGES:
-            return requested_stage
-
-        if current_stage in self.MANUAL_STAGES and requested_stage not in self.MANUAL_STAGES:
-            return current_stage
-
-        if requested_stage in self.AUTO_STAGES:
-            return requested_stage
-
-        quoted_amount = payload.get('quoted_amount')
-        if quoted_amount is None and existing_customer:
-            quoted_amount = existing_customer.get('quoted_amount')
-
-        contract_value = payload.get('contract_value')
-        if contract_value is None and existing_customer:
-            contract_value = existing_customer.get('contract_value')
-
-        proposal_sent_at = payload.get('proposal_sent_at')
-        if proposal_sent_at is None and existing_customer:
-            proposal_sent_at = existing_customer.get('proposal_sent_at')
-
-        has_budget = any(value not in (None, '', 0, 0.0) for value in [quoted_amount, contract_value]) or bool(proposal_sent_at)
-        has_interaction = any(payload.get(field) not in (None, '') for field in self.INTERACTION_FIELDS)
-
-        if has_budget and has_interaction:
-            return 'NEGOTIATING'
-        if has_budget:
-            return 'BUDGET'
-        return 'ANALYSIS'
-
-    def _build_log_payload(self, existing_customer: Optional[dict], updated_payload: dict, resolved_stage: str) -> Optional[dict]:
-        previous_stage = existing_customer.get('customer_state_now') if existing_customer else None
-
-        if resolved_stage in self.MANUAL_STAGES and previous_stage != resolved_stage:
-            label = 'Venda fechada' if resolved_stage == 'WON' else 'Oportunidade perdida'
-            return {'action_type': 'STAGE_CHANGED', 'description': label}
-
-        if resolved_stage == 'NEGOTIATING':
-            return {'action_type': 'NEGOTIATION_INTERACTION', 'description': 'Interação registrada após envio do orçamento.'}
-
-        quote_keys = {'quoted_amount', 'contract_value', 'proposal_sent_at'}
-        if resolved_stage == 'BUDGET' and any(key in updated_payload for key in quote_keys):
-            return {'action_type': 'BUDGET_SENT', 'description': 'Orçamento gerado ou atualizado para o lead.'}
-
-        if previous_stage and previous_stage != resolved_stage:
-            return {'action_type': 'STAGE_CHANGED', 'description': f'Etapa alterada para {resolved_stage}.'}
-
-        return {'action_type': 'LEAD_UPDATED', 'description': 'Dados comerciais do lead atualizados.'}
+    def _form_phone(self, raw, current_id: str | None = None) -> str:
+        """Telefone do formulário com DDI e sem duplicar contato (mesma regra da página Contatos)."""
+        from crm.services.contact_service import DuplicateContactError, find_by_phone
+        phone = normalize_phone(raw)
+        if not phone:
+            raise ValueError("Telefone inválido. Use DDD e número, por exemplo (62) 99999-1111.")
+        existing = find_by_phone(phone)
+        if existing and str(existing.id) != str(current_id):
+            raise DuplicateContactError(existing)
+        return phone
 
     def _has_budget_payload(self, data: dict) -> bool:
         quoted_amount = data.get('quoted_amount')
@@ -164,10 +155,19 @@ class CustomerService(ICustomerService):
         except Exception as e:
             logger.error(f"[CustomerService] Falha ao notificar financeiro: {str(e)}")
 
-    def register_customer(self, data: dict, user: Any = None) -> Any:
+    def register_customer(self, data: dict, user: Any = None, from_form: bool = False) -> Any:
+        """Cria o contato com o lead em NEW_LEAD (a etapa só muda pelas transições do funil).
+
+        `from_form=True` (cadastro pela tela): aceita só os campos do formulário, normaliza o
+        telefone e recusa número já cadastrado. O webhook chama sem `from_form`, com o telefone
+        exatamente como a Z-API manda.
+        """
         try:
             data = self._normalize_status_aliases(data)
             data = self._normalize_phone_data(data)
+            if from_form:
+                data = self._form_data(data)
+                data['phone'] = self._form_phone(data.get('phone'))
             data = self._normalize_event_data(data)
             name = data.get('name')
             phone = data.get('phone')
@@ -175,7 +175,8 @@ class CustomerService(ICustomerService):
             if not phone:
                 raise ValueError("O número de telefone é obrigatório.")
 
-            data['customer_state_now'] = self._infer_stage(existing_customer=None, payload=data)
+            data['customer_state_now'] = domain.NEW_LEAD
+            data['stage_changed_at'] = datetime.utcnow()
             customer = self.customer_repo.create(
                 name=name,
                 phone=phone,
@@ -217,17 +218,33 @@ class CustomerService(ICustomerService):
             logger.error(f"[CustomerService] Erro ao listar leads: {str(e)}")
             return []
 
+    def page_customers(self, status_filter: Optional[str] = None, search_term: Optional[str] = None,
+                       offset: int = 0, limit: int = 10, custom_tag_filter: Optional[str] = None) -> tuple[list, int]:
+        """Página de leads paginada no banco (visão em tabela /leads)."""
+        return self.customer_repo.page_customers(status_filter=status_filter, search_term=search_term, offset=offset, limit=limit, custom_tag_filter=custom_tag_filter)
+
     def update_customer_info(self, customer_id: str, data: dict, user: Any = None) -> Any:
         try:
             data = self._normalize_status_aliases(data)
             data = self._normalize_phone_data(data)
-            data = self._normalize_event_data(data)
+            requested_stage = data.get('customer_state_now') or None
+            lost_reason = data.get('lost_reason') or None
+            data = self._form_data(data)
 
             existing_customer = self.customer_repo.get_by_id(customer_id)
             if not existing_customer:
                 raise ValueError("Lead não encontrado.")
+            if 'phone' in data:
+                data['phone'] = self._form_phone(data['phone'], current_id=customer_id)
+            data = self._normalize_event_data(data)
 
-            data['customer_state_now'] = self._infer_stage(existing_customer=existing_customer, payload=data)
+            from crm.container import CrmContainer
+            pipeline = CrmContainer.get_pipeline_service()
+            stage_changed = bool(requested_stage) and requested_stage != existing_customer['customer_state_now']
+            if stage_changed:
+                # Valida antes de gravar qualquer campo, para não salvar a edição pela metade.
+                pipeline.validate_transition(existing_customer, requested_stage, user, lost_reason)
+
             data['updated_at'] = datetime.utcnow()
             customer = self.customer_repo.update(id=customer_id, attributes=data)
             if not customer:
@@ -242,14 +259,17 @@ class CustomerService(ICustomerService):
                 self._mark_budget_and_notify_finance(customer)
 
             operator_id = str(user.id) if user and hasattr(user, 'id') else None
-            log_payload = self._build_log_payload(existing_customer, data, customer['customer_state_now'])
             ServiceLogRepository.create_log(
                 customer=customer,
                 operator_id=operator_id,
-                action_type=log_payload['action_type'],
-                description=log_payload['description']
+                action_type='LEAD_UPDATED',
+                description='Dados comerciais do lead atualizados.'
             )
-            
+
+            # Etapa só muda pela transição explícita (valida e registra na linha do tempo).
+            if stage_changed:
+                customer = pipeline.change_stage(customer_id, requested_stage, user=user, lost_reason=lost_reason)
+
             logger.info(f"[CustomerService] Dados do lead {customer_id} atualizados.")
             return customer
         except Exception as e:

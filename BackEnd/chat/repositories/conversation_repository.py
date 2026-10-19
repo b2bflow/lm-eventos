@@ -75,6 +75,38 @@ class ConversationRepository(IConversationRepository):
             raise e
 
     @staticmethod
+    def filtered_queryset(search: str | None = None, tag: str | None = None, needs_attention: bool | None = None, status: str | None = None,
+                          assignee: str | None = None):
+        """Conversas filtradas no banco: busca por nome ou telefone do cliente, etiqueta, atenção e situação.
+
+        status: OPEN (abertas) ou CLOSED (fechadas e arquivadas).
+        """
+        from mongoengine.queryset.visitor import Q
+        queryset = ConversationModel.objects.all()
+        if status == 'OPEN':
+            queryset = queryset.filter(status__nin=['CLOSED', 'ARCHIVED'])
+        elif status == 'CLOSED':
+            queryset = queryset.filter(status__in=['CLOSED', 'ARCHIVED'])
+        if search:
+            term = search.strip()
+            digits = "".join(ch for ch in term if ch.isdigit())
+            customer_filter = Q(name__icontains=term)
+            # Telefone só quando o termo não tem letras (ex.: "(62) 99999-0000"), para "Cliente 01" não casar números.
+            if digits and not any(ch.isalpha() for ch in term):
+                customer_filter = customer_filter | Q(phone__icontains=digits)
+            customer_ids = [c.id for c in Customer.objects(customer_filter).only('id')]
+            queryset = queryset.filter(customer__in=customer_ids)
+        if tag:
+            queryset = queryset.filter(tag=tag)
+        if needs_attention is not None:
+            queryset = queryset.filter(needs_attention=needs_attention)
+        if assignee == 'none':
+            queryset = queryset.filter(assignee=None)
+        elif assignee:
+            queryset = queryset.filter(assignee=assignee)
+        return queryset
+
+    @staticmethod
     def get_closed_conversations_in_period(start_dt, end_dt):
         try:
             return ConversationModel.objects(

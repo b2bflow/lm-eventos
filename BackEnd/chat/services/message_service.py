@@ -122,7 +122,7 @@ class MessageService(IMessageService):
                 print(f"Erro ao converter a string para dicionário: {e}")
         return [False, None]
     
-    def _determine_agent_flow(self, vals, phone, customer):
+    def _determine_agent_flow(self, vals, phone, customer, conversation=None):
         """Define qual agente usar e se deve atualizar tag."""
 
         if vals[0]:
@@ -139,6 +139,7 @@ class MessageService(IMessageService):
                 self.chat.send_message_with_button(
                     phone=phone, message=msg_text, buttons=buttons
                 )
+                self._record_menu_message(conversation, msg_text, buttons)
 
                 self.customer_repository.update(
                     id=customer.get('id'),
@@ -164,6 +165,7 @@ class MessageService(IMessageService):
                 self.chat.send_message_with_button(
                     phone=phone, message=msg_text, buttons=buttons
                 )
+                self._record_menu_message(conversation, msg_text, buttons)
 
                 self.customer_repository.update(
                     id=customer.get("id"),
@@ -182,6 +184,7 @@ class MessageService(IMessageService):
                     "https://chat.whatsapp.com/G2JH9A0kp9O6ErGDlOyVlI?s=cl&p=i&ilr=2&amv=0"
                 )
                 self.chat.send_message(phone=phone, message=msg_text)
+                self._record_menu_message(conversation, msg_text)
 
                 customer_id = customer.get('id') if isinstance(customer, dict) else str(customer.id)
                 self.customer_repository.update(
@@ -304,22 +307,31 @@ class MessageService(IMessageService):
 
             if not conversation:
                 conversation = self.conversation_repo.create_conversation(customer_id)
+                if customer.get("human_operator"):
+                    # Parceiro ou cliente antigo (regra 1): fica com a Erica, sem IA e sem menu.
+                    conversation.tag = 'OPERADOR'
+                    conversation.ai_active = False
+                    self.conversation_repo.update_conversation(conversation)
 
             if active_quote and not getattr(conversation, 'quote', None):
                 from crm.models.quote_model import Quote
                 conversation.quote = Quote.objects(id=active_quote.get("id")).first()
 
+            message_type, media_url = self._extract_media(raw_metadata)
             message = self._save_and_notify(
                 conversation_id=str(conversation.id),
                 content=content,
                 direction='INCOMING',
                 sender_role='user',
                 external_id=external_id,
-                raw_metadata=raw_metadata
+                raw_metadata=raw_metadata,
+                message_type=message_type,
+                media_url=media_url,
+                status='RECEIVED',
             )
 
             conversation.updated_at = datetime.now()
-            conversation.last_message_content = content
+            conversation.last_message_content = self._preview(content, message_type, raw_metadata)
             conversation.unread_count = getattr(conversation, 'unread_count', 0) + 1
 
             if is_blocked:
@@ -330,6 +342,7 @@ class MessageService(IMessageService):
                 conversation.needs_attention = True
 
             self.conversation_repo.update_conversation(conversation)
+            self._touch_customer_interaction(customer_id)
 
             if is_blocked:
                 logger.info(
@@ -391,13 +404,14 @@ class MessageService(IMessageService):
                 self.chat.send_message_with_button(
                     phone=phone, message=msg_text, buttons=buttons
                 )
+                self._record_menu_message(conversation, msg_text, buttons)
 
                 return message
             
             vals = self.processar_mensagem(content)
 
             leave_execution = self._determine_agent_flow(
-                vals, phone, customer)
+                vals, phone, customer, conversation)
             
             if leave_execution:
                 return message
@@ -421,6 +435,7 @@ class MessageService(IMessageService):
                     phone=phone, 
                     message=msm_text
                 )
+                self._record_menu_message(conversation, msm_text)
 
                 return message
 
@@ -446,6 +461,7 @@ class MessageService(IMessageService):
         message_type: str = "text",
         media_url: str = None,
         status: str = "QUEUED",
+        hidden_from_ai: bool = False,
     ) -> Any:
         try:
             conversation = self.conversation_repo.get_by_id(conversation_id)
@@ -462,6 +478,7 @@ class MessageService(IMessageService):
                 message_type=message_type,
                 media_url=media_url,
                 status=status,
+                hidden_from_ai=hidden_from_ai,
             )
 
             self.socket_adapter.emit_new_message({
@@ -473,6 +490,8 @@ class MessageService(IMessageService):
                 "message_type": message_type,
                 "media_url": media_url,
                 "raw_metadata": raw_metadata or {},
+                "buttons": (raw_metadata or {}).get("buttons") if direction == 'OUTGOING' else None,
+                "author_name": (raw_metadata or {}).get("operator_name") if direction == 'INTERNAL' else None,
                 "created_at": message.created_at.isoformat()
             })
 
@@ -480,6 +499,65 @@ class MessageService(IMessageService):
         except Exception as e:
             logger.error(f"[MessageService] Falha ao salvar/notificar mensagem: {e}")
             raise e
+
+    @staticmethod
+    def _extract_media(raw_metadata: dict | None) -> tuple[str, str | None]:
+        """Tipo e URL da mídia a partir do payload da Z-API (o content continua como a IA lê hoje)."""
+        from utils.safe_url import safe_media_url
+        data = raw_metadata or {}
+        for kind, key, url_key in (("image", "image", "imageUrl"), ("file", "document", "documentUrl"),
+                                   ("audio", "audio", "audioUrl")):
+            if isinstance(data.get(key), dict) and data[key].get(url_key):
+                # URL fora de http(s) não vai para o painel (o content da IA continua igual).
+                return kind, safe_media_url(data[key][url_key])
+        return "text", None
+
+    @staticmethod
+    def _preview(content: str, message_type: str, raw_metadata: dict | None) -> str:
+        """Texto curto da última mensagem para a lista de conversas."""
+        data = raw_metadata or {}
+        if message_type == "image":
+            caption = (data.get("image") or {}).get("caption")
+            return f"[Imagem] {caption}".strip() if caption else "[Imagem]"
+        if message_type == "file":
+            doc = data.get("document") or {}
+            return f"[Arquivo] {doc.get('fileName') or doc.get('caption') or ''}".strip()
+        if message_type == "audio":
+            return f"[Áudio] {content}".strip()
+        if isinstance(data.get("buttonsResponseMessage"), dict):
+            return data["buttonsResponseMessage"].get("message") or content
+        return content
+
+    def _record_menu_message(self, conversation, content: str, buttons: list | None = None):
+        """Registra na conversa uma mensagem do menu já enviada pela Z-API (fora do contexto da IA)."""
+        if not conversation:
+            return None
+        try:
+            metadata = {"menu": True}
+            if buttons:
+                metadata["buttons"] = buttons
+            message = self._save_and_notify(
+                conversation_id=str(conversation.id),
+                content=content,
+                direction='OUTGOING',
+                sender_role='assistant',
+                raw_metadata=metadata,
+                hidden_from_ai=True,
+                status='SENT_TO_GATEWAY',
+            )
+            conversation.last_message_content = content
+            self.conversation_repo.update_conversation(conversation)
+            return message
+        except Exception as e:
+            # O menu já foi enviado ao cliente; falha ao registrar não pode interromper o fluxo.
+            logger.error(f"[MessageService] Falha ao registrar mensagem do menu: {e}")
+            return None
+
+    def _touch_customer_interaction(self, customer_id: str):
+        try:
+            self.customer_repository.update(id=customer_id, attributes={"last_interaction_at": datetime.utcnow()})
+        except Exception as e:
+            logger.error(f"[MessageService] Falha ao atualizar última interação do cliente {customer_id}: {e}")
 
     def _process_outgoing_message(self, conversation_id: str, content: str, sender_role: str, sender_id: Optional[str] = None):
         try:

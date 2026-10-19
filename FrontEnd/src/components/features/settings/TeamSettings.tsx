@@ -1,3 +1,4 @@
+import type { ApiError } from "@/services/api";
 import { useState } from "react"; 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,14 +35,14 @@ export function TeamSettings() {
   });
 
   const updateAccessMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: number, payload: any }) => {
+    mutationFn: async ({ id, payload }: { id: number, payload: Record<string, unknown> }) => {
       await api.patch(`/users/usuarios/${id}/`, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
       toast.success("Permissões atualizadas com sucesso.");
     },
-    onError: (error: any) => {
+    onError: (error: ApiError) => {
       toast.error(error.response?.data?.detail || "Erro ao atualizar permissões.");
     }
   });

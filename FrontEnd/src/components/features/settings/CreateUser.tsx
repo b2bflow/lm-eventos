@@ -1,3 +1,4 @@
+import type { ApiError } from "@/services/api";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -72,9 +73,12 @@ export default function CriarUsuario({ isOpen, onOpenChange }: CreateUserProps) 
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
       
       onOpenChange(false);
-    } catch (error: any) {
-      const serverMessage = error.response?.data?.email?.[0] || 
-                            error.response?.data?.username?.[0] || 
+    } catch (err) {
+      const error = err as ApiError;
+      const fieldError = (field: string) => (error.response?.data?.[field] as string[] | undefined)?.[0];
+      const serverMessage = error.response?.data?.detail ||
+                            fieldError("email") ||
+                            fieldError("username") || 
                             "Erro ao criar usuário no banco de dados.";
       
       toast({

@@ -21,6 +21,8 @@ class ZAPIClient(IChat):
         self._instance_token = os.getenv("ZAPI_INSTANCE_TOKEN")
         self._client_token = os.getenv("ZAPI_CLIENT_TOKEN")
         self._headers = {"Content-Type": "application/json"}
+        self._after_send_hooks: list[dict] = []
+        self._executing_hooks = False
 
     def __validate_message(self, message: str) -> bool:
         # Trata a mensagem
@@ -366,6 +368,32 @@ class ZAPIClient(IChat):
 
         finally:
             self._execute_after_send_hooks(event="send_contact")
+
+    def send_document(self, phone: str, document: str, file_name: str, caption: str = "",
+                      extension: str = "pdf") -> dict:
+        """Envia um arquivo. `document` é uma URL pública ou base64 ("data:application/pdf;base64,...")."""
+        if not self.__validate_cell_number(phone):
+            raise ValueError(f"Telefone inválido para envio de documento: {phone}")
+
+        url = f"{self._resolve_url()}/send-document/{extension}"
+        headers = {**self._headers, "Client-Token": self._client_token}
+        payload = {
+            "phone": self._resolve_phone(phone),
+            "document": document,
+            "fileName": file_name,
+        }
+        if caption:
+            payload["caption"] = caption
+
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"[Z-API] Documento {file_name} enviado para {phone}: {to_json_dump(result)}")
+            return result
+        except Exception as e:
+            logger.exception(f"[Z-API] Falha ao enviar documento {file_name} para {phone}: {e}")
+            raise e
 
     def send_message(self, phone: str, message: str) -> bool:
         if not self.__validate_message(message) or not self.__validate_cell_number(

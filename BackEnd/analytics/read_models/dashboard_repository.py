@@ -4,6 +4,7 @@ from utils.logger import logger
 from collections import defaultdict
 
 from crm.container import CrmContainer
+from crm import domain
 
 class DashboardRepository:
     @classmethod
@@ -17,10 +18,13 @@ class DashboardRepository:
             if end_date:
                 end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)
 
-            quote_service = CrmContainer.get_quote_service()
-            quotes = quote_service.list_quotes_created_between(start_dt, end_dt)
-            total_leads_general = quote_service.count_quotes()
-            filtered_quotes = []
+            customer_service = CrmContainer.get_customer_service()
+            customers = customer_service.get_active_customers()
+            # Leads antigos dos contatos (encerrados e arquivados) continuam contando no funil e na receita.
+            from crm.models.opportunity_model import Opportunity
+            customers = list(customers) + [o.to_lead_row() for o in Opportunity.objects()]
+            total_leads_general = len(customers)
+            filtered_customers = []
             upcoming_window_end = datetime.utcnow() + timedelta(days=30)
             occupied_dates = set()
 
@@ -32,7 +36,6 @@ class DashboardRepository:
 
             summary = {
                 "analysis": 0,
-                "waiting_budget": 0,
                 "budget": 0,
                 "negotiating": 0,
                 "won": 0,
@@ -40,45 +43,54 @@ class DashboardRepository:
                 "projected_revenue": 0.0,
                 "confirmed_revenue": 0.0,
             }
+            stage_counts = {stage: 0 for stage in domain.STAGES}
 
-            for quote in quotes:
-                created_at_raw = quote.get("created_at")
+            for customer in customers:
+                created_at_raw = customer.get("lead_started_at") or customer.get("created_at")
                 created_at = datetime.fromisoformat(created_at_raw) if isinstance(created_at_raw, str) else created_at_raw
                 if not created_at or created_at < start_dt or created_at > end_dt:
                     continue
 
-                filtered_quotes.append(quote)
+                filtered_customers.append(customer)
                 day_str = created_at.strftime("%d/%m")
-                stage = quote.get("status") or quote.get("customer_state_now", "ANALYSIS")
-                quoted_amount = float(quote.get("quoted_amount") or 0)
-                contract_value = float(quote.get("contract_value") or 0)
+                stage = domain.resolve_legacy_stage(customer.get("customer_state_now"), customer.get("proposal_sent_at"))
+                stage_counts[stage] += 1
+                quoted_amount = float(customer.get("quoted_amount") or 0)
+                contract_value = float(customer.get("contract_value") or 0)
                 revenue_reference = contract_value or quoted_amount
 
                 daily_stats[day_str]["lead_pipeline"] += 1
                 daily_stats[day_str]["projected_revenue"] += revenue_reference
 
-                if stage == "ANALYSIS":
+                # Chaves antigas mantidas para o dashboard atual:
+                # análise = novo + qualificado; orçamento = proposta enviada; negociando = proposta aceita.
+                if stage in (domain.NEW_LEAD, domain.QUALIFIED):
                     summary["analysis"] += 1
-                elif stage == "BUDGET":
+                elif stage == domain.PROPOSAL_SENT:
                     summary["budget"] += 1
-                elif stage == "WAITING_BUDGET":
-                    summary["waiting_budget"] += 1
-                elif stage == "NEGOTIATING":
+                elif stage == domain.PROPOSAL_ACCEPTED:
                     summary["negotiating"] += 1
-                elif stage == "WON":
+                elif stage == domain.CONTRACT_SIGNED:
                     summary["won"] += 1
                     daily_stats[day_str]["confirmed_events"] += 1
                     summary["confirmed_revenue"] += contract_value or quoted_amount
-                elif stage == "LOST":
+                elif stage == domain.LOST:
                     summary["lost"] += 1
 
-                if stage != "LOST":
+                if stage != domain.LOST:
                     summary["projected_revenue"] += revenue_reference
 
-                event_date_raw = quote.get("event_date")
+                event_date_raw = customer.get("event_date")
                 event_date = datetime.fromisoformat(event_date_raw) if isinstance(event_date_raw, str) and event_date_raw else event_date_raw
                 if event_date and datetime.utcnow() <= event_date <= upcoming_window_end:
                     occupied_dates.add(event_date.date().isoformat())
+
+            # Datas bloqueadas por evento confirmado na agenda também ocupam a agenda
+            try:
+                from agenda.services.agenda_service import AgendaService
+                occupied_dates |= AgendaService().confirmed_event_dates(datetime.utcnow(), upcoming_window_end)
+            except Exception as e:
+                logger.error(f"[DashboardRepository] Falha ao ler eventos confirmados: {e}")
 
             labels = []
             lead_pipeline_series = []
@@ -94,7 +106,7 @@ class DashboardRepository:
                 projected_revenue_series.append(round(daily_stats[day_str]["projected_revenue"], 2))
                 current_dt += timedelta(days=1)
 
-            total_leads = len(filtered_quotes)
+            total_leads = len(filtered_customers)
             events_confirmed = summary["won"]
             conversion_rate = round((events_confirmed / total_leads) * 100, 2) if total_leads else 0
             interruption_count = max(total_leads - summary["negotiating"] - summary["won"], 0)
@@ -111,7 +123,6 @@ class DashboardRepository:
                 "total_leads": total_leads,
                 "analysis_count": summary["analysis"],
                 "budget_count": summary["budget"],
-                "waiting_budget_count": summary["waiting_budget"],
                 "negotiating_count": summary["negotiating"],
                 "events_confirmed": events_confirmed,
                 "lost_count": summary["lost"],
@@ -124,6 +135,7 @@ class DashboardRepository:
                 "schedule_occupancy_rate": schedule_occupancy_rate,
                 "upcoming_events_count": len(occupied_dates),
                 "average_ticket": average_ticket,
+                "stage_counts": stage_counts,
             }
 
         except Exception as e:

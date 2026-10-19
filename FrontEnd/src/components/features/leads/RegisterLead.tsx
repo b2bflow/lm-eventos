@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/services/api';
+import api, { type ApiError } from '@/services/api';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
   DialogFooter
@@ -73,7 +73,7 @@ export function RegisterLead() {
       setIsOpen(false);
       form.reset();
     },
-    onError: (error: any) => {
+    onError: (error: ApiError) => {
       console.error(error);
       const msg = error.response?.data?.detail || "Erro ao criar lead.";
       toast.error(msg);

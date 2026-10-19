@@ -20,5 +20,11 @@ class ConversationModel(Document):
     unread_count = IntField(default=0)
     last_message_content = StringField(default="")
 
-    created_at = DateTimeField(default=datetime.now)
-    updated_at = DateTimeField(default=datetime.now)
+    # Responsável pela conversa na equipe (independe do responsável do lead no funil).
+    assignee = StringField(choices=('sdr', 'erica', 'lucia'), null=True)
+    # Última passagem entre IA e humano: quem fez e quando (ver ConversationHandoverService).
+    handover_by = StringField(null=True)  # id do usuário Django
+    handover_at = DateTimeField(null=True)
+
+    created_at = DateTimeField(default=datetime.utcnow)  # UTC sem fuso, como o resto do banco
+    updated_at = DateTimeField(default=datetime.utcnow)

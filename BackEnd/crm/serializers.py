@@ -24,6 +24,26 @@ class CustomerDTO(serializers.Serializer):
     updated_at = serializers.CharField()
     operator_name = serializers.SerializerMethodField()
 
+    # Funil LM (somente leitura aqui; escrita pelos endpoints do card)
+    email = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    company = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    role = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    contact_type = serializers.CharField(required=False)
+    origin = serializers.CharField(allow_null=True, required=False)
+    owner = serializers.CharField(required=False)
+    human_operator = serializers.BooleanField(required=False)
+    product = serializers.CharField(allow_null=True, required=False)
+    qualification = serializers.DictField(required=False)
+    pending_fields = serializers.ListField(required=False)
+    attachments = serializers.ListField(required=False)
+    flags = serializers.ListField(required=False)
+    needs_erica = serializers.BooleanField(required=False)
+    lost_reason = serializers.CharField(allow_null=True, required=False)
+    next_action_at = serializers.CharField(allow_null=True, required=False)
+    qualified_at = serializers.CharField(allow_null=True, required=False)
+    first_contact_at = serializers.CharField(allow_null=True, required=False)
+    stage_changed_at = serializers.CharField(allow_null=True, required=False)
+
     def _get_value(self, obj, key: str):
         if isinstance(obj, dict):
             return obj.get(key)

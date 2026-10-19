@@ -8,7 +8,7 @@ from bson import ObjectId
 class ServiceLogRepository:
     
     @classmethod
-    def create_log(self, customer: Customer, operator_id: str, action_type: str, description: str) -> ServiceLog:
+    def create_log(self, customer: Customer, operator_id: str, action_type: str, description: str, metadata: dict | None = None) -> ServiceLog:
         try:
             if isinstance(customer, dict):
                 customer = Customer.objects(id=ObjectId(customer['id'])).first()
@@ -21,6 +21,7 @@ class ServiceLogRepository:
                 operator_id=str(operator_id) if operator_id else None,
                 action_type=action_type,
                 description=description,
+                metadata=metadata or {},
             )
             log.save()
             return log

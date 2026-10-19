@@ -1,9 +1,14 @@
-import { Phone, Tag, Edit, User, CheckCircle, ArrowLeft, History } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Phone, Tag, Edit, User, CheckCircle, ArrowLeft, History, SquareKanban, Contact, UserCheck } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { formatSafeDate } from "@/lib/dateUtils";
+import { LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, OWNER_LABELS, PRODUCT_LABELS, resolveStage } from "@/constants/mappings";
+
+const NO_ASSIGNEE = "__none__";
 
 interface PastConversation {
   id: string;
@@ -33,28 +38,27 @@ interface ClientProfileProps {
     final_customer_status?: string;
     past_conversations?: PastConversation[];
     past_quotes?: PastQuote[];
+    assignee?: string | null;
+    customer_product?: string | null;
+    customer_human_operator?: boolean;
   } | undefined;
   onEdit: () => void; 
   onCloseMobile?: () => void; 
   onCloseConversation?: () => void; 
   isClosed?: boolean; 
   onSelectConversation?: (id: string) => void; // NOVO: Redirecionamento
+  onAssign?: (assignee: string | null) => void;
+  onCall?: () => void;
 }
 
 const getStatusDisplay = (status: string | undefined) => {
-  switch(status) {
-    case 'ANALYSIS': return { label: 'Análise', color: 'text-slate-600 bg-slate-500/10 border-slate-500/20' };
-    case 'BUDGET': return { label: 'Orçamento', color: 'text-amber-600 bg-amber-500/10 border-amber-500/20' };
-    case 'NEGOTIATING': return { label: 'Negociando', color: 'text-sky-600 bg-sky-500/10 border-sky-500/20' };
-    case 'WAITING_BUDGET': return { label: 'Orçamento Pendente', color: 'text-yellow-600 bg-yellow-500/10 border-yellow-500/20' };
-    case 'WON': return { label: 'Venda', color: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20' };
-    case 'LOST': return { label: 'Perdido', color: 'text-rose-600 bg-rose-500/10 border-rose-500/20' };
-    default: return { label: 'Análise', color: 'text-slate-600 bg-slate-500/10 border-slate-500/20' };
-  }
+  const stage = resolveStage(status);
+  return { label: LEAD_STATUS_LABELS[stage], color: LEAD_STATUS_STYLES[stage] };
 };
 
-export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversation, isClosed, onSelectConversation }: ClientProfileProps) {
-  
+export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversation, isClosed, onSelectConversation, onAssign, onCall }: ClientProfileProps) {
+  const navigate = useNavigate();
+
   if (!customer) return null;
 
   // Se a conversa já foi fechada, exibe o status "congelado" dela, caso contrário, o atual do banco.
@@ -70,7 +74,7 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
               <Edit className="w-4 h-4" />
             </Button>
             {onCloseMobile && (
-               <Button variant="ghost" size="icon" onClick={onCloseMobile} className="md:hidden h-8 w-8 text-muted-foreground hover:text-primary">
+               <Button variant="ghost" size="icon" onClick={onCloseMobile} className="xl:hidden h-8 w-8 text-muted-foreground hover:text-primary">
                  <ArrowLeft className="w-5 h-5" />
                </Button>
             )}
@@ -87,6 +91,34 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
           <h2 className="text-xl font-bold text-foreground mb-1">{customer.customer_name || "Desconhecido"}</h2>
         </div>
 
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="sm" variant="outline" onClick={() => navigate(`/funil?lead=${customer.id}`)}
+            disabled={customer.customer_human_operator} title={customer.customer_human_operator ? "Parceiro não entra no funil" : "Abrir o card do lead"}>
+            <SquareKanban className="w-4 h-4 mr-1" /> Card no funil
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/contatos?contato=${customer.id}`)}>
+            <Contact className="w-4 h-4 mr-1" /> Contato
+          </Button>
+        </div>
+
+        <Separator className="bg-border/50" />
+
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <UserCheck className="w-4 h-4" /> Responsável pela conversa
+          </h3>
+          <Select value={customer.assignee || NO_ASSIGNEE} onValueChange={(v) => onAssign?.(v === NO_ASSIGNEE ? null : v)} disabled={!onAssign}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NO_ASSIGNEE}>Sem responsável</SelectItem>
+              {Object.entries(OWNER_LABELS).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {customer.customer_human_operator && (
+            <p className="text-xs text-rose-600">Parceiro ou cliente antigo: fica com a Erica e a IA não atende.</p>
+          )}
+        </div>
+
         <Separator className="bg-border/50" />
 
         <div className="space-y-4">
@@ -99,6 +131,11 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
               <p className="text-xs text-muted-foreground">WhatsApp</p>
               <p className="text-sm font-medium text-foreground truncate">{customer.customer_phone || "Sem número"}</p>
             </div>
+            {onCall && customer.customer_phone && (
+              <Button size="sm" variant="outline" onClick={onCall} className="shrink-0">
+                <Phone className="w-4 h-4 mr-1" /> Ligar
+              </Button>
+            )}
           </div>
         </div>
 
@@ -117,6 +154,11 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
               <span className={cn("px-2.5 py-1 rounded-md text-[10px] font-bold border", statusInfo.color)}>
                 {statusInfo.label}
               </span>
+              {customer.customer_product && (
+                <span className="ml-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold border border-border/60 text-muted-foreground">
+                  {PRODUCT_LABELS[customer.customer_product] || customer.customer_product}
+                </span>
+              )}
             </div>
           </div>
           

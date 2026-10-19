@@ -27,6 +27,8 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'rest_framework_simplejwt',
+    # Refresh token revogável: logout e rotação põem o token antigo na lista negra.
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
 
     'core',
@@ -37,6 +39,10 @@ INSTALLED_APPS = [
     'events',
     'gateway',
     'ai_agents',
+    # Processo comercial com SDR
+    'sales',
+    'inventory',
+    'agenda',
 ]
 
 MIDDLEWARE = [
@@ -103,9 +109,11 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle"
     ],
+    # Por minuto, não por dia: o painel faz polling (barra lateral a cada 30 s, leads a cada 4 s) e
+    # "1000/day" bloqueava a SDR com 429 no meio do expediente.
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "10/minute",
-        "user": "1000/day"
+        "anon": os.getenv("API_ANON_THROTTLE", "10/minute"),
+        "user": os.getenv("API_USER_THROTTLE", "300/minute"),
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
@@ -114,7 +122,11 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'SIGNING_KEY': os.getenv('JWT_SECRET_KEY', SECRET_KEY),
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1)
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    # Cada /token/refresh/ devolve um refresh novo e invalida o anterior: um refresh vazado
+    # deixa de valer assim que o painel renova a sessão.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
 
@@ -123,7 +135,25 @@ CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
 
-LANGUAGE_CODE = 'en-us'
+# --- Produção (DEBUG=False) ---------------------------------------------------------------
+# Atrás de proxy com HTTPS (nginx, Traefik): SECURE_PROXY_SSL_HEADER=HTTP_X_FORWARDED_PROTO.
+if os.getenv('SECURE_PROXY_SSL_HEADER'):
+    SECURE_PROXY_SSL_HEADER = (os.getenv('SECURE_PROXY_SSL_HEADER'), 'https')
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+SECURE_HSTS_SECONDS = int(os.getenv('SECURE_HSTS_SECONDS', '0'))  # ex.: 31536000 depois de confirmar o HTTPS
+SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT') == 'True'
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # webhook e formulários; importação de CSV tem limite próprio (2 MB)
+
+# Admin do Django desligado por padrão: o login dele não tem limite de tentativas e serviria para
+# testar senhas da equipe. Ligar só quando precisar (DJANGO_ADMIN_ENABLED=True).
+DJANGO_ADMIN_ENABLED = os.getenv('DJANGO_ADMIN_ENABLED') == 'True'
+
+LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
@@ -152,7 +182,15 @@ CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
+# Horários do beat (crontab) em horário de Brasília; datas no banco seguem em UTC.
+CELERY_TIMEZONE = 'America/Sao_Paulo'
+CELERY_ENABLE_UTC = True
+
+# Tarefas periódicas (rodar `celery -A nucleus beat`). Ver BackEnd/README.md.
+from nucleus.beat_schedule import CELERY_BEAT_SCHEDULE  # noqa: E402,F401
+
+# Fuso usado nas regras de negócio (horário comercial, prazos da SDR, agenda).
+LM_TIMEZONE = os.getenv('LM_TIMEZONE', 'America/Sao_Paulo')
 
 ZAPI_SECURITY_TOKEN = os.getenv('ZAPI_SECURITY_TOKEN')
 ZAPI_INSTANCE_ID = os.getenv('ZAPI_INSTANCE_ID')

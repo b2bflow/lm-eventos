@@ -1,3 +1,4 @@
+import type { ApiError } from "@/services/api";
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -29,11 +30,6 @@ const Login = () => {
       localStorage.setItem('is_staff', data.is_admin ? "true" : "false"); 
       localStorage.setItem('username', data.username); 
 
-      const setCookie = (name: string, value: string, maxAgeSec: number) => {
-        document.cookie = `${name}=${value}; Path=/; SameSite=Lax; Max-Age=${maxAgeSec};${window.location.protocol === 'https:' ? ' Secure;' : ''}`;
-      };
-      setCookie('accessToken', data.access, 30 * 60);
-      setCookie('refreshToken', data.refresh, 24 * 60 * 60);
 
       if (data.is_admin) {
         navigate('/admin');
@@ -41,8 +37,8 @@ const Login = () => {
         navigate('/user');
       }
       
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Credenciais inválidas ou erro de conexão.');
+    } catch (err) {
+      setError((err as ApiError).response?.data?.detail || 'Credenciais inválidas ou erro de conexão.');
     } finally {
       setIsLoading(false);
     }

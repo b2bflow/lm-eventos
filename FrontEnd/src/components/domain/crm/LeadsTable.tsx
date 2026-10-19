@@ -35,7 +35,8 @@ interface LeadsTableProps {
   data: Lead[];
   isLoading: boolean;
   onEdit: (lead: Lead) => void;
-  onDelete: (lead: Lead) => void;
+  /** Só para a Erica (admin): o backend recusa a exclusão para os demais papéis. */
+  onDelete?: (lead: Lead) => void;
 }
 
 export function LeadsTable({ data, isLoading, onEdit, onDelete }: LeadsTableProps) {
@@ -145,14 +146,16 @@ export function LeadsTable({ data, isLoading, onEdit, onDelete }: LeadsTableProp
                   >
                     <Pencil className="w-4 h-4" />
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => onDelete(lead)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {onDelete && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => onDelete(lead)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

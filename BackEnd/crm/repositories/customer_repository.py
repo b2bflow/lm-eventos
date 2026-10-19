@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from crm.phones import phone_variants
 from crm.models.custumer_model import Customer
 from crm.interfaces.customer_repository_interface import ICustomerRepository
 from database.client.mongodb_client import MongoDBClient
@@ -8,6 +9,19 @@ from mongoengine.queryset.visitor import Q
 
 
 class CustomerRepository(ICustomerRepository):
+    UPDATABLE_FIELDS = frozenset([
+        "name", "phone", "agent", "customer_state_now", "celebration_type", "event_title",
+        "event_date", "guest_count", "quoted_amount", "contract_value", "venue", "notes",
+        "proposal_sent_at", "last_interaction_at", "next_step", "customer_custom_tag", "new_service",
+        # Funil LM
+        "email", "company", "role", "contact_type", "origin", "owner", "human_operator", "product",
+        "qualification", "pending_fields", "attachments", "flags", "needs_erica", "lost_reason",
+        "next_action_at", "qualified_at", "first_contact_at", "stage_changed_at",
+        # Fluxo da IA em producao
+        "blocked_until", "silenced_until", "send_button", "waiting_for_name", "name_collected",
+        "last_message_attendant", "followup_sent",
+    ])
+
     def __init__(self, database_client: MongoDBClient):
         self.db = database_client
 
@@ -52,6 +66,28 @@ class CustomerRepository(ICustomerRepository):
 
             customers = customers.order_by('-updated_at')
             return [customer.to_dict() for customer in customers]
+
+    def page_customers(self, status_filter: str | None = None, search_term: str | None = None,
+                       offset: int = 0, limit: int = 10, custom_tag_filter: str | None = None) -> tuple[list[dict], int]:
+        from crm import domain
+        with self.db.get_connection_context():
+            customers = Customer.objects()
+            if status_filter and status_filter != 'all':
+                legacy = [old for old in domain.LEGACY_STAGES if domain.resolve_legacy_stage(old) == status_filter]
+                customers = customers.filter(customer_state_now__in=[status_filter, *legacy])
+            if custom_tag_filter and custom_tag_filter != 'all':
+                customers = customers.filter(customer_custom_tag=custom_tag_filter)
+            if search_term:
+                customers = customers.filter(
+                    Q(name__icontains=search_term) |
+                    Q(phone__icontains=search_term) |
+                    Q(event_title__icontains=search_term) |
+                    Q(celebration_type__icontains=search_term) |
+                    Q(company__icontains=search_term)
+                )
+            total = customers.count()
+            page = customers.order_by('-updated_at').skip(offset).limit(limit)
+            return [customer.to_dict() for customer in page], total
 
     def find(self, id: str | None = None, phone: str | None = None) -> dict | None:
         with self.db.get_connection_context():
@@ -104,7 +140,8 @@ class CustomerRepository(ICustomerRepository):
         phone: str,
     ) -> bool:
         with self.db.get_connection_context():
-            customer = Customer.objects(phone=phone).first()
+            # Mesmo celular com e sem o nono dígito é o mesmo contato.
+            customer = Customer.objects(phone__in=phone_variants(phone) or [phone]).order_by('created_at').first()
             if not customer:
                 return False
 
@@ -123,21 +160,7 @@ class CustomerRepository(ICustomerRepository):
                 return None
 
             for key, value in attributes.items():
-                if key in [
-                    "name",
-                    "phone",
-                    "agent",
-                    "customer_state_now",
-                    "customer_custom_tag",
-                    "blocked_until",
-                    "silenced_until",
-                    "new_service",
-                    "send_button",
-                    "waiting_for_name",
-                    "name_collected",
-                    "last_message_attendant",
-                    "followup_sent",
-                ]:
+                if key in self.UPDATABLE_FIELDS:
                     setattr(customer, key, value)
 
             customer.updated_at = attributes.get("updated_at", customer.updated_at)
@@ -185,7 +208,8 @@ class CustomerRepository(ICustomerRepository):
 
     def get_by_phone(self, phone: str) -> dict | None:
         with self.db.get_connection_context():
-            customer = Customer.objects(phone=phone).first()
+            # Mesmo celular com e sem o nono dígito é o mesmo contato.
+            customer = Customer.objects(phone__in=phone_variants(phone) or [phone]).order_by('created_at').first()
             return customer.to_dict() if customer else None
 
     def delete_customer(self, customer_id: str) -> bool:

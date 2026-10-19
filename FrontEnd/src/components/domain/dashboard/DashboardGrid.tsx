@@ -133,7 +133,7 @@ export function DashboardGrid({ role }: DashboardGridProps) {
 
           <div className="space-y-4">
             <div className="rounded-xl bg-secondary/40 p-4">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground">Em análise</div>
+              <div className="text-xs uppercase tracking-wider text-muted-foreground">Novos e qualificados</div>
               <div className="mt-2 text-3xl font-bold">{metrics?.analysis_count || 0}</div>
             </div>
             <div className="rounded-xl bg-yellow-500/10 p-4 border border-yellow-500/20">
@@ -141,11 +141,11 @@ export function DashboardGrid({ role }: DashboardGridProps) {
               <div className="mt-2 text-3xl font-bold text-yellow-700">{metrics?.waiting_budget_count || 0}</div>
             </div>
             <div className="rounded-xl bg-amber-500/10 p-4 border border-amber-500/20">
-              <div className="text-xs uppercase tracking-wider text-amber-700">Orçamento Enviado</div>
+              <div className="text-xs uppercase tracking-wider text-amber-700">Proposta enviada</div>
               <div className="mt-2 text-3xl font-bold text-amber-700">{metrics?.budget_count || 0}</div>
             </div>
             <div className="rounded-xl bg-sky-500/10 p-4 border border-sky-500/20">
-              <div className="text-xs uppercase tracking-wider text-sky-700">Negociando</div>
+              <div className="text-xs uppercase tracking-wider text-sky-700">Proposta aceita</div>
               <div className="mt-2 text-3xl font-bold text-sky-700">{metrics?.negotiating_count || 0}</div>
             </div>
             <div className="rounded-xl bg-rose-500/10 p-4 border border-rose-500/20">

@@ -1,0 +1,462 @@
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { ArchiveRestore, CalendarClock, ClipboardCheck, Loader2, Minus, Plus, StickyNote, Trash2 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import api from "@/services/api";
+import { cn } from "@/lib/utils";
+import { formatDateTime, formatDay } from "@/lib/format";
+import { useInventoryItem, type InventoryItemDetail, type InventoryReservation } from "@/hooks/useSales";
+import { BILLING_UNITS, INVENTORY_LINES } from "./constants";
+
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** Fim da reserva é gravado exclusivo (dia seguinte): mostra o último dia de uso. */
+function lastDay(end: string) {
+  const d = new Date(`${end.slice(0, 10)}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return formatDay(d.toISOString());
+}
+
+function errorDetail(error: unknown, fallback: string) {
+  return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || fallback;
+}
+
+function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+type ItemForm = { name: string; line: string; size: string; billing_unit: string; owned: boolean; description: string };
+
+const toForm = (item: InventoryItemDetail): ItemForm => ({
+  name: item.name, line: item.line, size: item.size || "", billing_unit: item.billing_unit, owned: item.owned,
+  description: item.description || "",
+});
+
+function DetailsSection({ item, canEdit, onSaved }: { item: InventoryItemDetail; canEdit: boolean; onSaved: () => void }) {
+  const [form, setForm] = useState<ItemForm>(toForm(item));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setForm(toForm(item)), [item]);
+  const dirty = JSON.stringify(form) !== JSON.stringify(toForm(item));
+
+  const save = async () => {
+    if (!form.name.trim()) return toast.error("Informe o nome.");
+    setSaving(true);
+    try {
+      await api.patch(`/inventory/items/${item.id}/`, { ...form, size: form.size || null, description: form.description || null });
+      toast.success("Item atualizado.");
+      onSaved();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível salvar."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!canEdit) {
+    return (
+      <Section title="Detalhes">
+        <dl className="grid grid-cols-2 gap-2 text-sm">
+          <dt className="text-muted-foreground">Linha</dt><dd>{item.line}</dd>
+          <dt className="text-muted-foreground">Tamanho</dt><dd>{item.size || "-"}</dd>
+          <dt className="text-muted-foreground">Cobrança</dt><dd>{item.billing_unit}</dd>
+          <dt className="text-muted-foreground">Origem</dt><dd>{item.owned ? "próprio" : "terceirizado"}</dd>
+        </dl>
+        {item.description && <p className="text-sm whitespace-pre-wrap rounded-md bg-muted/50 p-3">{item.description}</p>}
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Detalhes">
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label className="text-xs">Nome</Label>
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Linha</Label>
+            <Select value={form.line} onValueChange={(line) => setForm({ ...form, line })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{INVENTORY_LINES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Cobrança por</Label>
+            <Select value={form.billing_unit} onValueChange={(billing_unit) => setForm({ ...form, billing_unit })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{BILLING_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Tamanho</Label>
+            <Input value={form.size} placeholder="ex.: 5 m" onChange={(e) => setForm({ ...form, size: e.target.value })} />
+          </div>
+          <label className="flex items-center gap-2 text-sm pt-5">
+            <Switch checked={!form.owned} onCheckedChange={(v) => setForm({ ...form, owned: !v })} />
+            Terceirizado
+          </label>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Descrição do equipamento</Label>
+          <Textarea rows={3} value={form.description} placeholder="Modelo, especificação, acessórios que acompanham..."
+            onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        </div>
+        {dirty && (
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setForm(toForm(item))}>Descartar</Button>
+            <Button size="sm" onClick={save} disabled={saving}>{saving && <Loader2 className="w-4 h-4 animate-spin" />}Salvar</Button>
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function QuantitySection({ item, canEdit, onSaved }: { item: InventoryItemDetail; canEdit: boolean; onSaved: () => void }) {
+  const [mode, setMode] = useState<"entrada" | "baixa" | "contagem">("entrada");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    const n = Math.trunc(Number(value));
+    if (value === "" || Number.isNaN(n) || n < 0 || (mode !== "contagem" && n === 0)) return toast.error("Informe a quantidade.");
+    if (mode !== "contagem" && !reason.trim()) return toast.error("Informe o motivo.");
+    setSaving(true);
+    try {
+      if (mode === "contagem") {
+        await api.patch(`/inventory/items/${item.id}/`, { qty_total: n });
+        toast.success(`Contagem atualizada para ${n}.`);
+      } else {
+        await api.post(`/inventory/items/${item.id}/adjust/`, { delta: mode === "entrada" ? n : -n, reason });
+        toast.success(mode === "entrada" ? `Entrada de ${n} registrada.` : `Baixa de ${n} registrada.`);
+      }
+      setValue("");
+      setReason("");
+      onSaved();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível salvar."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const MODES = [
+    { key: "entrada", label: "Entrada", icon: Plus },
+    { key: "baixa", label: "Baixa", icon: Minus },
+    { key: "contagem", label: "Recontagem", icon: ClipboardCheck },
+  ] as const;
+
+  return (
+    <Section title="Quantidade">
+      <div className="flex items-baseline gap-2">
+        <span className="text-3xl font-bold tabular-nums">{item.owned ? item.qty_total ?? "?" : "-"}</span>
+        <span className="text-sm text-muted-foreground">
+          {!item.owned ? "terceirizado, sem estoque próprio" : item.qty_total === null ? "ainda não contado" : "peças no total"}
+          {item.owned && item.approximate_count && item.qty_total !== null && " · contagem aproximada"}
+        </span>
+      </div>
+      {canEdit && item.owned && (
+        <div className="rounded-lg border p-3 space-y-3">
+          <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
+            {MODES.map(({ key, label, icon: Icon }) => (
+              <button key={key} type="button" onClick={() => setMode(key)}
+                className={cn("flex items-center justify-center gap-1 rounded px-2 py-1.5 text-xs font-medium transition-colors",
+                  mode === key ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
+                <Icon className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input type="number" min={0} value={value} className={mode === "contagem" ? "flex-1" : "w-24"}
+              placeholder={mode === "contagem" ? "Quantidade contada agora" : "Qtd."}
+              onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+            {mode !== "contagem" && (
+              <Input value={reason} placeholder={mode === "entrada" ? "Motivo (compra, devolução...)" : "Motivo (quebra, venda, perda...)"}
+                onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} />
+            )}
+            <Button size="sm" className="h-10 shrink-0" disabled={saving} onClick={submit}
+              variant={mode === "baixa" ? "destructive" : "default"}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Salvar"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {mode === "contagem" ? "Use depois de contar as peças: substitui o total e marca a contagem como exata."
+              : "Fica registrado nas observações, com quem fez e quando."}
+          </p>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function ObservationsSection({ item, canEdit, myId, onSaved }: {
+  item: InventoryItemDetail; canEdit: boolean; myId?: number; onSaved: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const add = async () => {
+    if (!text.trim()) return;
+    setSaving(true);
+    try {
+      await api.post(`/inventory/items/${item.id}/observations/`, { text });
+      setText("");
+      onSaved();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível salvar a observação."));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async (id: string) => {
+    try {
+      await api.delete(`/inventory/items/${item.id}/observations/${id}/`);
+      onSaved();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível apagar."));
+    }
+  };
+
+  return (
+    <Section title={`Observações (${item.observations.length})`}>
+      <div className="space-y-2">
+        <Textarea rows={2} value={text} placeholder="Estado da peça, manutenção, onde está guardado..."
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) add(); }} />
+        <div className="flex justify-end">
+          <Button size="sm" onClick={add} disabled={saving || !text.trim()}><StickyNote className="w-4 h-4" /> Adicionar observação</Button>
+        </div>
+      </div>
+      {item.observations.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhuma observação ainda.</p>
+      ) : (
+        <ul className="space-y-2">
+          {item.observations.map((o) => (
+            <li key={o.id} className={cn("rounded-lg border p-3 text-sm", o.kind === "ajuste" && "bg-muted/40")}>
+              <div className="flex items-start justify-between gap-2">
+                <p className="whitespace-pre-wrap flex-1">{o.text}</p>
+                {o.kind === "nota" && (canEdit || String(myId) === o.author_id) && (
+                  <button className="text-muted-foreground hover:text-rose-600" title="Apagar" onClick={() => remove(o.id)}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground flex gap-2">
+                {o.kind === "ajuste" && <Badge variant="outline" className="text-[10px]">ajuste</Badge>}
+                <span>{o.author_name || "sistema"} · {formatDateTime(o.created_at)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function ReservationRow({ r, canCancel, onCancel }: { r: InventoryReservation; canCancel: boolean; onCancel: () => void }) {
+  return (
+    <li className="rounded-lg border p-3 text-sm flex items-start justify-between gap-2">
+      <div className="space-y-0.5">
+        <div className="font-medium">{r.qty} · {r.customer_name || "sem cliente"}</div>
+        <div className="text-xs text-muted-foreground">
+          {formatDay(r.start)} a {lastDay(r.end)} · {r.manual ? `manual${r.created_by_name ? ` (${r.created_by_name})` : ""}` : "proposta aceita"}
+          {r.status === "retirado" && " · retirado"}
+        </div>
+        {r.note && <div className="text-xs">{r.note}</div>}
+      </div>
+      {canCancel && r.manual && r.status === "reservado" && (
+        <Button size="sm" variant="ghost" className="text-rose-600" onClick={onCancel}>Cancelar</Button>
+      )}
+    </li>
+  );
+}
+
+function ReservationsSection({ item, canEdit, myId, onSaved }: {
+  item: InventoryItemDetail; canEdit: boolean; myId?: number; onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ qty: "", start: today(), end: today(), client_name: "", note: "" });
+  const [saving, setSaving] = useState(false);
+
+  const create = async () => {
+    setSaving(true);
+    try {
+      await api.post("/inventory/reservations/", { item_id: item.id, ...form, qty: Number(form.qty) });
+      toast.success("Reserva criada.");
+      setForm({ qty: "", start: today(), end: today(), client_name: "", note: "" });
+      setOpen(false);
+      onSaved();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível reservar."));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const cancel = async (id: string) => {
+    try {
+      await api.delete(`/inventory/reservations/${id}/`);
+      toast.success("Reserva cancelada.");
+      onSaved();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível cancelar."));
+    }
+  };
+
+  if (!item.reservations_enabled) {
+    return (
+      <Section title="Reservas">
+        <p className="text-sm text-muted-foreground">A reserva de estoque está desligada. O disponível é o total do item.</p>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title={`Reservas ativas (${item.reservations.length})`}
+      action={item.active && !open && <Button size="sm" variant="outline" onClick={() => setOpen(true)}><CalendarClock className="w-4 h-4" /> Reservar</Button>}>
+      {open && (
+        <div className="rounded-lg border p-3 space-y-2">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Qtd.</Label>
+              <Input type="number" min={1} value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">De</Label>
+              <Input type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value, end: e.target.value > form.end ? e.target.value : form.end })} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Até</Label>
+              <Input type="date" value={form.end} min={form.start} onChange={(e) => setForm({ ...form, end: e.target.value })} />
+            </div>
+          </div>
+          <Input value={form.client_name} placeholder="Para quem (cliente / evento)" onChange={(e) => setForm({ ...form, client_name: e.target.value })} />
+          <Input value={form.note} placeholder="Observação (opcional)" onChange={(e) => setForm({ ...form, note: e.target.value })} />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Fechar</Button>
+            <Button size="sm" onClick={create} disabled={saving}>{saving && <Loader2 className="w-4 h-4 animate-spin" />}Reservar</Button>
+          </div>
+        </div>
+      )}
+      {item.reservations.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhuma reserva em andamento.</p>
+      ) : (
+        <ul className="space-y-2">
+          {item.reservations.map((r) => (
+            <ReservationRow key={r.id} r={r} canCancel={canEdit || String(myId) === r.created_by} onCancel={() => cancel(r.id)} />
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+export function InventoryItemDrawer({ itemId, onClose, canEdit, myId }: {
+  itemId: string | null; onClose: () => void; canEdit: boolean; myId?: number;
+}) {
+  const queryClient = useQueryClient();
+  const { data: item, isLoading } = useInventoryItem(itemId);
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["inventory-item", itemId] });
+    queryClient.invalidateQueries({ queryKey: ["inventory"] });
+  };
+
+  const setActive = async (active: boolean) => {
+    if (!item) return;
+    if (!active && !window.confirm(`Remover "${item.name}" do estoque? O histórico fica guardado e dá para restaurar.`)) return;
+    try {
+      if (active) await api.patch(`/inventory/items/${item.id}/`, { active: true });
+      else await api.delete(`/inventory/items/${item.id}/`);
+      toast.success(active ? "Item restaurado." : "Item removido do estoque.");
+      refresh();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível alterar o item."));
+    }
+  };
+  const deleteForever = async () => {
+    if (!item || !window.confirm(`Apagar "${item.name}" de vez? Não dá para desfazer.`)) return;
+    try {
+      await api.delete(`/inventory/items/${item.id}/`, { params: { permanent: 1 } });
+      toast.success("Item apagado.");
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      onClose();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível apagar."));
+    }
+  };
+
+  return (
+    <Sheet open={!!itemId} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto" onOpenAutoFocus={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); }}>
+        {isLoading || !item ? (
+          <div className="flex justify-center py-10">
+            <SheetTitle className="sr-only">Carregando item</SheetTitle>
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <SheetHeader className="text-left space-y-1">
+              <SheetTitle>{item.name}</SheetTitle>
+              <div className="flex flex-wrap gap-1 text-xs text-muted-foreground items-center">
+                <code>{item.code}</code>
+                {!item.active && <Badge variant="destructive" className="text-[10px]">removido</Badge>}
+                {!item.owned && <Badge variant="outline" className="text-[10px]">terceirizado</Badge>}
+              </div>
+            </SheetHeader>
+
+            <QuantitySection item={item} canEdit={canEdit} onSaved={refresh} />
+            <DetailsSection item={item} canEdit={canEdit} onSaved={refresh} />
+            <ObservationsSection item={item} canEdit={canEdit} myId={myId} onSaved={refresh} />
+            <ReservationsSection item={item} canEdit={canEdit} myId={myId} onSaved={refresh} />
+
+            {item.movements.length > 0 && (
+              <Section title="Últimas movimentações">
+                <ul className="text-sm divide-y">
+                  {item.movements.map((m) => (
+                    <li key={m.id} className="py-1.5 flex justify-between gap-2">
+                      <span>{m.type === "saida" ? "Saída" : "Retorno"} de {m.qty}{m.customer_name ? ` · ${m.customer_name}` : ""}</span>
+                      <span className="text-xs text-muted-foreground">{formatDateTime(m.date)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+
+            {canEdit && (
+              <div className="border-t pt-4 flex flex-wrap gap-2 justify-end">
+                {item.active ? (
+                  <Button size="sm" variant="outline" className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950" onClick={() => setActive(false)}>
+                    <Trash2 className="w-4 h-4" /> Remover do estoque
+                  </Button>
+                ) : (
+                  <>
+                    <Button size="sm" variant="ghost" className="text-rose-600" onClick={deleteForever}>Apagar de vez</Button>
+                    <Button size="sm" onClick={() => setActive(true)}><ArchiveRestore className="w-4 h-4" /> Restaurar</Button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}

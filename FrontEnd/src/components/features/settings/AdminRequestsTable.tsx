@@ -1,3 +1,4 @@
+import type { ApiError } from "@/services/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,7 @@ export function AdminRequestsTable() {
       queryClient.invalidateQueries({ queryKey: ["admin-name-requests"] });
       queryClient.invalidateQueries({ queryKey: ["team-users"] }); // Atualiza nomes na tabela principal
     },
-    onError: (error: any) => toast.error(error.response?.data?.detail || "Erro ao processar a solicitação.")
+    onError: (error: ApiError) => toast.error(error.response?.data?.detail || "Erro ao processar a solicitação.")
   });
 
   if (isLoading) return <div className="p-8 flex justify-center"><Loader2 className="animate-spin w-6 h-6 text-primary" /></div>;
