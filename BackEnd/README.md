@@ -72,7 +72,8 @@ Mongo em memória, Redis falso, Z-API e IA desligadas (envios só no log). Login
    (os tokens antigos deixam de valer); quem estiver logado só precisa entrar de novo.
 2. `pip install -r requirements.txt` (entrou a biblioteca do Google Agenda e as dependências
    subiram de versão na revisão de 19/10).
-3. `python manage.py migrate`: campo `role` do usuário e as tabelas do `token_blacklist`
+3. `SQLITE_PATH` num volume persistente (ex.: `/data/db.sqlite3`): os usuários do painel ficam
+   nesse SQLite; sem volume, somem a cada deploy. Depois, `python manage.py migrate`: campo `role` do usuário e as tabelas do `token_blacklist`
    (logout revoga o refresh token e cada renovação invalida o anterior). Sem essa migração o
    login e a renovação da sessão dão erro 500.
 4. `python manage.py migrate_lm_stages --dry-run` e depois sem `--dry-run`.

@@ -63,7 +63,9 @@ MIDDLEWARE = [
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        # Em produção aponte SQLITE_PATH para um volume (ex.: /data/db.sqlite3): sem isso os
+        # usuários do painel somem a cada deploy.
+        'NAME': os.getenv('SQLITE_PATH') or BASE_DIR / 'db.sqlite3',
     }
 }
 
