@@ -40,10 +40,11 @@ def test_webhook_accepts_token_in_query_or_header(published):
 
 
 @pytest.mark.django_db
-def test_webhook_rejects_everything_when_no_token_configured(published, monkeypatch):
+def test_webhook_is_open_when_no_token_configured(published, monkeypatch):
     monkeypatch.setenv("ZAPI_WEBHOOK_TOKEN", "")
     client = APIClient()
-    assert client.post(URL + "?token=", text_payload(), format="json").status_code == 401
+    assert client.post(URL, text_payload(), format="json").status_code == 200
+    assert client.post(URL + "?token=qualquer", text_payload(text="outra"), format="json").status_code == 200
 
 
 @pytest.mark.django_db

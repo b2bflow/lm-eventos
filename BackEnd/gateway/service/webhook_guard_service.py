@@ -8,11 +8,12 @@ from utils.logger import logger
 
 
 class WebhookGuardService:
-    """Proteções do webhook da Z-API: token obrigatório e descarte de mensagens repetidas.
+    """Proteções do webhook da Z-API: token opcional e descarte de mensagens repetidas.
 
-    Token: comparado com ZAPI_WEBHOOK_TOKEN (ou, se vazio, com SystemConfig.webhook_token).
-    Aceito no cabeçalho X-Webhook-Token ou na querystring ?token= (a Z-API só permite configurar URL).
-    Sem token configurado, todo webhook é recusado.
+    Token: só é exigido quando ZAPI_WEBHOOK_TOKEN está preenchido. Aceito no cabeçalho
+    X-Webhook-Token ou na querystring ?token=. Vazio = webhook aberto, como antes (decisão de
+    19/10: a URL da Z-API continua sem token). O token salvo em Configurações (SystemConfig) não
+    é usado aqui, para um valor antigo não derrubar o webhook.
 
     Repetição: mesmo número + mesmo texto em até WEBHOOK_DEDUP_SECONDS (padrão 120 s) é ignorado
     (clique repetido em anúncio). Reentrega da Z-API com o mesmo messageId também é ignorada.
@@ -33,21 +34,12 @@ class WebhookGuardService:
         return self._redis
 
     def expected_token(self) -> str:
-        token = os.getenv("ZAPI_WEBHOOK_TOKEN", "").strip()
-        if token:
-            return token
-        try:
-            from chat.repositories.system_config_repository import SystemConfigRepository
-            return (SystemConfigRepository.get_config().webhook_token or "").strip()
-        except Exception as e:
-            logger.error(f"[WebhookGuard] Falha ao ler token do SystemConfig: {e}")
-            return ""
+        return os.getenv("ZAPI_WEBHOOK_TOKEN", "").strip()
 
     def is_authorized(self, request) -> bool:
         expected = self.expected_token()
         if not expected:
-            logger.error("[WebhookGuard] Nenhum token de webhook configurado (ZAPI_WEBHOOK_TOKEN). Requisição recusada.")
-            return False
+            return True
         received = request.META.get(self.HEADER) or request.query_params.get("token") or ""
         # Em bytes: compare_digest com str não ASCII levanta TypeError (500 em vez de 401).
         return hmac.compare_digest(str(received).encode("utf-8"), expected.encode("utf-8"))

@@ -31,10 +31,10 @@ Em produção, o beat deve rodar em **uma única** instância para não duplicar
 
 ## Webhook da Z-API
 
-`POST /api/v1/gateway/webhook/zapi/?token=<ZAPI_WEBHOOK_TOKEN>`
+`POST /api/v1/gateway/webhook/zapi/`
 
-- Sem token configurado (`ZAPI_WEBHOOK_TOKEN` ou Configurações > Sistema > token do webhook),
-  todo webhook é recusado com 401. Na Z-API, cadastre a URL já com `?token=`.
+- Token opcional: com `ZAPI_WEBHOOK_TOKEN` preenchido, só aceita `?token=<valor>` (ou o cabeçalho
+  `X-Webhook-Token`); vazio, aceita como antes. Em produção fica vazio (a URL da Z-API não leva token).
 - Mesmo número + mesmo texto em até `WEBHOOK_DEDUP_SECONDS` (120 s) é ignorado; reentrega
   com o mesmo `messageId` também.
 
@@ -64,7 +64,7 @@ Mongo em memória, Redis falso, Z-API e IA desligadas (envios só no log). Login
 
 ## Implantação do processo com SDR (ordem)
 
-1. Variáveis novas no `.env` (ver `.env.example`): `ZAPI_WEBHOOK_TOKEN`, `FRONTEND_URL`,
+1. Variáveis novas no `.env` (ver `.env.example`): `FRONTEND_URL`,
    `GOOGLE_OAUTH_CLIENT_FILE` (caminho **fora** do repositório), `GOOGLE_OAUTH_REDIRECT_URI`
    ou `GOOGLE_REFRESH_TOKEN`. `JWT_SECRET_KEY` (ou `DJANGO_SECRET_KEY`, usada quando a primeira
    está vazia) com **32 bytes ou mais**, senão o PyJWT avisa a cada token. Gere com
@@ -78,8 +78,7 @@ Mongo em memória, Redis falso, Z-API e IA desligadas (envios só no log). Login
    login e a renovação da sessão dão erro 500.
 4. `python manage.py migrate_lm_stages --dry-run` e depois sem `--dry-run`.
 5. `python manage.py seed_inventory` (contagem de 22/01/2025, aproximada).
-6. Na Z-API, trocar a URL do webhook para `.../api/v1/gateway/webhook/zapi/?token=<ZAPI_WEBHOOK_TOKEN>`.
-   **Sem isso o webhook passa a responder 401.**
+6. Z-API: a URL do webhook continua a mesma (sem `ZAPI_WEBHOOK_TOKEN` o webhook não exige token).
 7. Subir o Celery **beat** (além do worker). Tarefas: lead parado (de hora em hora),
    cadência da SDR (30 min: follow-up D+1/D+3/D+5 da proposta, Perdido "sem resposta" em
    D+7 com reativação em 30 dias, reunião amanhã), propostas vencidas, sincronização do
