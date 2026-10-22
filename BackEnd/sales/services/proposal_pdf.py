@@ -3,7 +3,14 @@
 Páginas: capa (nome do cliente e data), missão, referências, página do evento (itens por bloco,
 incluso e não incluso, pagamento, validade e cancelamento; continua em mais páginas se precisar)
 e contato. Missão, referências e contato são as páginas do modelo atual, guardadas como imagem em
-`sales/pdf_assets/`; para trocar, substitua os arquivos mantendo os nomes.
+`sales/pdf_assets/`; para trocar, substitua os arquivos mantendo os nomes. Capa e página do evento usam
+`fundo_capa.jpg` e `fundo_preco.jpg` (luz quente da referência do Canva). As fotos de referências mudam
+com o tipo de proposta (`referencias_<tipo>.jpg`, ver REFERENCE_ASSETS); sem o arquivo do tipo, vale
+`referencias.jpg`.
+
+Valores dos itens: só aparecem com `inputs.show_item_prices` (desligado por padrão). Ligado, cada item
+sai com quantidade, preço unitário e subtotal (o preço editado na proposta, se houver), e o quadro
+de valores mostra itens, serviços, nota e ajustes antes do total.
 
 `build_pdf_context` é pura (testável sem banco) e `render_pdf` desenha com ReportLab, que não
 depende de bibliotecas nativas (WeasyPrint exigiria GTK/Pango na imagem de deploy).
@@ -37,6 +44,21 @@ MODE_TITLES = {
     "social": "Evento social",
     "produto_unico": "Locação de equipamento",
 }
+
+# Fotos da página de referências por modo da proposta
+REFERENCE_ASSETS = {
+    "corporativo": "referencias_corporativo.jpg",
+    "social": "referencias_social.jpg",
+    "porta": "referencias_estrutura.jpg",
+    "produto_unico": "referencias_produto.jpg",
+}
+
+
+def asset(name: str, fallback: str) -> str:
+    """Caminho do asset, ou do fallback quando o arquivo ainda não foi colocado em pdf_assets/."""
+    path = ASSETS / name
+    return str(path if path.exists() else ASSETS / fallback)
+
 
 BLOCK_ORDER = OrderedDict([
     ("estrutura", "Estrutura"),
@@ -117,18 +139,37 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
     codes = {line.get("code") for line in lines}
     cost_codes = {c.get("code") for c in costs}
 
+    show_prices = bool(inputs.get("show_item_prices"))
+    periods = int(proposal.get("periods") or 1)
+
     # Itens por bloco; peças de um kit (gol, grid) aparecem como a estrutura montada
     blocks: "OrderedDict[str, OrderedDict]" = OrderedDict((key, OrderedDict()) for key in BLOCK_ORDER)
     for line in lines:
         block = line.get("block") if line.get("block") in blocks else "outros"
+        subtotal = float(line.get("subtotal") or 0)
         if line.get("kit"):
-            blocks[block].setdefault(f"kit:{line['kit']}", {"qty": 1, "unit": "unidade", "name": line["kit"]})
+            kit = blocks[block].setdefault(f"kit:{line['kit']}", {"qty": 1, "unit": "unidade", "name": line["kit"],
+                                                                  "subtotal": 0.0, "unit_price": None})
+            kit["subtotal"] += subtotal
             continue
         key = line.get("code")
-        entry = blocks[block].setdefault(key, {"qty": 0, "unit": line.get("unit") or "unidade", "name": line.get("name")})
+        entry = blocks[block].setdefault(key, {"qty": 0, "unit": line.get("unit") or "unidade", "name": line.get("name"),
+                                               "subtotal": 0.0, "unit_price": line.get("unit_price")})
         entry["qty"] += float(line.get("qty") or 0)
+        entry["subtotal"] += subtotal
+
+    def item_text(v: dict) -> str:
+        text = f"{_qty(v['qty'], v['unit'])} {v['name']}"
+        if not show_prices:
+            return text
+        unit_price = v["unit_price"] if v["unit_price"] is not None else v["subtotal"]
+        if float(v["qty"]) == 1 and periods == 1:
+            return f"{text}: {format_brl(v['subtotal'])}"
+        weeks = f" x {periods} semanas" if periods > 1 else ""
+        return f"{text}: {format_brl(unit_price)} cada{weeks} = {format_brl(v['subtotal'])}"
+
     block_list = [
-        {"title": BLOCK_ORDER[key], "items": [f"{_qty(v['qty'], v['unit'])} {v['name']}" for v in items.values()]}
+        {"title": BLOCK_ORDER[key], "items": [item_text(v) for v in items.values()]}
         for key, items in blocks.items() if items
     ]
 
@@ -195,6 +236,22 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         if inputs.get("guests"):
             header.append(f"Público: {int(inputs['guests'])} pessoas")
 
+    price_summary = []
+    if show_prices:
+        price_summary.append(f"Itens: {format_brl(proposal.get('items_total') or 0)}")
+        if proposal.get("costs_total"):
+            price_summary.append(f"Serviços e operação: {format_brl(proposal['costs_total'])}")
+        margin_value = (proposal.get("items_total") or 0) + (proposal.get("costs_total") or 0)
+        if proposal.get("margin_pct"):
+            price_summary.append(f"Margem: {format_brl(margin_value * proposal['margin_pct'])}")
+        if proposal.get("invoice_value"):
+            price_summary.append(f"Nota fiscal: {format_brl(proposal['invoice_value'])}")
+        if proposal.get("discount"):
+            price_summary.append(f"Desconto: -{format_brl(proposal['discount'])}")
+        if proposal.get("manual_adjustment"):
+            adjustment = proposal["manual_adjustment"]
+            price_summary.append(f"Ajuste: {'-' if adjustment < 0 else '+'}{format_brl(abs(adjustment))}")
+
     validity_days = int(settings.get("proposal_validity_days") or 5)
     payment = [settings.get("payment_terms_text") or "Forma de pagamento a combinar.",
                settings.get("down_payment_text") or "Sinal a combinar."]
@@ -204,12 +261,14 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         "issued_at": _long_day(issued_at),
         "version": proposal.get("version") or 1,
         "title": MODE_TITLES.get(mode, "Proposta"),
+        "mode": mode,
         "header": header,
         "blocks": block_list,
         "included": included,
         "not_included": not_included,
         "payment": [p for p in payment if p],
         "total": format_brl(proposal.get("total")),
+        "price_summary": price_summary,
         "invoice_note": None if proposal.get("with_invoice") or mode not in ("corporativo", "social")
         else "Valor sem nota fiscal.",
         "validity": _validity_text(validity_days, valid_until),
@@ -243,6 +302,7 @@ class PaymentBox(Flowable):
         self.box_width = width
         self.parts = (
             [Paragraph(escape(p), STYLES["pill"]) for p in context["payment"]],
+            [Paragraph(escape(t), STYLES["item"]) for t in context.get("price_summary") or []],
             Paragraph(f"VALOR TOTAL: {escape(context['total'])}", STYLES["total"]),
             [Paragraph(escape(t), STYLES["small"]) for t in
              filter(None, [context.get("invoice_note"), context["validity"], context["cancellation"]])],
@@ -250,16 +310,17 @@ class PaymentBox(Flowable):
 
     def wrap(self, avail_width, avail_height):
         inner = self.box_width - 36
-        pills, total, notes = self.parts
+        pills, summary, total, notes = self.parts
         self._pill_h = sum(p.wrap(inner - 24, 1000)[1] for p in pills) + 16
+        self._summary_h = sum(p.wrap(inner, 1000)[1] for p in summary) + (6 if summary else 0)
         self._total_h = total.wrap(inner, 1000)[1]
         self._notes_h = sum(p.wrap(inner, 1000)[1] + 3 for p in notes)
-        self.height = 16 + self._pill_h + 10 + self._total_h + 8 + self._notes_h + 14
+        self.height = 16 + self._pill_h + 10 + self._summary_h + self._total_h + 8 + self._notes_h + 14
         return self.box_width, self.height
 
     def draw(self):
         c = self.canv
-        pills, total, notes = self.parts
+        pills, summary, total, notes = self.parts
         c.setStrokeColor(COPPER)
         c.setLineWidth(1.2)
         c.roundRect(0, 0, self.box_width, self.height, 18, stroke=1, fill=0)
@@ -273,6 +334,12 @@ class PaymentBox(Flowable):
             p.drawOn(c, 30, py - h)
             py -= h
         y -= self._pill_h + 10
+        for p in summary:
+            _, h = p.wrap(self.box_width - 36, 1000)
+            p.drawOn(c, 18, y - h)
+            y -= h
+        if summary:
+            y -= 6
         _, h = total.wrap(self.box_width - 36, 1000)
         total.drawOn(c, 18, y - h)
         y -= h + 8
@@ -282,16 +349,16 @@ class PaymentBox(Flowable):
             y -= h + 3
 
 
-def _draw_image_page(name):
+def _draw_image_page(name, fallback: str | None = None):
     def draw(canvas, doc):
-        canvas.drawImage(str(ASSETS / name), 0, 0, width=PAGE[0], height=PAGE[1])
+        canvas.drawImage(asset(name, fallback or name), 0, 0, width=PAGE[0], height=PAGE[1])
     return draw
 
 
 def _draw_cover(context):
     def draw(canvas, doc):
         w, h = PAGE
-        canvas.drawImage(str(ASSETS / "fundo.jpg"), 0, 0, width=w, height=h)
+        canvas.drawImage(asset("fundo_capa.jpg", "fundo.jpg"), 0, 0, width=w, height=h)
         canvas.setFillColor(COPPER)
         canvas.setFont("Helvetica", 54)
         canvas.drawCentredString(w / 2, h - 230, "PROPOSTA")
@@ -321,7 +388,7 @@ FRAME = (36, 50, PAGE[0] - 72, PAGE[1] - 230)  # x, y, largura, altura do conte�
 def _draw_content(context):
     def draw(canvas, doc):
         w, h = PAGE
-        canvas.drawImage(str(ASSETS / "fundo.jpg"), 0, 0, width=w, height=h)
+        canvas.drawImage(asset("fundo_preco.jpg", "fundo.jpg"), 0, 0, width=w, height=h)
         x, y, fw, fh = FRAME
         canvas.setStrokeColor(COPPER)
         canvas.setLineWidth(1.4)
@@ -353,7 +420,8 @@ def render_pdf(context: dict, compress: bool = True) -> bytes:
     doc.addPageTemplates([
         PageTemplate(id="capa", frames=[full], onPage=_draw_cover(context)),
         PageTemplate(id="missao", frames=[full], onPage=_draw_image_page("missao.jpg")),
-        PageTemplate(id="referencias", frames=[full], onPage=_draw_image_page("referencias.jpg")),
+        PageTemplate(id="referencias", frames=[full], onPage=_draw_image_page(
+            REFERENCE_ASSETS.get(context.get("mode"), "referencias.jpg"), "referencias.jpg")),
         PageTemplate(id="evento", frames=[content], onPage=_draw_content(context)),
         PageTemplate(id="contato", frames=[full], onPage=_draw_image_page("contato.jpg")),
     ])

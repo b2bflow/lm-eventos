@@ -308,3 +308,45 @@ def test_single_product_stock_long_rental_and_missing_price_lock():
 def test_single_product_floor_alone_warns_minimum():
     result = calculate_produto_unico(SingleProductInput(items=[{"code": "luz_piso_microlampadas", "qty": 9}]), TABLE)
     assert any("mínimo" in w for w in result.warnings)
+
+
+# --- Serviços opcionais (Som, Palco e vídeo, Iluminação) -------------------------------------
+
+ALL_SECTIONS = dict(stage_m2=10, backdrop=1, pass_cable_m=5, led_m2=4, tp=1, extra_mics=2,
+                    lights={"luz_par_led": 4}, margin=0, with_invoice=False)
+
+
+def test_corporate_sections_off_add_nothing():
+    off = dict(sound_enabled=False, stage_video_enabled=False, lighting_enabled=False)
+    result = calculate_corporativo(CorporateInput(guests=100, digital_mixer=1, **ALL_SECTIONS, **off), TABLE)
+    assert result.lines == []
+    assert result.total == Decimal("0.00")
+
+
+def test_corporate_only_lighting():
+    result = calculate_corporativo(CorporateInput(guests=100, sound_enabled=False, stage_video_enabled=False,
+                                                  **ALL_SECTIONS), TABLE)
+    assert set(codes(result)) == {"luz_par_led"}
+
+
+def test_corporate_sound_on_brings_system_mics_and_mixer():
+    result = calculate_corporativo(CorporateInput(guests=100, digital_mixer=1, stage_video_enabled=False,
+                                                  lighting_enabled=False, **ALL_SECTIONS), TABLE)
+    assert set(codes(result)) == {"som_ate_150", "som_mic_sem_fio", "som_mesa_digital"}
+
+
+def test_sections_default_on_for_old_proposals():
+    result = calculate_corporativo(CorporateInput(guests=100, **ALL_SECTIONS), TABLE)
+    assert {"som_ate_150", "palco_forrado", "palco_backdrop", "video_tp", "luz_par_led"} <= set(codes(result))
+
+
+def test_visit_lock_applies_without_sound():
+    result = calculate_corporativo(CorporateInput(guests=1600, sound_enabled=False, lights={"luz_par_led": 1}), TABLE)
+    assert "publico_acima_limite" in lock_codes(result)
+    assert result.requires_technical_visit
+
+
+def test_social_sound_off_skips_ceremony_and_system():
+    result = calculate_social(SocialInput(guests=100, ceremony_sound=True, sound_enabled=False, led_m2=4,
+                                          margin=0, with_invoice=False), TABLE)
+    assert set(codes(result)) == {"video_led_social"}

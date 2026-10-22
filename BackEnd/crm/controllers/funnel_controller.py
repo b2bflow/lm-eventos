@@ -51,6 +51,38 @@ class FunnelBoardController(APIView):
             return Response({"detail": "Erro interno do servidor."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class FunnelListController(APIView):
+    """GET /crm/funnel/list/: o funil em lista (mesmos filtros do quadro), paginado.
+
+    Query: os filtros do quadro + stage (opcional), offset e limit (padrão 50, máx. 200).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        params = request.query_params
+        try:
+            stage = params.get('stage') or None
+            if stage and stage not in domain.STAGES:
+                return Response({"detail": "Etapa inválida."}, status=status.HTTP_400_BAD_REQUEST)
+            data = CrmContainer.get_pipeline_service().lead_list(
+                offset=int(params.get('offset', 0) or 0),
+                limit=min(max(int(params.get('limit', 50)), 1), 200),
+                stage=stage,
+                product=params.get('product') or None,
+                owner=params.get('owner') or None,
+                flag=params.get('flag') or None,
+                search=params.get('search') or None,
+                include_human=_bool(params.get('include_human')),
+                ai_qualified=_bool(params.get('ai_qualified')),
+            )
+            return Response(data)
+        except ValueError as ve:
+            return Response({"detail": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"[FunnelList] Erro ao listar o funil: {e}")
+            return Response({"detail": "Erro interno do servidor."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class FunnelMetaController(APIView):
     """GET /crm/meta/: listas de valores do card (etapas, produtos, flags...) para o frontend."""
     permission_classes = [IsAuthenticated]

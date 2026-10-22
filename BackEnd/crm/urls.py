@@ -8,7 +8,7 @@ from crm.controllers.contact_controller import (
     ContactTimelineController,
 )
 from crm.controllers.funnel_controller import (
-    FunnelBoardController, FunnelMetaController, LmSettingsController, SdrTaskController,
+    FunnelBoardController, FunnelListController, FunnelMetaController, LmSettingsController, SdrTaskController,
 )
 
 router = DefaultRouter()
@@ -19,6 +19,7 @@ router.register(r'cotacoes', QuoteController, basename='quote_alias')
 
 urlpatterns = [
     path('funnel/', FunnelBoardController.as_view(), name='funnel-board'),
+    path('funnel/list/', FunnelListController.as_view(), name='funnel-list'),
     path('meta/', FunnelMetaController.as_view(), name='funnel-meta'),
     path('tasks/', SdrTaskController.as_view(), name='sdr-tasks'),
     path('tasks/<str:task_id>/done/', SdrTaskController.as_view(), name='sdr-task-done'),

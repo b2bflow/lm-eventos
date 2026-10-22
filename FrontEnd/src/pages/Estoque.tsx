@@ -31,7 +31,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const normalize = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 const matches = (row: InventoryRow, terms: string[]) => {
-  const haystack = normalize(`${row.name} ${row.code} ${row.size ?? ""} ${row.line}`);
+  const haystack = normalize(`${row.name} ${row.code} ${row.line}`);
   return terms.every((t) => haystack.includes(t));
 };
 
@@ -110,7 +110,6 @@ function ItemName({ row, wrap = false }: { row: InventoryRow; wrap?: boolean }) 
           </span>
         )}
       </div>
-      {row.description && <div className="text-xs text-muted-foreground truncate">{row.description}</div>}
       <Flags row={row} />
     </div>
   );

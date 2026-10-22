@@ -5,7 +5,7 @@ from bson import ObjectId
 from crm.models.custumer_model import Customer
 from crm.models.lm_settings_model import LmSettings
 from crm.models.log_service_model import ServiceLog
-from crm.models.sdr_task_model import CADENCE_TASKS, TASK_TYPES, SdrTask
+from crm.models.sdr_task_model import CADENCE_TASKS, MANUAL_TASK_TYPES, TASK_TYPES, SdrTask
 from crm.repositories.log_service_repository import ServiceLogRepository
 from crm import domain
 from crm.services.business_hours import business_slot, first_call_due, to_local, to_utc_naive
@@ -35,6 +35,22 @@ class SdrTaskService:
             description=f"Tarefa criada: {TASK_TYPES[task_type]}.",
             metadata={"task_id": str(task.id), "type": task_type, "due_at": due_at.isoformat()},
         )
+        return task
+
+    def create_activity(self, customer_id: str, task_type: str, title: str, due_at: datetime | None,
+                        user=None) -> SdrTask:
+        """Atividade criada à mão na página do lead (ligação, reunião, tarefa...). Entra na fila da SDR."""
+        if task_type not in MANUAL_TASK_TYPES:
+            raise ValueError("Tipo de atividade inválido.")
+        title = (title or "").strip()
+        if not title:
+            raise ValueError("Informe o título da atividade.")
+        if not due_at:
+            raise ValueError("Informe a data da atividade.")
+        task = self.create_task(customer_id, task_type, due_at, unique_pending=False,
+                                metadata={"title": title[:200], "created_by": str(user.id) if getattr(user, 'id', None) else None})
+        if task is None:
+            raise ValueError("Contato não encontrado ou fora da fila da SDR.")
         return task
 
     def complete(self, task_id: str, user=None) -> SdrTask:

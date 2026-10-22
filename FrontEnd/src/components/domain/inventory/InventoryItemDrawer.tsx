@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArchiveRestore, CalendarClock, ClipboardCheck, Loader2, Minus, Plus, StickyNote, Trash2 } from "lucide-react";
+import { ArchiveRestore, CalendarClock, ClipboardCheck, Loader2, Minus, Plus, Trash2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import api from "@/services/api";
 import { cn } from "@/lib/utils";
@@ -42,11 +41,11 @@ function Section({ title, children, action }: { title: string; children: React.R
   );
 }
 
-type ItemForm = { name: string; line: string; size: string; billing_unit: string; owned: boolean; description: string };
+// Tamanho e descrição saíram da tela (o nome já diz o tamanho); continuam gravados no item.
+type ItemForm = { name: string; line: string; billing_unit: string; owned: boolean };
 
 const toForm = (item: InventoryItemDetail): ItemForm => ({
-  name: item.name, line: item.line, size: item.size || "", billing_unit: item.billing_unit, owned: item.owned,
-  description: item.description || "",
+  name: item.name, line: item.line, billing_unit: item.billing_unit, owned: item.owned,
 });
 
 function DetailsSection({ item, canEdit, onSaved }: { item: InventoryItemDetail; canEdit: boolean; onSaved: () => void }) {
@@ -59,7 +58,7 @@ function DetailsSection({ item, canEdit, onSaved }: { item: InventoryItemDetail;
     if (!form.name.trim()) return toast.error("Informe o nome.");
     setSaving(true);
     try {
-      await api.patch(`/inventory/items/${item.id}/`, { ...form, size: form.size || null, description: form.description || null });
+      await api.patch(`/inventory/items/${item.id}/`, form);
       toast.success("Item atualizado.");
       onSaved();
     } catch (e) {
@@ -74,11 +73,9 @@ function DetailsSection({ item, canEdit, onSaved }: { item: InventoryItemDetail;
       <Section title="Detalhes">
         <dl className="grid grid-cols-2 gap-2 text-sm">
           <dt className="text-muted-foreground">Linha</dt><dd>{item.line}</dd>
-          <dt className="text-muted-foreground">Tamanho</dt><dd>{item.size || "-"}</dd>
           <dt className="text-muted-foreground">Cobrança</dt><dd>{item.billing_unit}</dd>
           <dt className="text-muted-foreground">Origem</dt><dd>{item.owned ? "próprio" : "terceirizado"}</dd>
         </dl>
-        {item.description && <p className="text-sm whitespace-pre-wrap rounded-md bg-muted/50 p-3">{item.description}</p>}
       </Section>
     );
   }
@@ -105,19 +102,10 @@ function DetailsSection({ item, canEdit, onSaved }: { item: InventoryItemDetail;
               <SelectContent>{BILLING_UNITS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Tamanho</Label>
-            <Input value={form.size} placeholder="ex.: 5 m" onChange={(e) => setForm({ ...form, size: e.target.value })} />
-          </div>
           <label className="flex items-center gap-2 text-sm pt-5">
             <Switch checked={!form.owned} onCheckedChange={(v) => setForm({ ...form, owned: !v })} />
             Terceirizado
           </label>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Descrição do equipamento</Label>
-          <Textarea rows={3} value={form.description} placeholder="Modelo, especificação, acessórios que acompanham..."
-            onChange={(e) => setForm({ ...form, description: e.target.value })} />
         </div>
         {dirty && (
           <div className="flex justify-end gap-2">
@@ -266,7 +254,7 @@ function QuantitySection({ item, canEdit, onSaved }: { item: InventoryItemDetail
           </div>
           <p className="text-xs text-muted-foreground">
             {mode === "contagem" ? "Use depois de contar as peças: substitui o total e marca a contagem como exata."
-              : "Fica registrado nas observações, com quem fez e quando."}
+              : "Fica registrado nos ajustes de quantidade, com quem fez e quando."}
           </p>
         </div>
       )}
@@ -274,66 +262,21 @@ function QuantitySection({ item, canEdit, onSaved }: { item: InventoryItemDetail
   );
 }
 
-function ObservationsSection({ item, canEdit, myId, onSaved }: {
-  item: InventoryItemDetail; canEdit: boolean; myId?: number; onSaved: () => void;
-}) {
-  const [text, setText] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const add = async () => {
-    if (!text.trim()) return;
-    setSaving(true);
-    try {
-      await api.post(`/inventory/items/${item.id}/observations/`, { text });
-      setText("");
-      onSaved();
-    } catch (e) {
-      toast.error(errorDetail(e, "Não foi possível salvar a observação."));
-    } finally {
-      setSaving(false);
-    }
-  };
-  const remove = async (id: string) => {
-    try {
-      await api.delete(`/inventory/items/${item.id}/observations/${id}/`);
-      onSaved();
-    } catch (e) {
-      toast.error(errorDetail(e, "Não foi possível apagar."));
-    }
-  };
-
+/** Histórico dos ajustes de quantidade (Entrada / Baixa / Recontagem). As notas livres saíram da tela,
+ * mas continuam gravadas. */
+function AdjustmentsSection({ item }: { item: InventoryItemDetail }) {
+  const adjustments = item.observations.filter((o) => o.kind === "ajuste");
+  if (adjustments.length === 0) return null;
   return (
-    <Section title={`Observações (${item.observations.length})`}>
-      <div className="space-y-2">
-        <Textarea rows={2} value={text} placeholder="Estado da peça, manutenção, onde está guardado..."
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) add(); }} />
-        <div className="flex justify-end">
-          <Button size="sm" onClick={add} disabled={saving || !text.trim()}><StickyNote className="w-4 h-4" /> Adicionar observação</Button>
-        </div>
-      </div>
-      {item.observations.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhuma observação ainda.</p>
-      ) : (
-        <ul className="space-y-2">
-          {item.observations.map((o) => (
-            <li key={o.id} className={cn("rounded-lg border p-3 text-sm", o.kind === "ajuste" && "bg-muted/40")}>
-              <div className="flex items-start justify-between gap-2">
-                <p className="whitespace-pre-wrap flex-1">{o.text}</p>
-                {o.kind === "nota" && (canEdit || String(myId) === o.author_id) && (
-                  <button className="text-muted-foreground hover:text-rose-600" title="Apagar" onClick={() => remove(o.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground flex gap-2">
-                {o.kind === "ajuste" && <Badge variant="outline" className="text-[10px]">ajuste</Badge>}
-                <span>{o.author_name || "sistema"} · {formatDateTime(o.created_at)}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+    <Section title={`Ajustes de quantidade (${adjustments.length})`}>
+      <ul className="space-y-2">
+        {adjustments.map((o) => (
+          <li key={o.id} className="rounded-lg border p-3 text-sm bg-muted/40">
+            <p className="whitespace-pre-wrap">{o.text}</p>
+            <div className="mt-1 text-xs text-muted-foreground">{o.author_name || "sistema"} · {formatDateTime(o.created_at)}</div>
+          </li>
+        ))}
+      </ul>
     </Section>
   );
 }
@@ -492,8 +435,8 @@ export function InventoryItemDrawer({ itemId, onClose, canEdit, canEditPrice = f
             <PriceSection item={item} canEdit={canEditPrice} onSaved={refresh} />
             <QuantitySection item={item} canEdit={canEdit} onSaved={refresh} />
             <DetailsSection item={item} canEdit={canEdit} onSaved={refresh} />
-            <ObservationsSection item={item} canEdit={canEdit} myId={myId} onSaved={refresh} />
             <ReservationsSection item={item} canEdit={canEdit} myId={myId} onSaved={refresh} />
+            <AdjustmentsSection item={item} />
 
             {item.movements.length > 0 && (
               <Section title="Últimas movimentações">

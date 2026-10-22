@@ -18,7 +18,7 @@ import { formatBRL, formatDateTime, formatDay, phoneDisplay } from "@/lib/format
 import {
   useContact, useContactActions, useContactLeadTimeline, type ContactDetail, type ContactLead,
 } from "@/hooks/useContacts";
-import { AttachmentView } from "@/components/domain/funnel/LeadDrawer";
+import { AttachmentView } from "@/components/domain/funnel/AttachmentView";
 
 const NONE = "__none__";
 

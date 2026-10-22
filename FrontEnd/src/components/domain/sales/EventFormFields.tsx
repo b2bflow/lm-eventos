@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatBRL } from "@/lib/format";
 import { CORPORATE_LIGHTS, SOCIAL_LIGHTS, type Band, type EventForm, type EventVariant } from "@/lib/quoteForms";
 import type { Catalog } from "@/hooks/useSales";
-import { NumberField, Section, SwitchField } from "./CalcFields";
+import { NumberField, Section, SwitchField, ToggleSection } from "./CalcFields";
 
 // Custos que só fazem sentido no produto único; o DJ do social tem chave própria.
 const HIDDEN_COSTS: Record<EventVariant, string[]> = {
@@ -30,6 +30,9 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
   const itemName = (code: string) => catalog?.items.find((i) => i.code === code)?.name || code;
   const lights = social ? SOCIAL_LIGHTS : CORPORATE_LIGHTS;
   const id = (name: string) => `${variant}-${name}`;
+  const soundSystem = form.guests > 0 && catalog?.sound_tiers
+    ? catalog.sound_tiers.find(([limit]) => limit === null || form.guests <= limit)?.[1]
+    : undefined;
 
   const applyBasicPackage = () => {
     const pkg = catalog?.social_basic_package;
@@ -60,23 +63,7 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
           <Label className="text-xs">Data do evento</Label>
           <Input type="date" value={form.event_date} onChange={(e) => set("event_date", e.target.value)} />
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Banda</Label>
-          <Select value={form.band} onValueChange={(v) => set("band", v as Band)}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="nenhuma">Nenhuma</SelectItem>
-              <SelectItem value="voz_violao">Voz e violão</SelectItem>
-              <SelectItem value="completa">Completa</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <SwitchField id={id("pista")} label="Pista" checked={form.dance_floor} onChange={(v) => set("dance_floor", v)} />
         {social && <SwitchField id={id("dj")} label="DJ" checked={form.dj} onChange={(v) => set("dj", v)} />}
-        {social && (
-          <SwitchField id={id("cerimonia")} label="Som de cerimônia" checked={form.ceremony_sound}
-            onChange={(v) => set("ceremony_sound", v)} />
-        )}
       </div>
 
       {social && (
@@ -99,38 +86,65 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
         </Section>
       )}
 
-      <Section title="Palco e vídeo">
+      <ToggleSection id={id("som")} title="Som" hint="Sistema pela faixa de público, com caixas e 1 microfone sem fio"
+        enabled={form.sound_enabled} onToggle={(v) => set("sound_enabled", v)}>
+        <label className="flex items-center gap-2 text-sm mb-3">
+          <Checkbox checked disabled />
+          {soundSystem ? itemName(soundSystem) : "Sistema de som"} <span className="text-muted-foreground">(1 microfone sem fio incluso)</span>
+        </label>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Banda</Label>
+            <Select value={form.band} onValueChange={(v) => set("band", v as Band)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nenhuma">Nenhuma</SelectItem>
+                <SelectItem value="voz_violao">Voz e violão</SelectItem>
+                <SelectItem value="completa">Completa (backline)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <SwitchField id={id("pista")} label="Pista" checked={form.dance_floor} onChange={(v) => set("dance_floor", v)} />
+          <NumberField label="Microfones extras" value={form.extra_mics} onChange={(v) => set("extra_mics", v)} />
+          {!social && <NumberField label="Mesa digital" value={form.digital_mixer} onChange={(v) => set("digital_mixer", v)} />}
+          {social && (
+            <SwitchField id={id("cerimonia")} label="Som de cerimônia" checked={form.ceremony_sound}
+              onChange={(v) => set("ceremony_sound", v)} />
+          )}
+        </div>
+      </ToggleSection>
+
+      <ToggleSection id={id("palco")} title="Palco e vídeo" enabled={form.stage_video_enabled}
+        onToggle={(v) => set("stage_video_enabled", v)}>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <NumberField label="Palco" suffix="m²" value={form.stage_m2} step={0.5} onChange={(v) => set("stage_m2", v)} />
           <SwitchField id={id("forrado")} label="Forrado" checked={form.stage_covered} onChange={(v) => set("stage_covered", v)} />
           <NumberField label="Praticáveis 2x1" value={form.praticaveis} onChange={(v) => set("praticaveis", v)} />
           <NumberField label="Backdrop" value={form.backdrop} onChange={(v) => set("backdrop", v)} />
+          {!social && <NumberField label="Passa-cabo" suffix="m" value={form.pass_cable_m} onChange={(v) => set("pass_cable_m", v)} />}
           <NumberField label={social ? "Painel de LED (técnico incluso)" : "Painel de LED"} suffix="m²" value={form.led_m2}
             step={0.5} onChange={(v) => set("led_m2", v)} />
           {!social && (
             <SwitchField id={id("tecled")} label="Técnico de LED" checked={form.led_technician} onChange={(v) => set("led_technician", v)} />
           )}
           <NumberField label="Estrutura de LED" value={form.led_structure} onChange={(v) => set("led_structure", v)} />
-          <NumberField label="Microfones extras" value={form.extra_mics} onChange={(v) => set("extra_mics", v)} />
           {!social && (
             <>
               <NumberField label="TP (TV de retorno)" value={form.tp} onChange={(v) => set("tp", v)} />
               <NumberField label="Passador de slides" value={form.slide_passer} onChange={(v) => set("slide_passer", v)} />
-              <NumberField label="Mesa digital" value={form.digital_mixer} onChange={(v) => set("digital_mixer", v)} />
-              <NumberField label="Passa-cabo" suffix="m" value={form.pass_cable_m} onChange={(v) => set("pass_cable_m", v)} />
             </>
           )}
         </div>
-      </Section>
+      </ToggleSection>
 
-      <Section title="Iluminação">
+      <ToggleSection id={id("luz")} title="Iluminação" enabled={form.lighting_enabled} onToggle={(v) => set("lighting_enabled", v)}>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {lights.map((code) => (
             <NumberField key={code} label={itemName(code)} value={form.lights[code] || 0}
               onChange={(v) => set("lights", { ...form.lights, [code]: v })} />
           ))}
         </div>
-      </Section>
+      </ToggleSection>
 
       <Section title="Custos operacionais">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

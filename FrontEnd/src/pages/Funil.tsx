@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Check, ListTodo, Loader2, Plus, Search, X } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Check, Columns3, List, ListTodo, Loader2, Plus, Search, X } from "lucide-react";
 import { endOfDay } from "date-fns";
 import { PageShell } from "@/components/shared/PageShell";
 import { FilterBar } from "@/components/shared/FilterBar";
@@ -15,7 +15,7 @@ import { FLAG_LABELS, LEAD_STATUS_OPTIONS, OWNER_LABELS, PRODUCT_LABELS, type Le
 import { formatDateTime, isOverdue, phoneDisplay, utcIso } from "@/lib/format";
 import { useFunnelBoard, useLeadActions, useSdrQueue, type FunnelFilters, type SdrTask } from "@/hooks/useFunnel";
 import { FunnelBoardView } from "@/components/domain/funnel/FunnelBoardView";
-import { LeadDrawer } from "@/components/domain/funnel/LeadDrawer";
+import { FunnelListView } from "@/components/domain/funnel/FunnelListView";
 import { LostReasonDialog } from "@/components/domain/funnel/LeadDialogs";
 import { NewLeadDialog } from "@/components/domain/funnel/NewLeadDialog";
 
@@ -65,13 +65,20 @@ function QueueList({ title, tasks, onOpen, onDone }: {
 }
 
 export default function Funil() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<FunnelFilters>({});
   const [searchInput, setSearchInput] = useState("");
   const [showQueue, setShowQueue] = useState(false);
   const [pendingLost, setPendingLost] = useState<string | null>(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
-  const openLeadId = searchParams.get("lead");
+  const linkedLeadId = searchParams.get("lead");
+  const view = searchParams.get("view") === "lista" ? "lista" : "quadro";
+
+  // Links antigos (/funil?lead=<id>) abrem a página do lead
+  useEffect(() => {
+    if (linkedLeadId) navigate(`/funil/lead/${linkedLeadId}`, { replace: true });
+  }, [linkedLeadId, navigate]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setFilters((f) => ({ ...f, search: searchInput.trim() || undefined })), 400);
@@ -87,11 +94,12 @@ export default function Funil() {
   const dueToday = queue.filter((t) => new Date(utcIso(t.due_at)).getTime() <= todayLimit);
   const upcoming = queue.filter((t) => new Date(utcIso(t.due_at)).getTime() > todayLimit);
 
-  const openLead = (id: string | null) => {
-    const next = new URLSearchParams(searchParams);
-    if (id) next.set("lead", id);
-    else next.delete("lead");
-    setSearchParams(next, { replace: true });
+  const openLead = (id: string) => navigate(`/funil/lead/${id}`);
+  const setView = (next: "quadro" | "lista") => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "lista") params.set("view", "lista");
+    else params.delete("view");
+    setSearchParams(params, { replace: true });
   };
 
   const handleMove = (leadId: string, _from: LeadStage, to: LeadStage) => {
@@ -111,6 +119,15 @@ export default function Funil() {
       title="Funil de vendas"
       actions={(
         <div className="flex items-center gap-2">
+          <div className="flex rounded-lg bg-muted p-1" role="group" aria-label="Visualização">
+            {([["quadro", "Quadro", Columns3], ["lista", "Lista", List]] as const).map(([key, label, Icon]) => (
+              <button key={key} type="button" onClick={() => setView(key)} aria-pressed={view === key} title={label}
+                className={cn("flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium transition-colors",
+                  view === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                <Icon className="w-4 h-4" /><span className="hidden md:inline">{label}</span>
+              </button>
+            ))}
+          </div>
           <Button onClick={() => setNewLeadOpen(true)}>
             <Plus className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Novo lead</span>
@@ -168,13 +185,14 @@ export default function Funil() {
         </div>
       )}
 
-      {isLoading || !board ? (
+      {view === "lista" ? (
+        <FunnelListView filters={filters} onOpen={openLead} />
+      ) : isLoading || !board ? (
         <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
         <FunnelBoardView board={board} filters={filters} onOpen={openLead} onMove={handleMove} />
       )}
 
-      <LeadDrawer leadId={openLeadId} onClose={() => openLead(null)} />
       <NewLeadDialog open={newLeadOpen} onClose={() => setNewLeadOpen(false)} />
       <LostReasonDialog
         open={!!pendingLost}

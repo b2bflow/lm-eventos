@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import api from "@/services/api";
 import { cn } from "@/lib/utils";
 import { formatBRL, phoneDisplay } from "@/lib/format";
@@ -19,7 +20,7 @@ import { EventFormFields } from "@/components/domain/sales/EventFormFields";
 import { SingleProductFields } from "@/components/domain/sales/SingleProductFields";
 import { ContactPicker } from "@/components/domain/contacts/ContactPicker";
 import {
-  answeredYes, emptyEvent, emptySingleProduct, eventInputs, singleProductInputs, toIsoDay,
+  answeredYes, emptyEvent, emptySingleProduct, eventInputs, singleProductInputs, toIsoDay, withServiceDefaults,
   type EventForm, type SingleProductForm,
 } from "@/lib/quoteForms";
 
@@ -85,6 +86,8 @@ export default function Calculadora() {
   const [single, setSingle] = useState<SingleProductForm>(emptySingleProduct);
   const [itemFilter, setItemFilter] = useState("Q30");
   const [edits, setEdits] = useState<Record<Mode, Edits>>(noEdits);
+  // Valores dos itens no PDF: desligado por padrão (o PDF lista só os itens e o total)
+  const [showItemPrices, setShowItemPrices] = useState(false);
   const patchEdits = (patch: Partial<Edits>) => setEdits((e) => ({ ...e, [mode]: { ...e[mode], ...patch } }));
   const editing = {
     onPrice: (code: string, value: number | null) => {
@@ -139,6 +142,7 @@ export default function Calculadora() {
   useEffect(() => {
     if (!baseProposal) return;
     const inputs = baseProposal.inputs as Record<string, unknown>;
+    setShowItemPrices(inputs.show_item_prices === true);
     setEdits((e) => ({
       ...e,
       [baseProposal.mode]: {
@@ -155,7 +159,7 @@ export default function Calculadora() {
     } else if (baseProposal.mode === "corporativo" || baseProposal.mode === "social") {
       const variant = baseProposal.mode;
       setMode(variant);
-      setEvents((e) => ({ ...e, [variant]: { ...emptyEvent(variant), ...(inputs as Partial<EventForm>) } }));
+      setEvents((e) => ({ ...e, [variant]: { ...emptyEvent(variant), ...withServiceDefaults(inputs as Partial<EventForm>) } }));
     } else if (baseProposal.mode === "produto_unico") {
       setMode("produto_unico");
       const list = (inputs.items as { code: string; qty: number }[]) || [];
@@ -171,6 +175,7 @@ export default function Calculadora() {
     const edited = {
       ...(Object.keys(prices).length ? { price_overrides: prices } : {}),
       ...(finalTotal !== null ? { final_total: finalTotal } : {}),
+      show_item_prices: showItemPrices,
     };
     if (mode === "porta") {
       return {
@@ -181,7 +186,7 @@ export default function Calculadora() {
     }
     if (mode === "produto_unico") return { ...singleProductInputs(single, isAdmin), ...edited };
     return { ...eventInputs(mode, events[mode], isAdmin), ...edited };
-  }, [mode, pickup, returnDate, items, events, single, isAdmin, edits]);
+  }, [mode, pickup, returnDate, items, events, single, isAdmin, edits, showItemPrices]);
 
   // Modo e entradas esperam juntos: trocar de modo não manda as entradas do modo anterior (400 piscando)
   const debounced = useDebounced({ mode, inputs }, 500);
@@ -350,6 +355,13 @@ export default function Calculadora() {
           )}
           <QuoteSummary result={ready ? preview.data : undefined} loading={preview.isFetching} error={ready ? previewError : null}
             editing={editing} />
+          <div className="glass rounded-2xl border border-border/50 px-4 py-3 flex items-center justify-between gap-3">
+            <Label htmlFor="show-item-prices" className="text-sm cursor-pointer">
+              Mostrar valores dos itens na proposta
+              <span className="block text-xs font-normal text-muted-foreground">Desligado, o PDF lista os itens e só o total.</span>
+            </Label>
+            <Switch id="show-item-prices" checked={showItemPrices} onCheckedChange={setShowItemPrices} />
+          </div>
           <Button className="w-full" size="lg" disabled={!leadId || !ready || !preview.data || save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             {preview.data?.requires_meeting ? "Salvar e chamar a Erica" : preview.data?.locked ? "Salvar e pedir aprovação" : "Salvar proposta"}

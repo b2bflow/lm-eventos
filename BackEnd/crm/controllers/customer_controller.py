@@ -229,11 +229,21 @@ class CustomerController(ViewSet):
     def timeline(self, request, pk=None) -> Response:
         return Response(CrmContainer.get_pipeline_service().timeline(pk))
 
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get', 'post'])
     @_card_action
     def tasks(self, request, pk=None) -> Response:
+        """GET: tarefas do lead (?status=pending|done). POST: nova atividade {type, title, due_at (ISO 8601)}."""
+        service = CrmContainer.get_sdr_task_service()
+        if request.method == 'POST':
+            when = CustomerService()._parse_datetime(request.data.get('due_at'))
+            if when is not None and when.tzinfo is not None:
+                from datetime import timezone
+                when = when.astimezone(timezone.utc).replace(tzinfo=None)
+            task = service.create_activity(pk, request.data.get('type'), request.data.get('title'), when,
+                                           user=request.user)
+            return Response(task.to_dict(), status=status.HTTP_201_CREATED)
         status_filter = request.query_params.get('status', 'pending')
-        return Response(CrmContainer.get_sdr_task_service().list_tasks(status=status_filter, customer_id=pk))
+        return Response(service.list_tasks(status=status_filter, customer_id=pk))
 
     # --- Qualificação (mesmos serviços que a IA vai chamar; ver crm/README.md) -------------
 

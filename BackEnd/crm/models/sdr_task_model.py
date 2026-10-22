@@ -13,7 +13,15 @@ TASK_TYPES = {
     'reuniao_amanha': 'Reunião amanhã',
     'retomar_lead_parado': 'Retomar lead parado',
     'reativar_lead': 'Reativar lead perdido sem resposta',
+    # Atividades criadas à mão na página do lead (título livre em metadata.title)
+    'atividade_ligacao': 'Ligação',
+    'atividade_whatsapp': 'WhatsApp',
+    'atividade_reuniao': 'Reunião',
+    'atividade_email': 'E-mail',
+    'atividade_tarefa': 'Tarefa',
 }
+
+MANUAL_TASK_TYPES = tuple(t for t in TASK_TYPES if t.startswith('atividade_'))
 
 # Tarefas da cadência de uma proposta enviada: canceladas quando o lead sai de PROPOSAL_SENT
 # ou quando uma nova versão é enviada (novo ciclo).
@@ -43,13 +51,16 @@ class SdrTask(Document):
 
     def to_dict(self) -> dict:
         customer = self.customer
+        label = TASK_TYPES.get(self.type, self.type)
+        title = (self.metadata or {}).get('title')
         return {
             "id": str(self.id),
             "customer_id": str(customer.id) if customer else None,
             "customer_name": getattr(customer, 'name', None),
             "customer_phone": getattr(customer, 'phone', None),
             "type": self.type,
-            "label": TASK_TYPES.get(self.type, self.type),
+            "label": f"{label}: {title}" if title else label,
+            "title": title,
             "due_at": self.due_at.isoformat() if self.due_at else None,
             "assignee": self.assignee,
             "status": self.status,

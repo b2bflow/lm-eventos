@@ -68,6 +68,36 @@ def test_render_pdf_has_cover_static_pages_and_value():
     assert file_name(ctx) == "Proposta_LM_Ana_Paula_v1.pdf"
 
 
+def test_item_prices_hidden_by_default():
+    ctx = build_pdf_context(social_proposal(), {"name": "Ana"}, SETTINGS)
+    assert not any("R$" in item for block in ctx["blocks"] for item in block["items"])
+    assert ctx["price_summary"] == []
+
+
+def test_item_prices_shown_with_overrides_and_summary():
+    line = {"code": "q30_torre_5m", "name": "Torre Q30 5 m", "block": "estrutura", "qty": 4, "unit": "peça",
+            "unit_price": 90.0, "subtotal": 360.0, "price_overridden": True}
+    single = {"code": "som_ate_150", "name": "Som até 150", "block": "som", "qty": 1, "unit": "sistema",
+              "unit_price": 1300.0, "subtotal": 1300.0}
+    ctx = build_pdf_context({"mode": "corporativo", "inputs": {"show_item_prices": True}, "lines": [line, single],
+                             "costs": [{"code": "frete", "subtotal": 200}], "items_total": 1660, "costs_total": 200,
+                             "with_invoice": True, "invoice_value": 279, "total": 2139}, {"name": "Lu"}, SETTINGS)
+    items = [i for b in ctx["blocks"] for i in b["items"]]
+    assert "04 Torre Q30 5 m: R$ 90,00 cada = R$ 360,00" in items
+    assert "01 Som até 150: R$ 1.300,00" in items
+    assert ctx["price_summary"] == ["Itens: R$ 1.660,00", "Serviços e operação: R$ 200,00", "Nota fiscal: R$ 279,00"]
+    data = render_pdf(ctx, compress=False)
+    assert b"R$ 2.139,00" in data
+
+
+def test_item_prices_porta_multiplies_weeks():
+    line = {"code": "q30_torre_5m", "name": "Torre Q30 5 m", "block": "estrutura", "qty": 2, "unit": "peça",
+            "unit_price": 75.0, "subtotal": 300.0}
+    ctx = build_pdf_context({"mode": "porta", "periods": 2, "inputs": {"show_item_prices": True}, "lines": [line],
+                             "costs": [], "items_total": 300, "total": 300}, {"name": "Lu"}, SETTINGS)
+    assert ctx["blocks"][0]["items"] == ["02 Torre Q30 5 m: R$ 75,00 cada x 2 semanas = R$ 300,00"]
+
+
 # --- API -------------------------------------------------------------------------------------
 
 @pytest.fixture
@@ -152,3 +182,21 @@ def test_pdf_uses_configurable_payment_texts(api_client, lead_with_chat):
     assert ctx["payment"][0] == "Pagamento em duas vezes." and ctx["payment"][1] == "Sinal: a combinar."
     content, name = ProposalService().pdf(str(proposal.id))
     assert content.startswith(b"%PDF") and name.startswith("Proposta_LM_Ana")
+
+
+def test_reference_photos_follow_proposal_mode_with_fallback(tmp_path, monkeypatch):
+    from sales.services import proposal_pdf
+    for name in ("referencias.jpg", "referencias_social.jpg"):
+        (tmp_path / name).write_bytes(b"x")
+    monkeypatch.setattr(proposal_pdf, "ASSETS", tmp_path)
+    assert proposal_pdf.asset(proposal_pdf.REFERENCE_ASSETS["social"], "referencias.jpg").endswith("referencias_social.jpg")
+    # Sem a foto de corporativo ainda: usa a página de referências atual
+    assert proposal_pdf.asset(proposal_pdf.REFERENCE_ASSETS["corporativo"], "referencias.jpg").endswith("referencias.jpg")
+
+
+def test_cover_and_price_pages_use_warm_backgrounds():
+    from sales.services.proposal_pdf import ASSETS
+    assert (ASSETS / "fundo_capa.jpg").exists() and (ASSETS / "fundo_preco.jpg").exists()
+    ctx = build_pdf_context(social_proposal(), {"name": "Ana"}, SETTINGS)
+    assert ctx["mode"] == "social"
+    assert render_pdf(ctx).startswith(b"%PDF")

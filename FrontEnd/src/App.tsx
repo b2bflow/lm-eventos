@@ -13,6 +13,7 @@ import Leads from "./pages/Leads";
 import NotFound from "./pages/NotFound";
 import Settings from "@/pages/Settings";
 import Funil from "@/pages/Funil";
+import FunilLead from "@/pages/FunilLead";
 import Contatos from "@/pages/Contatos";
 import Calculadora from "@/pages/Calculadora";
 import Estoque from "@/pages/Estoque";
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/whatsapp" element={<PrivateRoute><WhatsApp /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             <Route path="/funil" element={<PrivateRoute><Funil /></PrivateRoute>} />
+            <Route path="/funil/lead/:id" element={<PrivateRoute><FunilLead /></PrivateRoute>} />
             <Route path="/contatos" element={<PrivateRoute><Contatos /></PrivateRoute>} />
             <Route path="/calculadora" element={<PrivateRoute><Calculadora /></PrivateRoute>} />
             <Route path="/estoque" element={<PrivateRoute><Estoque /></PrivateRoute>} />

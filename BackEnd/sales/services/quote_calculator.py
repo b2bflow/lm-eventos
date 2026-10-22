@@ -7,6 +7,9 @@ linhas, totais e motivos de trava. Disponibilidade de estoque entra pronta em `a
 Modos: locação de porta (`calculate_porta`), corporativo (`calculate_corporativo`), social
 (`calculate_social`, mesma fórmula do corporativo) e produto único (`calculate_produto_unico`).
 
+Serviços opcionais (corporativo e social): `sound_enabled`, `stage_video_enabled` e `lighting_enabled`.
+Seção desligada não soma nada. Sem o campo (propostas antigas) a seção conta como ligada.
+
 Valores editados na proposta: `table["unit_overrides"]` ({código: preço unitário}) troca o preço
 de um item só nesta proposta, e `apply_final_total` fixa o valor final. Baixar qualquer um dos
 dois trava como desconto (a Erica aprova).
@@ -271,6 +274,9 @@ class CorporateInput:
     slide_passer: int = 0
     digital_mixer: int = 0
     pass_cable_m: float = 0
+    sound_enabled: bool = True
+    stage_video_enabled: bool = True
+    lighting_enabled: bool = True
     extra_items: list = field(default_factory=list)  # [{"code", "qty"}] itens avulsos do catálogo
     operational: list = field(default_factory=list)  # chaves de OPERATIONAL_COSTS marcadas
     manual_freight: float = 0  # deslocamento fora de Goiânia
@@ -302,9 +308,6 @@ def _add_sound(result: QuoteResult, guests: int, band: str, dance_floor: bool, t
     """Som pela faixa de público; sub duplo até 200 com banda ou pista; backline ou microfone pela banda."""
     sound = sound_system_for(guests, table)
     _add_line(result, sound, 1, table, availability, note=f"{guests} pessoas")
-    if guests > config.max_guests_without_visit:
-        result.requires_technical_visit = True
-        result.lock("publico_acima_limite", f"{guests} pessoas")
     if guests <= 200 and (band != "nenhuma" or dance_floor):
         _add_line(result, "som_sub_duplo", 1, table, availability, note="Banda ou pista até 200 pessoas")
     if band == "completa":
@@ -312,6 +315,13 @@ def _add_sound(result: QuoteResult, guests: int, band: str, dance_floor: bool, t
         result.warnings.append("Banda completa: a Erica revisa o rider.")
     elif band == "voz_violao":
         _add_line(result, "som_mic_sem_fio", 1, table, availability, note="Voz e violão")
+
+
+def _check_guests(result: QuoteResult, guests: int, config: CalcConfig):
+    """Público acima do limite exige visita técnica, com ou sem som."""
+    if guests > config.max_guests_without_visit:
+        result.requires_technical_visit = True
+        result.lock("publico_acima_limite", f"{guests} pessoas")
 
 
 def _add_lights(result: QuoteResult, lights: dict, table: dict, availability: dict | None):
@@ -367,33 +377,36 @@ def calculate_corporativo(data: CorporateInput, table: dict, config: CalcConfig 
     if data.guests <= 0:
         raise ValueError("Informe o número de pessoas.")
     margin = _check_margin(data.margin, config)
+    _check_guests(result, data.guests, config)
 
-    _add_sound(result, data.guests, data.band, data.dance_floor, table, config, availability)
-    if data.extra_mics:
-        _add_line(result, "som_mic_sem_fio", data.extra_mics, table, availability, note="Adicionais")
-    if data.digital_mixer:
-        _add_line(result, "som_mesa_digital", data.digital_mixer, table, availability)
+    if data.sound_enabled:
+        _add_sound(result, data.guests, data.band, data.dance_floor, table, config, availability)
+        if data.extra_mics:
+            _add_line(result, "som_mic_sem_fio", data.extra_mics, table, availability, note="Adicionais")
+        if data.digital_mixer:
+            _add_line(result, "som_mesa_digital", data.digital_mixer, table, availability)
 
-    # Palco, vídeo e iluminação
-    if data.stage_m2:
-        _add_line(result, "palco_forrado" if data.stage_covered else "palco_sem_forracao", data.stage_m2, table, availability)
-    if data.praticaveis:
-        _add_line(result, "palco_praticavel_2x1", data.praticaveis, table, availability)
-    if data.backdrop:
-        _add_line(result, "palco_backdrop", data.backdrop, table, availability)
-    if data.pass_cable_m:
-        _add_line(result, "palco_passa_cabo", data.pass_cable_m, table, availability)
-    if data.led_m2:
-        _add_line(result, "video_led_corporativo", data.led_m2, table, availability)
-    if data.led_technician:
-        _add_line(result, "video_tecnico_led", 1, table, availability)
-    if data.led_structure:
-        _add_line(result, "video_estrutura_led", data.led_structure, table, availability)
-    if data.tp:
-        _add_line(result, "video_tp", data.tp, table, availability)
-    if data.slide_passer:
-        _add_line(result, "video_passador_slides", data.slide_passer, table, availability)
-    _add_lights(result, data.lights, table, availability)
+    if data.stage_video_enabled:
+        if data.stage_m2:
+            _add_line(result, "palco_forrado" if data.stage_covered else "palco_sem_forracao", data.stage_m2, table, availability)
+        if data.praticaveis:
+            _add_line(result, "palco_praticavel_2x1", data.praticaveis, table, availability)
+        if data.backdrop:
+            _add_line(result, "palco_backdrop", data.backdrop, table, availability)
+        if data.pass_cable_m:
+            _add_line(result, "palco_passa_cabo", data.pass_cable_m, table, availability)
+        if data.led_m2:
+            _add_line(result, "video_led_corporativo", data.led_m2, table, availability)
+        if data.led_technician:
+            _add_line(result, "video_tecnico_led", 1, table, availability)
+        if data.led_structure:
+            _add_line(result, "video_estrutura_led", data.led_structure, table, availability)
+        if data.tp:
+            _add_line(result, "video_tp", data.tp, table, availability)
+        if data.slide_passer:
+            _add_line(result, "video_passador_slides", data.slide_passer, table, availability)
+    if data.lighting_enabled:
+        _add_lights(result, data.lights, table, availability)
     for entry in data.extra_items or []:
         _add_line(result, entry["code"], entry.get("qty", 0), table, availability)
 
@@ -421,6 +434,9 @@ class SocialInput:
     ceremony_sound: bool = False  # 4 caixas ativas, pedestais, mesa e microfone
     extra_mics: int = 0
     dj: bool = False
+    sound_enabled: bool = True
+    stage_video_enabled: bool = True
+    lighting_enabled: bool = True
     extra_items: list = field(default_factory=list)
     operational: list = field(default_factory=list)
     manual_freight: float = 0
@@ -451,25 +467,29 @@ def calculate_social(data: SocialInput, table: dict, config: CalcConfig | None =
     if data.guests <= 0:
         raise ValueError("Informe o número de convidados.")
     margin = _check_margin(data.margin, config)
+    _check_guests(result, data.guests, config)
 
     if data.structure and data.structure != "nenhuma":
         _add_kit(result, data.structure, table, availability)
-    _add_sound(result, data.guests, data.band, data.dance_floor, table, config, availability)
-    if data.ceremony_sound:
-        _add_line(result, "som_cerimonia", 1, table, availability)
-    if data.extra_mics:
-        _add_line(result, "som_mic_sem_fio", data.extra_mics, table, availability, note="Adicionais")
-    if data.stage_m2:
-        _add_line(result, "palco_forrado" if data.stage_covered else "palco_sem_forracao", data.stage_m2, table, availability)
-    if data.praticaveis:
-        _add_line(result, "palco_praticavel_2x1", data.praticaveis, table, availability)
-    if data.backdrop:
-        _add_line(result, "palco_backdrop", data.backdrop, table, availability)
-    if data.led_m2:
-        _add_line(result, "video_led_social", data.led_m2, table, availability)
-    if data.led_structure:
-        _add_line(result, "video_estrutura_led", data.led_structure, table, availability)
-    _add_lights(result, data.lights, table, availability)
+    if data.sound_enabled:
+        _add_sound(result, data.guests, data.band, data.dance_floor, table, config, availability)
+        if data.ceremony_sound:
+            _add_line(result, "som_cerimonia", 1, table, availability)
+        if data.extra_mics:
+            _add_line(result, "som_mic_sem_fio", data.extra_mics, table, availability, note="Adicionais")
+    if data.stage_video_enabled:
+        if data.stage_m2:
+            _add_line(result, "palco_forrado" if data.stage_covered else "palco_sem_forracao", data.stage_m2, table, availability)
+        if data.praticaveis:
+            _add_line(result, "palco_praticavel_2x1", data.praticaveis, table, availability)
+        if data.backdrop:
+            _add_line(result, "palco_backdrop", data.backdrop, table, availability)
+        if data.led_m2:
+            _add_line(result, "video_led_social", data.led_m2, table, availability)
+        if data.led_structure:
+            _add_line(result, "video_estrutura_led", data.led_structure, table, availability)
+    if data.lighting_enabled:
+        _add_lights(result, data.lights, table, availability)
     for entry in data.extra_items or []:
         _add_line(result, entry["code"], entry.get("qty", 0), table, availability)
 

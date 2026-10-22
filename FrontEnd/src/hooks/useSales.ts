@@ -23,12 +23,16 @@ export interface Catalog {
   approval_ceiling: number;
   proposal_validity_days: number;
   kits: { code: string; label: string; pieces: { code: string; qty: number }[] }[];
+  sound_tiers?: [number | null, string][];
   social_basic_package: {
     structure: string;
     led_m2: number;
     dance_floor: boolean;
     lights: Record<string, number>;
     dj: boolean;
+    sound_enabled: boolean;
+    stage_video_enabled: boolean;
+    lighting_enabled: boolean;
     operational: string[];
   };
   social_max_guests: number;

@@ -244,18 +244,31 @@ class PipelineService:
         domain.LOST: [domain.LOST],
     }
 
+    def _stage_queryset(self, base, stage: str):
+        sources = list(self._STAGE_SOURCES[stage])
+        if stage == domain.QUALIFIED:
+            return base.filter(Q(customer_state_now=domain.QUALIFIED) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at=None)))
+        if stage == domain.PROPOSAL_SENT:
+            return base.filter(Q(customer_state_now__in=sources) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at__ne=None)))
+        return base.filter(customer_state_now__in=sources)
+
+    def lead_list(self, offset: int = 0, limit: int = 50, stage: str | None = None, **filters) -> dict:
+        """Funil em lista: os mesmos leads e filtros do quadro, numa lista só, paginada no banco."""
+        base = self._board_queryset(**filters)
+        queryset = self._stage_queryset(base, stage) if stage else base
+        offset = max(int(offset or 0), 0)
+        total = queryset.count()
+        items = list(queryset.order_by('-updated_at', '-id').skip(offset).limit(limit))
+        return {"count": total, "offset": offset, "has_more": offset + len(items) < total,
+                "results": [c.to_dict() for c in items]}
+
     def board(self, stages: list[str] | None = None, per_stage: int = 30, offsets: dict | None = None, **filters) -> dict:
         """Colunas do funil: {stage: {count, results, offset, has_more}}. Cada coluna paginada no banco."""
         offsets = offsets or {}
         columns = {}
         base = self._board_queryset(**filters)
         for stage in stages or domain.STAGES:
-            sources = list(self._STAGE_SOURCES[stage])
-            queryset = base.filter(customer_state_now__in=sources)
-            if stage == domain.QUALIFIED:
-                queryset = base.filter(Q(customer_state_now=domain.QUALIFIED) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at=None)))
-            elif stage == domain.PROPOSAL_SENT:
-                queryset = base.filter(Q(customer_state_now__in=sources) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at__ne=None)))
+            queryset = self._stage_queryset(base, stage)
             offset = int(offsets.get(stage, 0) or 0)
             total = queryset.count()
             items = list(queryset.order_by('-updated_at', '-id').skip(offset).limit(per_stage))

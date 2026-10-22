@@ -190,6 +190,9 @@ SOCIAL_BASIC_PACKAGE = {
     "dance_floor": True,
     "lights": {"luz_par_led": 8, "luz_moving_beam": 2, "luz_fumaca": 1},
     "dj": True,
+    "sound_enabled": True,
+    "stage_video_enabled": True,
+    "lighting_enabled": True,
     "operational": ["carga", "montagem", "desmontagem", "descarga", "frete", "alimentacao"],
 }
 

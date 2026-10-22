@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "@/services/api";
 import type { LeadStage } from "@/constants/mappings";
@@ -40,6 +40,7 @@ export interface FunnelLead {
   origin?: string | null;
   qualified_at?: string | null;
   first_contact_at?: string | null;
+  last_interaction_at?: string | null;
   updated_at: string;
 }
 
@@ -78,9 +79,27 @@ export interface SdrTask {
   customer_phone: string | null;
   type: string;
   label: string;
+  title?: string | null;
   due_at: string;
   status: string;
+  done_at?: string | null;
 }
+
+export interface FunnelListPage {
+  count: number;
+  offset: number;
+  has_more: boolean;
+  results: FunnelLead[];
+}
+
+/** Tipos de atividade criada à mão na página do lead (crm/models/sdr_task_model.py). */
+export const ACTIVITY_TYPES: Record<string, string> = {
+  atividade_ligacao: "Ligação",
+  atividade_whatsapp: "WhatsApp",
+  atividade_reuniao: "Reunião",
+  atividade_email: "E-mail",
+  atividade_tarefa: "Tarefa",
+};
 
 export interface LockReason {
   code: string;
@@ -150,6 +169,19 @@ export function useFunnelBoard(filters: FunnelFilters) {
   });
 }
 
+/** Funil em lista: mesmos filtros do quadro, paginado ("Carregar mais"). */
+export function useFunnelList(filters: FunnelFilters, enabled: boolean, pageSize = 50) {
+  return useInfiniteQuery({
+    queryKey: ["funnel", "list", filters],
+    queryFn: async ({ pageParam }) =>
+      (await api.get<FunnelListPage>("/crm/funnel/list/", { params: { ...cleanFilters(filters), offset: pageParam, limit: pageSize } })).data,
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.has_more ? last.offset + last.results.length : undefined),
+    enabled,
+    refetchInterval: 60000,
+  });
+}
+
 export async function fetchMoreForStage(stage: LeadStage, offset: number, filters: FunnelFilters) {
   const { data } = await api.get<FunnelBoard>("/crm/funnel/", { params: { ...cleanFilters(filters), stage, offset } });
   return data[stage];
@@ -171,10 +203,10 @@ export function useTimeline(id: string | null) {
   });
 }
 
-export function useLeadTasks(id: string | null) {
+export function useLeadTasks(id: string | null, status: "pending" | "done" = "pending") {
   return useQuery({
-    queryKey: ["lead-tasks", id],
-    queryFn: async () => (await api.get<SdrTask[]>(`/crm/customers/${id}/tasks/`)).data,
+    queryKey: ["lead-tasks", id, status],
+    queryFn: async () => (await api.get<SdrTask[]>(`/crm/customers/${id}/tasks/`, { params: { status } })).data,
     enabled: !!id,
   });
 }
@@ -235,6 +267,8 @@ export function useLeadActions(id: string | null) {
       post(`/crm/customers/${id}/notes/`, { text }, "Nota adicionada.", "Não foi possível salvar a nota."),
     logCall: (body: { outcome: string; notes?: string }) =>
       post(`/crm/customers/${id}/calls/`, body, "Ligação registrada.", "Não foi possível registrar a ligação."),
+    createActivity: (body: { type: string; title: string; due_at: string }) =>
+      post(`/crm/customers/${id}/tasks/`, body, "Atividade criada.", "Não foi possível criar a atividade."),
     completeTask: (taskId: string) =>
       post(`/crm/tasks/${taskId}/done/`, {}, "Tarefa concluída.", "Não foi possível concluir a tarefa."),
     proposalAction: (proposalId: string, action: "send" | "accept" | "reject" | "approve", extra?: { approve?: boolean; note?: string }) =>

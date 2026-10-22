@@ -7,13 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import api from "@/services/api";
 import { BILLING_UNITS, INVENTORY_LINES } from "./constants";
 
 const empty = (line?: string) => ({
-  name: "", line: line || "Acessórios", size: "", billing_unit: "unidade", qty: "", owned: true, description: "", price: "",
+  name: "", line: line || "Acessórios", billing_unit: "unidade", qty: "", owned: true, price: "",
 });
 
 export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCreated, canEditPrice }: {
@@ -35,8 +34,7 @@ export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCrea
     setSaving(true);
     try {
       const { data } = await api.post<{ id: string }>("/inventory/items/", {
-        name: form.name, line: form.line, size: form.size || null, billing_unit: form.billing_unit,
-        owned: form.owned, description: form.description || null,
+        name: form.name, line: form.line, billing_unit: form.billing_unit, owned: form.owned,
         qty_total: form.owned && form.qty !== "" ? Math.trunc(Number(form.qty)) : null,
         ...(canEditPrice && form.price.trim() ? { sale_price: form.price } : {}),
       });
@@ -59,7 +57,7 @@ export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCrea
         <div className="space-y-3">
           <div className="space-y-1">
             <Label className="text-xs">Nome</Label>
-            <Input autoFocus value={form.name} placeholder="ex.: Moving head beam 230W" onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <Input autoFocus value={form.name} placeholder="ex.: Cubo 45, Torre 2 m, Moving head beam 230W" onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -77,10 +75,6 @@ export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCrea
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Tamanho</Label>
-              <Input value={form.size} placeholder="opcional" onChange={(e) => setForm({ ...form, size: e.target.value })} />
-            </div>
-            <div className="space-y-1">
               <Label className="text-xs">Quantidade</Label>
               <Input type="number" min={0} value={form.qty} disabled={!form.owned} placeholder="não contado"
                 onChange={(e) => setForm({ ...form, qty: e.target.value })} />
@@ -90,11 +84,6 @@ export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCrea
             <Switch checked={!form.owned} onCheckedChange={(v) => setForm({ ...form, owned: !v })} />
             Terceirizado (não tem quantidade própria)
           </label>
-          <div className="space-y-1">
-            <Label className="text-xs">Descrição</Label>
-            <Textarea rows={3} value={form.description} placeholder="Modelo, especificação, acessórios..."
-              onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          </div>
           {canEditPrice ? (
             <div className="space-y-1">
               <Label className="text-xs">Preço de venda (R$ por {form.billing_unit === "metro" ? "peça" : form.billing_unit})</Label>

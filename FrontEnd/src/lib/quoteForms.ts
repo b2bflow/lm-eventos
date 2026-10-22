@@ -22,6 +22,10 @@ export interface EventForm {
   slide_passer: number;
   digital_mixer: number;
   pass_cable_m: number;
+  // Serviços opcionais: desligados por padrão, seção desligada não soma nada
+  sound_enabled: boolean;
+  stage_video_enabled: boolean;
+  lighting_enabled: boolean;
   operational: string[];
   manual_freight: number;
   project_cost: number;
@@ -58,7 +62,8 @@ export const SOCIAL_LIGHTS = [
 export const emptyEvent = (variant: EventVariant): EventForm => ({
   guests: 0, event_date: "", band: "nenhuma", dance_floor: variant === "social", stage_m2: 0, stage_covered: true,
   led_m2: 0, led_technician: false, led_structure: 0, backdrop: 0, lights: {}, extra_mics: 0, tp: 0, praticaveis: 0,
-  slide_passer: 0, digital_mixer: 0, pass_cable_m: 0, operational: ["carga", "descarga", "frete", "alimentacao"],
+  slide_passer: 0, digital_mixer: 0, pass_cable_m: 0,
+  sound_enabled: false, stage_video_enabled: false, lighting_enabled: false, operational: ["carga", "descarga", "frete", "alimentacao"],
   manual_freight: 0, project_cost: 0, margin: 0, with_invoice: true, discount: 0, manual_adjustment: 0,
   structure: "nenhuma", ceremony_sound: false, dj: variant === "social", has_project: false, competitor_quote: false,
 });
@@ -71,7 +76,7 @@ export const emptySingleProduct = (): SingleProductForm => ({
 const COMMON_EVENT_KEYS: (keyof EventForm)[] = [
   "guests", "event_date", "band", "dance_floor", "stage_m2", "stage_covered", "led_m2", "led_structure", "backdrop",
   "lights", "extra_mics", "praticaveis", "operational", "manual_freight", "project_cost", "margin", "with_invoice",
-  "discount", "manual_adjustment",
+  "discount", "manual_adjustment", "sound_enabled", "stage_video_enabled", "lighting_enabled",
 ];
 const VARIANT_KEYS: Record<EventVariant, (keyof EventForm)[]> = {
   corporativo: ["led_technician", "tp", "slide_passer", "digital_mixer", "pass_cable_m"],
@@ -89,6 +94,16 @@ export function eventInputs(variant: EventVariant, form: EventForm, isAdmin: boo
   inputs.margin = 0;
   if (!isAdmin) inputs.manual_adjustment = 0;
   return inputs;
+}
+
+/** Proposta salva antes das chaves de serviço: as três seções contavam, então abrem ligadas. */
+export function withServiceDefaults(inputs: Partial<EventForm>): Partial<EventForm> {
+  return {
+    ...inputs,
+    sound_enabled: inputs.sound_enabled ?? true,
+    stage_video_enabled: inputs.stage_video_enabled ?? true,
+    lighting_enabled: inputs.lighting_enabled ?? true,
+  };
 }
 
 export function singleProductInputs(form: SingleProductForm, isAdmin: boolean) {

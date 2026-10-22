@@ -121,3 +121,38 @@ def test_saving_a_proposal_puts_lead_in_funnel(api_client):
     assert resp.status_code == 201, resp.data
     customer.reload()
     assert customer.funnel_entered_at is not None
+
+
+@pytest.mark.django_db
+def test_funnel_list_view_uses_board_rules_and_paginates(api_client):
+    now = datetime.utcnow()
+    for i in range(3):
+        Customer(name=f"Lead {i}", phone=f"556291000000{i}", funnel_entered_at=now, product="social",
+                 customer_state_now=domain.QUALIFIED).save()
+    Customer(name="Antigo", phone="5562910000009").save()  # fora do funil zerado
+    Customer(name="Parceiro", phone="5562910000008", funnel_entered_at=now, human_operator=True).save()
+
+    data = api_client.get("/api/v1/crm/funnel/list/", {"limit": 2}).data
+    assert data["count"] == 3 and len(data["results"]) == 2 and data["has_more"]
+    page2 = api_client.get("/api/v1/crm/funnel/list/", {"limit": 2, "offset": 2}).data
+    assert len(page2["results"]) == 1 and not page2["has_more"]
+    assert api_client.get("/api/v1/crm/funnel/list/", {"stage": domain.LOST}).data["count"] == 0
+    assert api_client.get("/api/v1/crm/funnel/list/", {"stage": "XX"}).status_code == 400
+    assert api_client.get("/api/v1/crm/funnel/list/", {"include_human": "true"}).data["count"] == 4
+
+
+@pytest.mark.django_db
+def test_lead_page_creates_activity_and_completes_it(api_client):
+    lead = Customer(name="Lu", phone="5562910000100", funnel_entered_at=datetime.utcnow()).save()
+    url = f"/api/v1/crm/customers/{lead.id}/tasks/"
+    resp = api_client.post(url, {"type": "atividade_reuniao", "title": "Visita ao salão",
+                                 "due_at": "2026-10-30T14:00:00-03:00"}, format="json")
+    assert resp.status_code == 201, resp.data
+    assert resp.data["label"] == "Reunião: Visita ao salão"
+    assert resp.data["due_at"].startswith("2026-10-30T17:00")  # gravado em UTC
+    assert [t["id"] for t in api_client.get(url).data] == [resp.data["id"]]
+    assert api_client.post(f"/api/v1/crm/tasks/{resp.data['id']}/done/").status_code == 200
+    assert api_client.get(url, {"status": "done"}).data[0]["title"] == "Visita ao salão"
+
+    assert api_client.post(url, {"type": "ligar_15min", "title": "x", "due_at": "2026-10-30"}, format="json").status_code == 400
+    assert api_client.post(url, {"type": "atividade_tarefa", "title": " ", "due_at": "2026-10-30"}, format="json").status_code == 400
