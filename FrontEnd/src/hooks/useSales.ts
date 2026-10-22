@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "@/services/api";
 import type { LockReason, Proposal, ProposalLine } from "@/hooks/useFunnel";
 
@@ -144,6 +144,39 @@ export function useCatalog() {
     queryKey: ["sales-catalog"],
     queryFn: async () => (await api.get<Catalog>("/sales/catalog/")).data,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export interface PriceRow {
+  price: number | null;
+  default: number | null;
+}
+
+export interface PriceSettings {
+  metro_price: (PriceRow & { line: string })[];
+  operational_costs: (PriceRow & { code: string; label: string })[];
+  sound_tiers: (PriceRow & { code: string; label: string; limit: number | null })[];
+}
+
+export type PriceSettingsPatch = Partial<Record<keyof PriceSettings, Record<string, number | null>>>;
+
+/** Valores gerais da calculadora (aba "Valores" em Configurações). */
+export function usePriceSettings() {
+  return useQuery({
+    queryKey: ["sales-prices"],
+    queryFn: async () => (await api.get<PriceSettings>("/sales/prices/")).data,
+  });
+}
+
+/** Grava os valores (só admin); null volta ao padrão do catálogo. */
+export function useUpdatePriceSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: PriceSettingsPatch) => (await api.patch<PriceSettings>("/sales/prices/", patch)).data,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["sales-prices"], data);
+      queryClient.invalidateQueries({ queryKey: ["sales-catalog"] });
+    },
   });
 }
 

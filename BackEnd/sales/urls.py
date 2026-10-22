@@ -2,11 +2,12 @@ from django.urls import path
 
 from sales.controllers import (
     CalculateController, CatalogController, ProposalActionController, ProposalDetailController, ProposalListController,
-    ProposalPdfController,
+    PriceSettingsController, ProposalPdfController,
 )
 
 urlpatterns = [
     path('catalog/', CatalogController.as_view(), name='sales-catalog'),
+    path('prices/', PriceSettingsController.as_view(), name='sales-prices'),
     path('proposals/calculate/', CalculateController.as_view(), name='proposal-calculate'),
     path('proposals/', ProposalListController.as_view(), name='proposal-list'),
     path('proposals/<str:proposal_id>/', ProposalDetailController.as_view(), name='proposal-detail'),

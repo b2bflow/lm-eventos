@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { User, Settings as SettingsIcon, Users, Lock, Key } from "lucide-react";
+import { User, Settings as SettingsIcon, Users, Lock, Key, DollarSign } from "lucide-react";
 import { ProfileSettings } from "@/components/features/settings/ProfileSettings";
 import { SystemSettings } from "@/components/features/settings/SystemSettings";
 import { TeamSettings } from "@/components/features/settings/TeamSettings";
+import { PriceSettings } from "@/components/features/settings/PriceSettings";
 
 
 export default function Settings() {
@@ -42,6 +43,9 @@ export default function Settings() {
                     <TabsTrigger value="team" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all gap-2">
                       <Users className="w-4 h-4" /> Equipe
                     </TabsTrigger>
+                    <TabsTrigger value="prices" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all gap-2">
+                      <DollarSign className="w-4 h-4" /> Valores
+                    </TabsTrigger>
                     <TabsTrigger value="system" className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all gap-2">
                       <Key className="w-4 h-4" /> Integrações & API
                     </TabsTrigger>
@@ -59,6 +63,9 @@ export default function Settings() {
                 <>
                   <TabsContent value="team" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <TeamSettings />
+                  </TabsContent>
+                  <TabsContent value="prices" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <PriceSettings />
                   </TabsContent>
                   <TabsContent value="system" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <SystemSettings />

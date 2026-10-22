@@ -8,9 +8,10 @@ from rest_framework.views import APIView
 from crm.models.lm_settings_model import LmSettings
 from crm.services.pipeline_service import PermissionDeniedError
 from sales.catalog import CATALOG, LINES, OPERATIONAL_COSTS, SOCIAL_BASIC_PACKAGE
-from sales.services.pricing_service import effective_price_table
+from sales.services.pricing_service import effective_price_table, price_settings, update_price_settings
 from sales.services.proposal_service import ProposalService, valid_pdf_token
 from sales.services.quote_calculator import unit_price
+from users.permissions import has_role
 from utils.logger import logger
 
 service = ProposalService()
@@ -62,6 +63,21 @@ class CatalogController(APIView):
             "social_max_guests": cfg.social_max_guests,
             "social_max_total": cfg.social_max_total,
         })
+
+
+class PriceSettingsController(APIView):
+    """GET /sales/prices/ (qualquer usuário autenticado) e PATCH (só admin): preço do metro,
+    custos operacionais e faixas de som, editados na aba "Valores" de Configurações."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(price_settings())
+
+    @_handle
+    def patch(self, request):
+        if not has_role(request.user):
+            return Response({"detail": "Só a Erica (admin) define preços."}, status=status.HTTP_403_FORBIDDEN)
+        return Response(update_price_settings(request.data))
 
 
 class CalculateController(APIView):
