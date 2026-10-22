@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   BadgeCheck, Calculator, CalendarPlus, Check, CheckCircle2, Contact, FileText, Loader2, MessageSquare, Pencil,
-  Phone, PhoneCall, Send, ThumbsDown, ThumbsUp, Trophy, XCircle,
+  Phone, PhoneCall, Send, ThumbsDown, ThumbsUp, Trash2, Trophy, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,7 @@ import {
   type FunnelLead,
 } from "@/hooks/useFunnel";
 import { AttachmentView } from "@/components/domain/funnel/AttachmentView";
-import { CallDialog, LostReasonDialog } from "@/components/domain/funnel/LeadDialogs";
+import { CallDialog, LostReasonDialog, RemoveFromFunnelDialog } from "@/components/domain/funnel/LeadDialogs";
 
 // Campos da qualificação já exibidos pelos campos do CRM (espelhados no backend)
 const MIRRORED_FIELDS = new Set(["nome", "email", "empresa", "cargo", "local", "data_evento", "publico"]);
@@ -399,6 +399,7 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
   const [lostOpen, setLostOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [nextStep, setNextStep] = useState("");
   const [nextAt, setNextAt] = useState("");
 
@@ -465,6 +466,12 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
             <Button variant="outline" className="text-rose-600 border-rose-500/40" disabled={lost} onClick={() => setLostOpen(true)}>
               <XCircle className="w-4 h-4 mr-1.5" /> Perdido
             </Button>
+            {lead.funnel_entered_at && (
+              <Button variant="ghost" className="text-muted-foreground hover:text-rose-600" onClick={() => setRemoveOpen(true)}
+                title="Tira o card do funil; o contato continua em Contatos">
+                <Trash2 className="w-4 h-4 mr-1.5" /> Excluir do funil
+              </Button>
+            )}
           </div>
         </div>
 
@@ -590,6 +597,9 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
           setCallOpen(false);
           actions.logCall({ outcome, notes }).catch(() => undefined);
         }} />
+      <RemoveFromFunnelDialog open={removeOpen} name={lead.name || "este lead"} pending={actions.isPending}
+        onClose={() => setRemoveOpen(false)}
+        onConfirm={() => actions.removeFromFunnel().then(() => { setRemoveOpen(false); onClose(); }).catch(() => undefined)} />
     </>
   );
 }

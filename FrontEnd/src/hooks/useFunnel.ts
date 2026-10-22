@@ -259,6 +259,8 @@ export function useLeadActions(id: string | null) {
     isPending: mutation.isPending,
     changeStage: (body: { stage: LeadStage; lost_reason?: string }, leadId?: string) =>
       post(`/crm/customers/${leadId ?? id}/stage/`, body, "Etapa atualizada.", "Não foi possível mudar a etapa."),
+    removeFromFunnel: () =>
+      post(`/crm/customers/${id}/remove-from-funnel/`, {}, "Card excluído do funil.", "Não foi possível excluir o card do funil."),
     setFlags: (body: { add?: string[]; remove?: string[] }) =>
       post(`/crm/customers/${id}/flags/`, body, "Sinalizações atualizadas.", "Não foi possível alterar as sinalizações."),
     setNextAction: (body: { next_step: string; next_action_at: string | null }) =>

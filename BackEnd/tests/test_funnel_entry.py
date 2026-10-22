@@ -170,3 +170,43 @@ def test_contact_with_stale_lead_can_open_a_new_one(api_client):
     old.update(set__funnel_entered_at=datetime.utcnow())
     detail = api_client.get(f"/api/v1/crm/contacts/{old.id}/").data
     assert detail["in_funnel"] is True and detail["current_lead_open"] is True
+
+
+@pytest.mark.django_db
+def test_remove_from_funnel_keeps_contact_and_cancels_tasks(sdr_api):
+    from crm.models.log_service_model import ServiceLog
+    from crm.models.sdr_task_model import SdrTask
+    lead = Customer(name="Sai", phone="5562900000040", funnel_entered_at=datetime.utcnow()).save()
+    SdrTask(customer=lead, type="ligar_15min", due_at=datetime.utcnow()).save()
+
+    resp = sdr_api.post(f"/api/v1/crm/customers/{lead.id}/remove-from-funnel/")
+    assert resp.status_code == 200, resp.data
+    lead.reload()
+    assert lead.funnel_entered_at is None
+    assert SdrTask.objects(customer=lead, status="pending").count() == 0
+    assert ServiceLog.objects(customer=lead, action_type="FUNNEL_REMOVED").count() == 1
+    board = sdr_api.get("/api/v1/crm/funnel/").data
+    assert board[domain.NEW_LEAD]["count"] == 0
+    # O contato continua na página Contatos
+    assert sdr_api.get(f"/api/v1/crm/contacts/{lead.id}/").status_code == 200
+
+    again = sdr_api.post(f"/api/v1/crm/customers/{lead.id}/remove-from-funnel/")
+    assert again.status_code == 400
+
+
+@pytest.mark.django_db
+def test_remove_from_funnel_blocks_accepted_proposal(api_client):
+    lead = Customer(name="Aceito", phone="5562900000041", funnel_entered_at=datetime.utcnow(),
+                    customer_state_now=domain.PROPOSAL_ACCEPTED).save()
+    resp = api_client.post(f"/api/v1/crm/customers/{lead.id}/remove-from-funnel/")
+    assert resp.status_code == 400
+    lead.reload()
+    assert lead.funnel_entered_at is not None
+
+
+@pytest.mark.django_db
+def test_lead_detail_exposes_funnel_dates(api_client):
+    lead = Customer(name="Card", phone="5562900000042", funnel_entered_at=datetime.utcnow(),
+                    ai_qualified_at=datetime.utcnow()).save()
+    data = api_client.get(f"/api/v1/crm/customers/{lead.id}/").data
+    assert data["funnel_entered_at"] and data["ai_qualified_at"]

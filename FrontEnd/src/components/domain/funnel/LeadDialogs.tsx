@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,6 +97,34 @@ export function CallDialog({ open, onClose, onConfirm }: CallDialogProps) {
           >
             Registrar
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RemoveFromFunnelDialogProps {
+  open: boolean;
+  name: string;
+  pending?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+export function RemoveFromFunnelDialog({ open, name, pending, onClose, onConfirm }: RemoveFromFunnelDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Excluir do funil</DialogTitle>
+          <DialogDescription>
+            O card de {name} sai do quadro e as tarefas pendentes da SDR são canceladas. O contato, a conversa,
+            as propostas e o histórico continuam na página Contatos, e dá para abrir um lead novo por lá.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="destructive" disabled={pending} onClick={onConfirm}>Excluir do funil</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

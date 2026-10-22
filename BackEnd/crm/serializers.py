@@ -32,6 +32,8 @@ class CustomerDTO(serializers.Serializer):
     origin = serializers.CharField(allow_null=True, required=False)
     owner = serializers.CharField(required=False)
     human_operator = serializers.BooleanField(required=False)
+    funnel_entered_at = serializers.CharField(allow_null=True, required=False)
+    ai_qualified_at = serializers.CharField(allow_null=True, required=False)
     product = serializers.CharField(allow_null=True, required=False)
     qualification = serializers.DictField(required=False)
     pending_fields = serializers.ListField(required=False)

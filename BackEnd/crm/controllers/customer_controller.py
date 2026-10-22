@@ -189,6 +189,13 @@ class CustomerController(ViewSet):
         )
         return Response(CustomerDTO(customer).data)
 
+    @action(detail=True, methods=['post'], url_path='remove-from-funnel')
+    @_card_action
+    def remove_from_funnel(self, request, pk=None) -> Response:
+        """Tira o card do quadro; o contato e o histórico continuam em Contatos."""
+        customer = CrmContainer.get_pipeline_service().remove_from_funnel(pk, user=request.user)
+        return Response(CustomerDTO(customer).data)
+
     @action(detail=True, methods=['post'])
     @_card_action
     def flags(self, request, pk=None) -> Response:

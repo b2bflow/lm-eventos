@@ -207,6 +207,29 @@ class PipelineService:
             )
         return log.to_dict()
 
+    def remove_from_funnel(self, customer_id: str, user=None) -> dict:
+        """Tira o card do quadro (limpa `funnel_entered_at`) sem apagar nada: contato, conversa,
+        propostas e histórico continuam na página Contatos. Volta ao funil pelos caminhos de
+        crm.services.funnel_entry (Abrir lead, proposta salva, qualificação da IA)."""
+        customer = _get_document(customer_id)
+        if customer.funnel_entered_at is None:
+            raise ValueError("Este lead já está fora do funil.")
+        if customer.stage in (domain.PROPOSAL_ACCEPTED, domain.CONTRACT_SIGNED):
+            raise ValueError("Lead com proposta aceita ou contrato assinado não sai do funil: "
+                             "marque como perdido antes, para liberar o estoque reservado.")
+        customer.funnel_entered_at = None
+        customer.next_action_at = None
+        customer.updated_at = datetime.utcnow()
+        customer.save()
+        from crm.container import CrmContainer
+        CrmContainer.get_sdr_task_service().cancel_pending_for_customer(customer_id)
+        ServiceLogRepository.create_log(
+            customer=customer, operator_id=_operator_id(user), action_type='FUNNEL_REMOVED',
+            description=f"Card excluído do funil (etapa {domain.STAGE_LABELS[customer.stage]}).",
+            metadata={"stage": customer.stage},
+        )
+        return customer.to_dict()
+
     def timeline(self, customer_id: str, limit: int = 200) -> list[dict]:
         _get_document(customer_id)
         # Só o lead atual; leads arquivados aparecem na página Contatos.

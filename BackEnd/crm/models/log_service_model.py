@@ -41,6 +41,7 @@ class ServiceLog(Document):
         ('TASK_DONE', 'Tarefa concluída'),
         ('CONTACT_UPDATED', 'Contato atualizado'),
         ('NEW_LEAD_OPENED', 'Novo lead aberto'),
+        ('FUNNEL_REMOVED', 'Card excluído do funil'),
         ('HANDOVER', 'Passagem entre IA e humano'),
         ('CONVERSATION_ASSIGNED', 'Conversa atribuída'),
     )
