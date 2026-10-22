@@ -55,6 +55,8 @@ export interface ContactLead {
 
 export interface ContactDetail extends ContactSummary {
   lead_number: number;
+  /** O lead atual está no quadro do funil (leads de antes do início pela plataforma não estão). */
+  in_funnel: boolean;
   current_lead_open: boolean;
   leads: ContactLead[];
   attachments: (Attachment & { lead_number: number })[];

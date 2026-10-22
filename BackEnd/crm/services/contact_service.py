@@ -67,11 +67,21 @@ def find_by_phone(phone: str) -> Customer | None:
     return Customer.objects(phone__in=phone_variants(phone)).order_by("created_at").first()
 
 
-def in_funnel(customer: Customer) -> bool:
-    """O lead atual do contato aparece no funil (mesma regra do quadro)."""
+def has_current_lead(customer: Customer) -> bool:
+    """O contato tem um lead atual (dados de lead no Customer), esteja ele no funil ou não."""
     if customer.product:
         return True
     return not customer.human_operator and (customer.contact_type or "lead") not in ("parceiro", "fornecedor", "candidato")
+
+
+def in_funnel(customer: Customer) -> bool:
+    """O lead atual aparece no quadro do funil (mesma regra de PipelineService._board_queryset).
+
+    Leads de antes do funil zerado (sem funnel_entered_at) continuam no histórico do contato, mas
+    não estão no funil: dá para abrir um lead novo para eles.
+    """
+    return (customer.funnel_entered_at is not None and has_current_lead(customer)
+            and (customer.contact_type or "lead") not in ("parceiro", "fornecedor", "candidato"))
 
 
 class ContactService:
@@ -127,7 +137,7 @@ class ContactService:
         }
 
     def _summary(self, customer: Customer, archived_count: int) -> dict:
-        current = in_funnel(customer)
+        current = has_current_lead(customer)
         return {
             **self._contact_fields(customer),
             "current_lead": {"stage": customer.stage, "product": customer.product} if current else None,
@@ -158,7 +168,7 @@ class ContactService:
 
         customer = _get(customer_id)
         leads = [o.to_dict() for o in Opportunity.objects(customer=customer).order_by("-number")]
-        if in_funnel(customer):
+        if has_current_lead(customer):
             leads.insert(0, self._current_lead(customer))
         proposals: dict[str | None, list] = {}
         for proposal in Proposal.objects(customer=customer).order_by("-version"):
@@ -176,6 +186,7 @@ class ContactService:
         return {
             **self._contact_fields(customer),
             "lead_number": customer.lead_number or 1,
+            "in_funnel": in_funnel(customer),
             "current_lead_open": in_funnel(customer) and customer.stage not in CLOSED_STAGES,
             "leads": leads,
             "attachments": attachments,
@@ -328,9 +339,9 @@ class ContactService:
         if product not in domain.PRODUCTS:
             raise ValueError(f"Produto inválido: {product}.")
         customer = _get(customer_id)
-        has_lead = in_funnel(customer) and (customer.product or customer.stage != domain.NEW_LEAD)
+        has_lead = has_current_lead(customer) and (customer.product or customer.stage != domain.NEW_LEAD)
         # Lead de antes do funil zerado (fora do quadro): vai para o histórico e o contato começa um novo.
-        stale_lead = has_lead and customer.funnel_entered_at is None
+        stale_lead = has_lead and not in_funnel(customer)
         if has_lead and not stale_lead and customer.stage not in CLOSED_STAGES:
             raise ValueError("Este contato já tem um lead em andamento. Encerre-o (contrato assinado ou perdido) "
                              "antes de abrir outro.")

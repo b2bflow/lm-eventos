@@ -103,6 +103,12 @@ export const OWNER_LABELS: Record<string, string> = {
   lucia: "Lúcia",
 };
 
+/** Responsável de uma conversa no WhatsApp: com a IA atendendo (AGENTE) é a IA; senão, quem foi atribuído. */
+export function conversationResponsible(tag?: string | null, assignee?: string | null): string | null {
+  if (tag === "AGENTE") return "IA";
+  return assignee ? OWNER_LABELS[assignee] || assignee : null;
+}
+
 export const CONTACT_TYPE_LABELS: Record<string, string> = {
   lead: "Lead",
   cliente: "Cliente",

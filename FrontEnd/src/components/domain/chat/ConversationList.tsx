@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2, BadgeCheck } from "lucide-react";
+import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2, BadgeCheck, UserCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { LEAD_STATUS_LABELS, LEAD_STATUS_SOLID, OWNER_LABELS, resolveStage } from "@/constants/mappings";
+import { LEAD_STATUS_LABELS, LEAD_STATUS_SOLID, OWNER_LABELS, conversationResponsible, resolveStage } from "@/constants/mappings";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -40,7 +40,7 @@ interface ConversationListProps {
   hasMore: boolean;
   isLoading?: boolean;
   isLoadingMore?: boolean;
-  /** Responsável ("" todas, sdr, erica, lucia ou none), quem atende (IA/operador) e só qualificados pela IA. */
+  /** Responsável ("" todas, ia, sdr, erica, lucia ou none), quem atende (IA/operador) e só qualificados pela IA. */
   filters?: ConversationFilters;
   onFiltersChange?: (filters: ConversationFilters) => void;
 }
@@ -128,6 +128,7 @@ export function ConversationList({
                 <SelectTrigger className="h-9 text-sm bg-card/50" aria-label="Responsável"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={ALL}>Todos os responsáveis</SelectItem>
+                  <SelectItem value="ia">IA</SelectItem>
                   {Object.entries(OWNER_LABELS).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
                   <SelectItem value="none">Sem responsável</SelectItem>
                 </SelectContent>
@@ -160,6 +161,7 @@ export function ConversationList({
         ) : (
           filteredConversations.map((conv) => {
             const statusInfo = getStatusDisplay(conv.customer_status);
+            const responsible = conversationResponsible(conv.tag, conv.assignee);
 
             return (
               <div
@@ -241,9 +243,10 @@ export function ConversationList({
                                 <BadgeCheck className="w-3 h-3" />Qualificado IA
                               </span>
                             )}
-                            {conv.assignee && (
-                              <span className="px-2 py-1 rounded-full text-[10px] font-bold border border-border/60 text-muted-foreground">
-                                {OWNER_LABELS[conv.assignee] || conv.assignee}
+                            {responsible && (
+                              <span className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-border/60 text-muted-foreground"
+                                title="Responsável pela conversa">
+                                <UserCheck className="w-3 h-3" />{responsible}
                               </span>
                             )}
                           </>

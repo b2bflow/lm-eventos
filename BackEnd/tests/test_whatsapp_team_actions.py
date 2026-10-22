@@ -69,10 +69,17 @@ def test_assign_conversation_and_filter_list(api_client, conversation):
     assert api_client.post(url(conversation, "assign/"), {"assignee": "joao"}, format="json").status_code == 400
 
     other = ConversationModel(customer=Customer(name="Outro", phone="5562990000001").save()).save()
-    ids = [c["id"] for c in api_client.get("/api/v1/chat/conversations/", {"assignee": "lucia"}).data["results"]]
-    assert ids == [str(conversation.id)]
-    ids = [c["id"] for c in api_client.get("/api/v1/chat/conversations/", {"assignee": "none"}).data["results"]]
-    assert ids == [str(other.id)]
+    # Com a IA atendendo, o responsável é a IA, mesmo que a conversa tenha alguém atribuído
+    with_ai = ConversationModel(customer=Customer(name="Com IA", phone="5562990000002").save(),
+                                tag="AGENTE", ai_active=True, assignee="lucia").save()
+
+    def listed(**params):
+        return [c["id"] for c in api_client.get("/api/v1/chat/conversations/", params).data["results"]]
+
+    assert listed(assignee="lucia") == [str(conversation.id)]
+    assert listed(assignee="none") == [str(other.id)]
+    assert listed(assignee="ia") == [str(with_ai.id)]
+    assert listed(assignee="ia", tag="OPERADOR") == []
 
 
 @pytest.mark.django_db

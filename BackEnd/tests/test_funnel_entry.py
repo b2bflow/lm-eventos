@@ -156,3 +156,17 @@ def test_lead_page_creates_activity_and_completes_it(api_client):
 
     assert api_client.post(url, {"type": "ligar_15min", "title": "x", "due_at": "2026-10-30"}, format="json").status_code == 400
     assert api_client.post(url, {"type": "atividade_tarefa", "title": " ", "due_at": "2026-10-30"}, format="json").status_code == 400
+
+
+@pytest.mark.django_db
+def test_contact_with_stale_lead_can_open_a_new_one(api_client):
+    """Lead de antes do funil zerado aparece no histórico do contato, mas não trava o "Abrir lead"."""
+    old = Customer(name="Antigo", phone="5562900000070", product="corporativo",
+                   customer_state_now="PROPOSAL_SENT").save()
+    detail = api_client.get(f"/api/v1/crm/contacts/{old.id}/").data
+    assert detail["in_funnel"] is False and detail["current_lead_open"] is False
+    assert [lead["stage"] for lead in detail["leads"]] == ["PROPOSAL_SENT"]
+
+    old.update(set__funnel_entered_at=datetime.utcnow())
+    detail = api_client.get(f"/api/v1/crm/contacts/{old.id}/").data
+    assert detail["in_funnel"] is True and detail["current_lead_open"] is True

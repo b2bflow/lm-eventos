@@ -89,6 +89,7 @@ class ConversationRepository(IConversationRepository):
         status: OPEN (abertas) ou CLOSED (fechadas e arquivadas).
         tag: AGENTE (IA atendendo) ou OPERADOR (inclui as variações gravadas pela IA ao transferir).
         ai_qualified: só conversas de leads qualificados pela IA (Customer.ai_qualified_at).
+        assignee: ia (IA atendendo), none (humano sem responsável) ou sdr, erica, lucia.
         """
         from mongoengine.queryset.visitor import Q
         queryset = ConversationModel.objects.all()
@@ -113,10 +114,13 @@ class ConversationRepository(IConversationRepository):
             queryset = queryset.filter(customer__in=list(Customer.objects(ai_qualified_at__ne=None).scalar('id')))
         if needs_attention is not None:
             queryset = queryset.filter(needs_attention=needs_attention)
-        if assignee == 'none':
-            queryset = queryset.filter(assignee=None)
+        # Com a IA atendendo (AGENTE) o responsável é a IA; os demais responsáveis valem para conversas com humano.
+        if assignee == 'ia':
+            queryset = queryset.filter(tag='AGENTE')
+        elif assignee == 'none':
+            queryset = queryset.filter(assignee=None, tag__ne='AGENTE')
         elif assignee:
-            queryset = queryset.filter(assignee=assignee)
+            queryset = queryset.filter(assignee=assignee, tag__ne='AGENTE')
         return queryset
 
     @staticmethod
