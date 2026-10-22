@@ -14,11 +14,12 @@ import { cn } from "@/lib/utils";
 import { formatBRL, phoneDisplay } from "@/lib/format";
 import { PRODUCT_LABELS } from "@/constants/mappings";
 import { isAdminUser, useCurrentUser, useLead } from "@/hooks/useFunnel";
-import { useCatalog, useProposal, type QuoteResult } from "@/hooks/useSales";
+import { useCatalog, useProposal, type CatalogItem, type InventoryRow, type QuoteResult } from "@/hooks/useSales";
 import { QuoteSummary } from "@/components/domain/sales/QuoteSummary";
 import { EventFormFields } from "@/components/domain/sales/EventFormFields";
 import { SingleProductFields } from "@/components/domain/sales/SingleProductFields";
 import { ContactPicker } from "@/components/domain/contacts/ContactPicker";
+import { InventoryItemDrawer } from "@/components/domain/inventory/InventoryItemDrawer";
 import {
   answeredYes, emptyEvent, emptySingleProduct, eventInputs, singleProductInputs, toIsoDay, withServiceDefaults,
   type EventForm, type SingleProductForm,
@@ -75,6 +76,19 @@ export default function Calculadora() {
   const { data: baseProposal } = useProposal(proposalId);
   const { data: me } = useCurrentUser();
   const isAdmin = isAdminUser(me);
+
+  // C7: atalho "definir preço" abre a mesma ficha de preço do Estoque (só admin).
+  const [priceItemId, setPriceItemId] = useState<string | null>(null);
+  const openPriceEditor = async (item: CatalogItem) => {
+    try {
+      const rows = (await api.get<InventoryRow[]>("/inventory/items/", { params: { line: item.line } })).data;
+      const row = rows.find((r) => r.code === item.code);
+      if (row) setPriceItemId(row.id);
+      else toast.error("Item não está no Estoque. Cadastre-o no Estoque para definir o preço.");
+    } catch {
+      toast.error("Não foi possível abrir o item.");
+    }
+  };
 
   const [mode, setMode] = useState<Mode>("porta");
   const [pickup, setPickup] = useState("");
@@ -319,7 +333,15 @@ export default function Calculadora() {
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-foreground">{item.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {item.sale_price === null ? <span className="text-amber-600 dark:text-amber-400">sem preço (vai para aprovação)</span> : `${formatBRL(item.sale_price)} / peça`}
+                            {item.sale_price === null ? (
+                              <>
+                                <span className="text-amber-600 dark:text-amber-400">sem preço (vai para aprovação)</span>
+                                {isAdmin && (
+                                  <button type="button" className="ml-1.5 font-medium text-primary hover:underline"
+                                    onClick={() => openPriceEditor(item)}>definir preço</button>
+                                )}
+                              </>
+                            ) : `${formatBRL(item.sale_price)} / peça`}
                             {item.note ? ` · ${item.note}` : ""}
                           </p>
                         </div>
@@ -369,6 +391,9 @@ export default function Calculadora() {
           {!leadId && <p className="text-xs text-muted-foreground text-center">Escolha o cliente acima para salvar.</p>}
         </div>
       </div>
+      {isAdmin && (
+        <InventoryItemDrawer itemId={priceItemId} onClose={() => setPriceItemId(null)} canEdit canEditPrice myId={me?.id} />
+      )}
     </PageShell>
   );
 }
