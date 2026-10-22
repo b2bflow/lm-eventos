@@ -152,18 +152,7 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
         </div>
       </Section>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
-        <div className="space-y-1">
-          <Label className="text-xs">Margem</Label>
-          <Select value={String(form.margin)} onValueChange={(v) => set("margin", Number(v))}>
-            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {(catalog?.margin_levels || [0.2, 0.35, 0.5]).map((m) => (
-                <SelectItem key={m} value={String(m)}>{Math.round(m * 100)}%</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-end">
         <div className="flex items-center gap-2 pb-2">
           <Switch checked={form.with_invoice} onCheckedChange={(v) => set("with_invoice", v)} id={id("nf")} />
           <Label htmlFor={id("nf")} className="text-sm">{form.with_invoice ? "Com nota" : "Sem nota"}</Label>

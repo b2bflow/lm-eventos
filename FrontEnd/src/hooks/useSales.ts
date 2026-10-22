@@ -56,6 +56,9 @@ export interface QuoteResult {
   pending_items: string[];
   requires_technical_visit: boolean;
   requires_meeting: boolean;
+  /** Total calculado antes do valor final editado. */
+  calculated_total: number;
+  final_total_edited: boolean;
   period_start: string;
   period_end: string;
 }

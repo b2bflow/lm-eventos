@@ -21,8 +21,8 @@ from sales.models import Proposal
 from sales.services.pricing_service import calc_config, effective_price_table
 from sales.services.proposal_pdf import build_pdf_context, file_name as pdf_file_name, render_pdf
 from sales.services.quote_calculator import (
-    CorporateInput, QuoteResult, SingleProductInput, SocialInput, calculate_corporativo, calculate_porta,
-    calculate_produto_unico, calculate_social, rental_periods, sound_system_for,
+    CorporateInput, QuoteResult, SingleProductInput, SocialInput, apply_final_total, calculate_corporativo,
+    calculate_porta, calculate_produto_unico, calculate_social, rental_periods, sound_system_for,
 )
 from users.permissions import has_role
 from utils.logger import logger
@@ -129,10 +129,17 @@ class ProposalService:
         return codes
 
     def calculate(self, mode: str, inputs: dict, customer: Customer | None = None,
-                  exclude_proposal: str | None = None) -> tuple[QuoteResult, datetime, datetime]:
+                  exclude_proposal: str | None = None, user=None) -> tuple[QuoteResult, datetime, datetime]:
+        """Calcula a proposta. Entradas comuns a todos os modos: `price_overrides` ({código: preço
+        unitário editado}) e `final_total` (valor final editado). Baixar preço ou total trava como
+        desconto, exceto para a Erica (admin), que pode dar desconto sem pedir aprovação."""
         if mode not in AVAILABLE_MODES:
             raise ValueError("Modo de proposta inválido.")
         table = effective_price_table()
+        overrides = inputs.get("price_overrides") or {}
+        if not isinstance(overrides, dict):
+            raise ValueError("Preços editados inválidos.")
+        table["unit_overrides"] = {code: value for code, value in overrides.items() if value not in (None, "")}
         config = calc_config()
         start, end = self._period(mode, inputs, customer)
         availability = self.inventory.availability(self._requested_codes(mode, inputs, table), start, end, exclude_proposal)
@@ -147,6 +154,9 @@ class ProposalService:
             data = _build(EVENT_INPUTS[mode], inputs)
             calculate_event = calculate_social if mode == "social" else calculate_corporativo
             result = calculate_event(data, table, config, availability)
+        apply_final_total(result, inputs.get("final_total"), config)
+        if user is not None and has_role(user):
+            result.lock_reasons = [r for r in result.lock_reasons if r["code"] != "desconto"]
         return result, start, end
 
     # --- Salvar (nova versão) ------------------------------------------------------------
@@ -155,7 +165,7 @@ class ProposalService:
         customer = _customer(customer_id)
         if float(inputs.get("manual_adjustment") or 0) != 0 and not has_role(user):
             raise PermissionDeniedError("Só a Erica (admin) pode aplicar ajuste manual.")
-        result, start, end = self.calculate(mode, inputs, customer, exclude_proposal=replaces)
+        result, start, end = self.calculate(mode, inputs, customer, exclude_proposal=replaces, user=user)
         data = result.to_dict()
 
         last = Proposal.objects(customer=customer).order_by("-version").first()

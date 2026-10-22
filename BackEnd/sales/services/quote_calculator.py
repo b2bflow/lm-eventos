@@ -6,6 +6,10 @@ linhas, totais e motivos de trava. Disponibilidade de estoque entra pronta em `a
 
 Modos: locação de porta (`calculate_porta`), corporativo (`calculate_corporativo`), social
 (`calculate_social`, mesma fórmula do corporativo) e produto único (`calculate_produto_unico`).
+
+Valores editados na proposta: `table["unit_overrides"]` ({código: preço unitário}) troca o preço
+de um item só nesta proposta, e `apply_final_total` fixa o valor final. Baixar qualquer um dos
+dois trava como desconto (a Erica aprova).
 """
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -94,6 +98,8 @@ class QuoteResult:
     pending_items: list = field(default_factory=list)
     requires_technical_visit: bool = False
     requires_meeting: bool = False  # social fora do padrão: reunião com a Erica
+    calculated_total: Decimal | None = None  # total antes do valor final editado
+    final_total_edited: bool = False
 
     @property
     def locked(self) -> bool:
@@ -118,6 +124,8 @@ class QuoteResult:
             "lock_reasons": self.lock_reasons, "warnings": self.warnings, "pending_items": self.pending_items,
             "requires_technical_visit": self.requires_technical_visit,
             "requires_meeting": self.requires_meeting,
+            "calculated_total": f(self.calculated_total if self.calculated_total is not None else self.total),
+            "final_total_edited": self.final_total_edited,
         }
 
 
@@ -143,7 +151,11 @@ def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: di
     qty = non_negative(qty, f"Quantidade de {item['name']}")
     if qty == 0:
         return
-    price = unit_price(code, table)
+    catalog_price = unit_price(code, table)
+    price = catalog_price
+    override = (table.get("unit_overrides") or {}).get(code)
+    if override not in (None, ""):
+        price = money(non_negative(override, f"Preço de {item['name']}"))
     line = {
         "code": code, "name": item["name"], "block": block or item.get("block") or "outros",
         # Torres cobradas por metro são pedidas em peças (o preço já é por peça)
@@ -151,7 +163,10 @@ def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: di
         "unit_price": price if price is not None else None,
         "periods": multiplier, "subtotal": Decimal("0"), "note": note or item.get("note"),
         "available": None, "shortage": False, "owned": item["owned"],
+        "catalog_unit_price": catalog_price, "price_overridden": price != catalog_price,
     }
+    if catalog_price is not None and price is not None and price < catalog_price:
+        result.lock("desconto", f"{item['name']}: {format_brl(price)} (tabela {format_brl(catalog_price)})")
     if price is None:
         result.lock("item_sem_preco", item["name"])
         result.pending_items.append(item["name"])
@@ -204,6 +219,32 @@ def calculate_porta(items: list[dict], pickup: date, return_date: date, table: d
     return result
 
 
+def apply_final_total(result: QuoteResult, final_total, config: CalcConfig) -> QuoteResult:
+    """Valor final editado na proposta (a Erica sobe ou desce conforme época, local e cliente).
+
+    A diferença para o calculado vira ajuste manual, então o total do PDF bate com as linhas.
+    Valor abaixo do calculado trava como desconto; acima do teto, como sempre."""
+    result.calculated_total = result.total
+    if final_total in (None, ""):
+        return result
+    final = money(non_negative(final_total, "Valor final"))
+    if final <= 0:
+        raise ValueError("O valor final precisa ser maior que zero.")
+    difference = final - result.total
+    if difference == 0:
+        return result
+    result.manual_adjustment = money(result.manual_adjustment + difference)
+    result.total = final
+    result.final_total_edited = True
+    if difference < 0:
+        result.lock("desconto", f"Valor final {format_brl(final)} (calculado {format_brl(result.calculated_total)})")
+    # O teto vale para o valor que vai na proposta, não para o calculado
+    result.lock_reasons = [r for r in result.lock_reasons if r["code"] != "acima_do_teto"]
+    if result.total > config.approval_ceiling:
+        result.lock("acima_do_teto", f"R$ {result.total}")
+    return result
+
+
 # --- Corporativo ---------------------------------------------------------------------------
 
 @dataclass
@@ -229,7 +270,7 @@ class CorporateInput:
     operational: list = field(default_factory=list)  # chaves de OPERATIONAL_COSTS marcadas
     manual_freight: float = 0  # deslocamento fora de Goiânia
     project_cost: float = 0  # trava para aprovação
-    margin: float = 0.35
+    margin: float = 0  # sem margem: a tabela já tem a margem da Erica
     with_invoice: bool = True
     discount: float = 0
     manual_adjustment: float = 0  # só admin (validado no serviço de proposta)
@@ -243,8 +284,10 @@ def sound_system_for(guests: int, table: dict) -> str:
 
 
 def _check_margin(margin, config: CalcConfig) -> Decimal:
-    margin = Decimal(str(margin))
-    if margin not in config.margin_levels:
+    """Sem margem é o padrão: os preços da tabela já têm a margem da Erica. Os níveis antigos
+    continuam aceitos para recalcular propostas salvas com margem."""
+    margin = Decimal(str(margin or 0))
+    if margin != 0 and margin not in config.margin_levels:
         raise ValueError(f"Margem inválida. Use uma de: {', '.join(f'{m * 100:.0f}%' for m in config.margin_levels)}.")
     return margin
 
@@ -378,7 +421,7 @@ class SocialInput:
     project_cost: float = 0
     has_project: bool = False  # cliente mandou projeto: reunião com a Erica
     competitor_quote: bool = False  # cliente mandou orçamento concorrente: reunião com a Erica
-    margin: float = 0.35
+    margin: float = 0  # sem margem: a tabela já tem a margem da Erica
     with_invoice: bool = True
     discount: float = 0
     manual_adjustment: float = 0

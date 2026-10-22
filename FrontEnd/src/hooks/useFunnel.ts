@@ -101,6 +101,9 @@ export interface ProposalLine {
   available?: number | null;
   shortage?: boolean;
   owned?: boolean;
+  /** Preço da tabela quando o preço da linha foi editado na proposta. */
+  catalog_unit_price?: number | null;
+  price_overridden?: boolean;
 }
 
 export interface Proposal {

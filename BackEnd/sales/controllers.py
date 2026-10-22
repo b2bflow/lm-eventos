@@ -75,7 +75,7 @@ class CalculateController(APIView):
             raise ValueError("Lead inválido.")
         customer = Customer.objects(id=customer_id).first() if customer_id else None
         result, start, end = service.calculate(request.data.get("mode"), request.data.get("inputs") or {}, customer,
-                                               exclude_proposal=request.data.get("replaces"))
+                                               exclude_proposal=request.data.get("replaces"), user=request.user)
         return Response({**result.to_dict(), "period_start": start.isoformat(), "period_end": end.isoformat()})
 
 

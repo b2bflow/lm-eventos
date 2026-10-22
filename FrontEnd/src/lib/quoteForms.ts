@@ -59,7 +59,7 @@ export const emptyEvent = (variant: EventVariant): EventForm => ({
   guests: 0, event_date: "", band: "nenhuma", dance_floor: variant === "social", stage_m2: 0, stage_covered: true,
   led_m2: 0, led_technician: false, led_structure: 0, backdrop: 0, lights: {}, extra_mics: 0, tp: 0, praticaveis: 0,
   slide_passer: 0, digital_mixer: 0, pass_cable_m: 0, operational: ["carga", "descarga", "frete", "alimentacao"],
-  manual_freight: 0, project_cost: 0, margin: 0.35, with_invoice: true, discount: 0, manual_adjustment: 0,
+  manual_freight: 0, project_cost: 0, margin: 0, with_invoice: true, discount: 0, manual_adjustment: 0,
   structure: "nenhuma", ceremony_sound: false, dj: variant === "social", has_project: false, competitor_quote: false,
 });
 
@@ -85,6 +85,8 @@ export function eventInputs(variant: EventVariant, form: EventForm, isAdmin: boo
   const keys = [...COMMON_EVENT_KEYS, ...VARIANT_KEYS[variant]];
   const inputs: Record<string, unknown> = Object.fromEntries(keys.map((k) => [k, form[k]]));
   inputs.lights = positive(form.lights);
+  // Sem margem: a tabela já tem a margem da Erica (vale também ao reabrir proposta antiga com margem)
+  inputs.margin = 0;
   if (!isAdmin) inputs.manual_adjustment = 0;
   return inputs;
 }

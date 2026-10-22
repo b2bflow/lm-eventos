@@ -28,6 +28,10 @@ type Mode = "porta" | "corporativo" | "social" | "produto_unico";
 const PORTA_LINES = ["Q30", "Q15", "Acessórios"];
 const MODES: Mode[] = ["porta", "corporativo", "social", "produto_unico"];
 
+/** Valores editados na proposta, por modo: preço unitário por item e valor final. */
+type Edits = { prices: Record<string, number>; finalTotal: number | null };
+const noEdits = (): Record<Mode, Edits> => Object.fromEntries(MODES.map((m) => [m, { prices: {}, finalTotal: null }])) as Record<Mode, Edits>;
+
 function useDebounced<T>(value: T, delay: number) {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -80,6 +84,17 @@ export default function Calculadora() {
   }));
   const [single, setSingle] = useState<SingleProductForm>(emptySingleProduct);
   const [itemFilter, setItemFilter] = useState("Q30");
+  const [edits, setEdits] = useState<Record<Mode, Edits>>(noEdits);
+  const patchEdits = (patch: Partial<Edits>) => setEdits((e) => ({ ...e, [mode]: { ...e[mode], ...patch } }));
+  const editing = {
+    onPrice: (code: string, value: number | null) => {
+      const prices = { ...edits[mode].prices };
+      if (value === null) delete prices[code];
+      else prices[code] = value;
+      patchEdits({ prices });
+    },
+    onFinalTotal: (value: number | null) => patchEdits({ finalTotal: value }),
+  };
   const patchEvent = (variant: "corporativo" | "social") => (patch: Partial<EventForm>) =>
     setEvents((e) => ({ ...e, [variant]: { ...e[variant], ...patch } }));
 
@@ -124,6 +139,13 @@ export default function Calculadora() {
   useEffect(() => {
     if (!baseProposal) return;
     const inputs = baseProposal.inputs as Record<string, unknown>;
+    setEdits((e) => ({
+      ...e,
+      [baseProposal.mode]: {
+        prices: (inputs.price_overrides as Record<string, number>) || {},
+        finalTotal: typeof inputs.final_total === "number" ? inputs.final_total : null,
+      },
+    }));
     if (baseProposal.mode === "porta") {
       setMode("porta");
       setPickup(String(inputs.pickup_date || ""));
@@ -145,15 +167,21 @@ export default function Calculadora() {
   }, [baseProposal]);
 
   const inputs = useMemo(() => {
+    const { prices, finalTotal } = edits[mode];
+    const edited = {
+      ...(Object.keys(prices).length ? { price_overrides: prices } : {}),
+      ...(finalTotal !== null ? { final_total: finalTotal } : {}),
+    };
     if (mode === "porta") {
       return {
         pickup_date: pickup, return_date: returnDate,
         items: Object.entries(items).filter(([, q]) => q > 0).map(([code, qty]) => ({ code, qty })),
+        ...edited,
       };
     }
-    if (mode === "produto_unico") return singleProductInputs(single, isAdmin);
-    return eventInputs(mode, events[mode], isAdmin);
-  }, [mode, pickup, returnDate, items, events, single, isAdmin]);
+    if (mode === "produto_unico") return { ...singleProductInputs(single, isAdmin), ...edited };
+    return { ...eventInputs(mode, events[mode], isAdmin), ...edited };
+  }, [mode, pickup, returnDate, items, events, single, isAdmin, edits]);
 
   const debouncedInputs = useDebounced(inputs, 500);
   const ready = mode === "porta"
@@ -319,7 +347,8 @@ export default function Calculadora() {
               </ul>
             </div>
           )}
-          <QuoteSummary result={ready ? preview.data : undefined} loading={preview.isFetching} error={ready ? previewError : null} />
+          <QuoteSummary result={ready ? preview.data : undefined} loading={preview.isFetching} error={ready ? previewError : null}
+            editing={editing} />
           <Button className="w-full" size="lg" disabled={!leadId || !ready || !preview.data || save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             {preview.data?.requires_meeting ? "Salvar e chamar a Erica" : preview.data?.locked ? "Salvar e pedir aprovação" : "Salvar proposta"}
