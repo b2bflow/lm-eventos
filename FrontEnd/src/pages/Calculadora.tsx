@@ -183,7 +183,8 @@ export default function Calculadora() {
     return { ...eventInputs(mode, events[mode], isAdmin), ...edited };
   }, [mode, pickup, returnDate, items, events, single, isAdmin, edits]);
 
-  const debouncedInputs = useDebounced(inputs, 500);
+  // Modo e entradas esperam juntos: trocar de modo não manda as entradas do modo anterior (400 piscando)
+  const debounced = useDebounced({ mode, inputs }, 500);
   const ready = mode === "porta"
     ? !!pickup && !!returnDate && (inputs as { items: unknown[] }).items.length > 0
     : mode === "produto_unico"
@@ -191,12 +192,12 @@ export default function Calculadora() {
       : events[mode].guests > 0 && (!!events[mode].event_date || !!lead?.event_date);
 
   const preview = useQuery({
-    queryKey: ["quote-preview", mode, debouncedInputs, leadId, proposalId],
+    queryKey: ["quote-preview", debounced.mode, debounced.inputs, leadId, proposalId],
     queryFn: async () =>
       (await api.post<QuoteResult>("/sales/proposals/calculate/", {
-        mode, inputs: debouncedInputs, customer_id: leadId || undefined, replaces: proposalId || undefined,
+        mode: debounced.mode, inputs: debounced.inputs, customer_id: leadId || undefined, replaces: proposalId || undefined,
       })).data,
-    enabled: ready,
+    enabled: ready && debounced.mode === mode && debounced.inputs === inputs,
     retry: false,
   });
   const previewError = (preview.error as { response?: { data?: { detail?: string } } } | null)?.response?.data?.detail;

@@ -77,6 +77,11 @@ def seed_funnel():
                          created_at=datetime.utcnow() - timedelta(days=330)).save()
     CrmContainer.get_contact_service().start_new_lead(str(returning.id), "social")
     CrmContainer.get_contact_service().import_partners("Nome;Telefone\nCerimonial Lírio;(62) 97777-0000\n")
+    # Leads da demo já no funil (os contatos só de conversa ficam fora, como no funil zerado);
+    # os qualificados contam como qualificados pela IA.
+    now = datetime.utcnow()
+    Customer.objects(product__ne=None, funnel_entered_at=None).update(set__funnel_entered_at=now)
+    Customer.objects(product__ne=None, customer_state_now="QUALIFIED").update(set__ai_qualified_at=now)
 
 
 def run_all():

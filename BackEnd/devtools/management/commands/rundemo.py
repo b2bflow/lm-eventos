@@ -1,7 +1,7 @@
 """Sobe o backend com dados de demonstração em memória (perfil nucleus.settings_demo).
 
-Z-API e IA ficam desligadas: envios são só registrados no log. Usuário: erica / demo1234 (admin)
-e sdr / demo1234.
+Z-API e IA ficam desligadas: envios são só registrados no log. Login: erica@demo.local / demo1234 (admin)
+e sdr@demo.local / demo1234.
 """
 from datetime import datetime, timedelta
 
@@ -31,10 +31,14 @@ def _disable_external_services():
 
 def seed_users():
     from users.models.user_model import User
+    # A tela de login entra por e-mail
     if not User.objects.filter(username="erica").exists():
-        User.objects.create_user(username="erica", password="demo1234", first_name="Erica", is_staff=True)
+        User.objects.create_user(username="erica", email="erica@demo.local", password="demo1234", first_name="Erica",
+                                 is_staff=True)
     if not User.objects.filter(username="sdr").exists():
-        User.objects.create_user(username="sdr", password="demo1234", first_name="SDR")
+        User.objects.create_user(username="sdr", email="sdr@demo.local", password="demo1234", first_name="SDR")
+    for username in ("erica", "sdr"):  # bancos de demo criados antes do login por e-mail
+        User.objects.filter(username=username, email="").update(email=f"{username}@demo.local")
 
 
 def seed_chat():
@@ -80,5 +84,5 @@ class Command(BaseCommand):
         seed_chat()
         from devtools import seeds
         seeds.run_all()
-        self.stdout.write(self.style.SUCCESS("Demo pronta. Login: erica / demo1234 (admin) ou sdr / demo1234."))
+        self.stdout.write(self.style.SUCCESS("Demo pronta. Login: erica@demo.local / demo1234 (admin) ou sdr@demo.local / demo1234."))
         call_command("runserver", options["addrport"], use_reloader=False)
