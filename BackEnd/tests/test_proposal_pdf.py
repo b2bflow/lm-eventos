@@ -194,6 +194,11 @@ def test_reference_photos_follow_proposal_mode_with_fallback(tmp_path, monkeypat
     assert proposal_pdf.asset(proposal_pdf.REFERENCE_ASSETS["corporativo"], "referencias.jpg").endswith("referencias.jpg")
 
 
+def test_corporate_and_social_reference_photos_are_shipped():
+    from sales.services.proposal_pdf import ASSETS, REFERENCE_ASSETS
+    assert (ASSETS / REFERENCE_ASSETS["corporativo"]).exists() and (ASSETS / REFERENCE_ASSETS["social"]).exists()
+
+
 def test_cover_and_price_pages_use_warm_backgrounds():
     from sales.services.proposal_pdf import ASSETS
     assert (ASSETS / "fundo_capa.jpg").exists() and (ASSETS / "fundo_preco.jpg").exists()
