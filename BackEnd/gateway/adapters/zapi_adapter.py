@@ -35,6 +35,13 @@ class ZAPIClient(IChat):
 
         return True
 
+    @staticmethod
+    def is_lid(phone: str | None) -> bool:
+        """Identificador privado do WhatsApp (`<dígitos>@lid`). A Z-API manda no lugar do número em
+        alguns contatos e aceita responder para ele no campo `phone`."""
+        value = (phone or "").strip()
+        return value.endswith("@lid") and value[:-4].isdigit()
+
     def __validate_cell_number(self, cell_number: str) -> bool:
         # Verifica se o celular não está vazio
         if not cell_number:
@@ -42,6 +49,10 @@ class ZAPIClient(IChat):
                 f"[Z-API] ❌ Dados incompletos: O número de telefone é obrigatório. {cell_number}"
             )
             return False
+
+        # Contato com @lid: não é número, vai como veio (antes era recusado e a resposta se perdia)
+        if self.is_lid(cell_number):
+            return True
 
         # Trata o telefone
         cell_number_clean = cell_number.strip()
@@ -58,7 +69,7 @@ class ZAPIClient(IChat):
 
         # Verifica tamanho máximo (13 dígitos = 11DDI + DDD + Celular)
         if len(cell_number_clean) > 13:
-            print(
+            logger.warning(
                 f"[Z-API] Telefone inválido. O número de celular deve conter no máximo 13 dígitos (com DDI e DDD): {cell_number_clean}"
             )
             return False
@@ -66,6 +77,8 @@ class ZAPIClient(IChat):
         return True
 
     def _resolve_phone(self, phone: str) -> str:
+        if self.is_lid(phone):
+            return phone.strip()
         # Coloca o número o prefixo 9 caso o número tenha 8 dígitos
         if len(phone[4:]) == 8:
             phone = f"{phone[:4]}9{phone[4:]}"
