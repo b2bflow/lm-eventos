@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import api from "@/services/api";
 import { cn } from "@/lib/utils";
-import { formatDateTime, formatDay } from "@/lib/format";
+import { formatBRL, formatDateTime, formatDay } from "@/lib/format";
 import { useInventoryItem, type InventoryItemDetail, type InventoryReservation } from "@/hooks/useSales";
 import { BILLING_UNITS, INVENTORY_LINES } from "./constants";
 
@@ -126,6 +126,72 @@ function DetailsSection({ item, canEdit, onSaved }: { item: InventoryItemDetail;
           </div>
         )}
       </div>
+    </Section>
+  );
+}
+
+/** Preço de venda: grava na tabela de preços (o mesmo que a calculadora usa). Só a Erica (admin) edita. */
+function PriceSection({ item, canEdit, onSaved }: { item: InventoryItemDetail; canEdit: boolean; onSaved: () => void }) {
+  const [value, setValue] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const unit = item.billing_unit === "metro" ? "peça" : item.billing_unit;
+
+  const save = async (price: string | null) => {
+    setSaving(true);
+    try {
+      await api.patch(`/inventory/items/${item.id}/`, { sale_price: price });
+      toast.success(price === null ? "Preço removido." : "Preço salvo.");
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      toast.error(errorDetail(e, "Não foi possível salvar o preço."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section title="Preço de venda">
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">R$</span>
+          <Input autoFocus inputMode="decimal" className="w-32" value={value} placeholder="0,00"
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && value.trim()) save(value);
+              if (e.key === "Escape") setEditing(false);
+            }} />
+          <span className="text-sm text-muted-foreground">por {unit}</span>
+          <Button size="sm" onClick={() => save(value)} disabled={saving || !value.trim()}>
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}Salvar
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancelar</Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm">
+            {item.sale_price === null
+              ? <span className="text-amber-700 dark:text-amber-400">Sem preço: trava a proposta até ter preço.</span>
+              : <><span className="text-lg font-semibold tabular-nums">{formatBRL(item.sale_price)}</span> <span className="text-muted-foreground">por {unit}</span></>}
+          </p>
+          {canEdit && (
+            <div className="flex gap-1">
+              {item.sale_price !== null && (
+                <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={saving}
+                  title="Volta ao preço padrão da tabela (ou sem preço)" onClick={() => save(null)}>Limpar</Button>
+              )}
+              <Button size="sm" variant="outline"
+                onClick={() => { setValue(item.sale_price !== null ? String(item.sale_price) : ""); setEditing(true); }}>
+                {item.sale_price === null ? "Adicionar preço" : "Editar preço"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      {item.billing_unit === "metro" && (
+        <p className="text-xs text-muted-foreground">Torre cobrada por metro: o preço por peça definido aqui substitui o cálculo pelo metro da linha.</p>
+      )}
     </Section>
   );
 }
@@ -369,14 +435,15 @@ function ReservationsSection({ item, canEdit, myId, onSaved }: {
   );
 }
 
-export function InventoryItemDrawer({ itemId, onClose, canEdit, myId }: {
-  itemId: string | null; onClose: () => void; canEdit: boolean; myId?: number;
+export function InventoryItemDrawer({ itemId, onClose, canEdit, canEditPrice = false, myId }: {
+  itemId: string | null; onClose: () => void; canEdit: boolean; canEditPrice?: boolean; myId?: number;
 }) {
   const queryClient = useQueryClient();
   const { data: item, isLoading } = useInventoryItem(itemId);
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["inventory-item", itemId] });
     queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    queryClient.invalidateQueries({ queryKey: ["sales-catalog"] });
   };
 
   const setActive = async (active: boolean) => {
@@ -422,6 +489,7 @@ export function InventoryItemDrawer({ itemId, onClose, canEdit, myId }: {
               </div>
             </SheetHeader>
 
+            <PriceSection item={item} canEdit={canEditPrice} onSaved={refresh} />
             <QuantitySection item={item} canEdit={canEdit} onSaved={refresh} />
             <DetailsSection item={item} canEdit={canEdit} onSaved={refresh} />
             <ObservationsSection item={item} canEdit={canEdit} myId={myId} onSaved={refresh} />

@@ -316,7 +316,11 @@ export default function Estoque() {
                               className={cn("group border-t cursor-pointer hover:bg-muted/40 transition-colors", !row.active && "opacity-60")}>
                               <td className="px-4 py-2.5 max-w-0 w-1/2"><ItemName row={row} /></td>
                               <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                                {row.sale_price === null ? <span className="text-muted-foreground">—</span> : (
+                                {row.sale_price === null ? (
+                                  isAdmin
+                                    ? <span className="text-xs font-medium text-primary group-hover:underline">+ Adicionar preço</span>
+                                    : <span className="text-muted-foreground">—</span>
+                                ) : (
                                   <span className="tabular-nums">
                                     {formatBRL(row.sale_price)}
                                     <span className="text-xs text-muted-foreground"> / {unitLabel(row.billing_unit)}</span>
@@ -376,8 +380,9 @@ export default function Estoque() {
               </>
             )}
 
-      <InventoryItemDrawer itemId={openItem} onClose={() => setOpenItem(null)} canEdit={canEdit} myId={me?.id} />
-      <NewInventoryItemDialog open={creating} onOpenChange={setCreating} defaultLine={line ?? undefined} onCreated={setOpenItem} />
+      <InventoryItemDrawer itemId={openItem} onClose={() => setOpenItem(null)} canEdit={canEdit} canEditPrice={isAdmin} myId={me?.id} />
+      <NewInventoryItemDialog open={creating} onOpenChange={setCreating} defaultLine={line ?? undefined} onCreated={setOpenItem}
+        canEditPrice={isAdmin} />
     </PageShell>
   );
 }

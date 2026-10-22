@@ -13,11 +13,13 @@ import api from "@/services/api";
 import { BILLING_UNITS, INVENTORY_LINES } from "./constants";
 
 const empty = (line?: string) => ({
-  name: "", line: line || "Acessórios", size: "", billing_unit: "unidade", qty: "", owned: true, description: "",
+  name: "", line: line || "Acessórios", size: "", billing_unit: "unidade", qty: "", owned: true, description: "", price: "",
 });
 
-export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCreated }: {
+export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCreated, canEditPrice }: {
   open: boolean; onOpenChange: (open: boolean) => void; defaultLine?: string; onCreated: (id: string) => void;
+  /** Só a Erica (admin) define preço. */
+  canEditPrice?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(empty(defaultLine));
@@ -36,7 +38,9 @@ export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCrea
         name: form.name, line: form.line, size: form.size || null, billing_unit: form.billing_unit,
         owned: form.owned, description: form.description || null,
         qty_total: form.owned && form.qty !== "" ? Math.trunc(Number(form.qty)) : null,
+        ...(canEditPrice && form.price.trim() ? { sale_price: form.price } : {}),
       });
+      queryClient.invalidateQueries({ queryKey: ["sales-catalog"] });
       toast.success(`${form.name} adicionado ao estoque.`);
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       close(false);
@@ -91,7 +95,14 @@ export function NewInventoryItemDialog({ open, onOpenChange, defaultLine, onCrea
             <Textarea rows={3} value={form.description} placeholder="Modelo, especificação, acessórios..."
               onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
-          <p className="text-xs text-muted-foreground">O preço de venda vem da tabela de preços. Item novo aparece como "sem preço" até ser incluído lá.</p>
+          {canEditPrice ? (
+            <div className="space-y-1">
+              <Label className="text-xs">Preço de venda (R$ por {form.billing_unit === "metro" ? "peça" : form.billing_unit})</Label>
+              <Input inputMode="decimal" value={form.price} placeholder="sem preço" onChange={(e) => setForm({ ...form, price: e.target.value })} />
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Item novo aparece como "sem preço" até a Erica definir o preço.</p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => close(false)}>Cancelar</Button>

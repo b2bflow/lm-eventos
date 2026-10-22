@@ -197,6 +197,13 @@ class InventoryService:
     def item_detail(self, item: InventoryItem) -> dict:
         now = datetime.utcnow()
         data = item.to_dict(with_observations=True)
+        from sales.services.pricing_service import effective_price_table
+        from sales.services.quote_calculator import unit_price
+        try:
+            price = unit_price(item.code, effective_price_table())
+        except ValueError:
+            price = None
+        data["sale_price"] = float(price) if price is not None else None
         data["reservations"] = [r.to_dict() for r in InventoryReservation.objects(
             item=item, status__in=ACTIVE_RESERVATION_STATUSES, end__gt=now).order_by('start')]
         data["movements"] = [m.to_dict() for m in InventoryMovement.objects(item=item).order_by('-date').limit(30)]

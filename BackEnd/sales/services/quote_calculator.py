@@ -131,23 +131,28 @@ class QuoteResult:
 
 # --- Linhas ---------------------------------------------------------------------------------
 
-def unit_price(code: str, table: dict) -> Decimal | None:
-    """Preço unitário por peça. Torres cobradas por metro: metragem cobrada x preço do metro da linha."""
-    item = CATALOG_BY_CODE.get(code)
+def catalog_item(code: str, table: dict) -> dict:
+    """Item do catálogo fixo ou criado pela tela de Estoque (`table["extra_items"]`)."""
+    item = CATALOG_BY_CODE.get(code) or (table.get("extra_items") or {}).get(code)
     if not item:
         raise ValueError(f"Item desconhecido: {code}")
-    if item["billing_unit"] == "metro" and item.get("billed_length_m"):
+    return item
+
+
+def unit_price(code: str, table: dict) -> Decimal | None:
+    """Preço unitário por peça. Torres cobradas por metro: metragem cobrada x preço do metro da linha,
+    a não ser que a tabela tenha um preço por peça gravado para a torre (editado no Estoque)."""
+    item = catalog_item(code, table)
+    price = table["items"].get(code, {}).get("sale_price")
+    if price is None and item["billing_unit"] == "metro" and item.get("billed_length_m"):
         metro = table["metro_price"].get(item["line"])
         return None if metro is None else money(Decimal(str(metro)) * Decimal(str(item["billed_length_m"])))
-    price = table["items"].get(code, {}).get("sale_price")
     return None if price is None else money(price)
 
 
 def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: dict | None, multiplier: int = 1,
               note: str | None = None, block: str | None = None):
-    item = CATALOG_BY_CODE.get(code)
-    if not item:
-        raise ValueError(f"Item desconhecido: {code}")
+    item = catalog_item(code, table)
     qty = non_negative(qty, f"Quantidade de {item['name']}")
     if qty == 0:
         return
@@ -311,7 +316,8 @@ def _add_sound(result: QuoteResult, guests: int, band: str, dance_floor: bool, t
 
 def _add_lights(result: QuoteResult, lights: dict, table: dict, availability: dict | None):
     for code, qty in (lights or {}).items():
-        if CATALOG_BY_CODE.get(code, {}).get("block") != "iluminacao":
+        known = code in CATALOG_BY_CODE or code in (table.get("extra_items") or {})
+        if not known or catalog_item(code, table).get("block") != "iluminacao":
             raise ValueError(f"Item de iluminação inválido: {code}")
         _add_line(result, code, qty, table, availability)
 

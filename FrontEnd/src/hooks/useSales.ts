@@ -118,7 +118,7 @@ export interface InventoryMovement {
   note: string | null;
 }
 
-export interface InventoryItemDetail extends Omit<InventoryRow, "sale_price" | "reserved" | "available"> {
+export interface InventoryItemDetail extends Omit<InventoryRow, "reserved" | "available"> {
   observations: InventoryObservation[];
   reservations: InventoryReservation[];
   movements: InventoryMovement[];

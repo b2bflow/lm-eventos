@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from inventory.models import BILLING_UNITS, LINES, InventoryItem, InventoryMovement, InventoryReservation
 from inventory.services.inventory_service import InventoryService
+from sales.services.pricing_service import set_item_price
 from users.permissions import PORTA, has_role
 
 service = InventoryService()
@@ -35,6 +36,23 @@ def _can_edit(user) -> bool:
 
 
 FORBIDDEN = "Só admin ou a Lúcia editam o estoque."
+PRICE_FORBIDDEN = "Só a Erica (admin) define preços."
+
+
+def _price_value(data):
+    """`sale_price` do corpo: None limpa (volta ao preço padrão); número >= 0 grava. ValueError se inválido."""
+    value = data.get("sale_price")
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError("Preço inválido.")
+    try:
+        price = float(str(value).replace(",", "."))
+    except ValueError:
+        raise ValueError("Preço inválido.")
+    if price < 0 or price != price or price in (float("inf"), float("-inf")):
+        raise ValueError("O preço não pode ser negativo.")
+    return round(price, 2)
 
 
 def _item(item_id):
@@ -89,12 +107,22 @@ class InventoryItemsController(APIView):
             return Response({"detail": "Já existe um item com esse código."}, status=status.HTTP_400_BAD_REQUEST)
         if data.get("billing_unit") and data["billing_unit"] not in BILLING_UNITS:
             return Response({"detail": "Unidade de cobrança inválida."}, status=status.HTTP_400_BAD_REQUEST)
+        price = None
+        if data.get("sale_price") not in (None, ""):
+            if not has_role(request.user):
+                return Response({"detail": PRICE_FORBIDDEN}, status=status.HTTP_403_FORBIDDEN)
+            try:
+                price = _price_value(data)
+            except ValueError as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         fields = {k: data[k] for k in EDITABLE if k in data}
         fields["name"] = data["name"].strip()
         try:
             item = InventoryItem(code=code, approximate_count=False, counted_at=datetime.utcnow(), **fields).save()
         except Exception as e:
             return Response({"detail": f"Dados inválidos: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+        if price is not None:
+            set_item_price(item.code, price)
         return Response(item.to_dict(), status=status.HTTP_201_CREATED)
 
 
@@ -110,11 +138,21 @@ class InventoryItemDetailController(APIView):
         return Response(service.item_detail(item))
 
     def patch(self, request, item_id):
+        """Edita o item. `sale_price` (só admin) grava o preço de venda na tabela de preços;
+        null volta ao preço padrão do catálogo."""
         if not _can_edit(request.user):
             return Response({"detail": FORBIDDEN}, status=status.HTTP_403_FORBIDDEN)
         item = _item(item_id)
         if not item:
             return Response({"detail": "Item não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        price_given = "sale_price" in request.data
+        if price_given:
+            if not has_role(request.user):
+                return Response({"detail": PRICE_FORBIDDEN}, status=status.HTTP_403_FORBIDDEN)
+            try:
+                price = _price_value(request.data)
+            except ValueError as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         if _invalid_text(request.data):
             return Response({"detail": "Nome, tamanho e textos devem ser texto."}, status=status.HTTP_400_BAD_REQUEST)
         qty = request.data.get("qty_total")
@@ -133,6 +171,8 @@ class InventoryItemDetailController(APIView):
             item.save()
         except Exception as e:
             return Response({"detail": f"Dados inválidos: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+        if price_given:
+            set_item_price(item.code, price)
         if "qty_total" in request.data and item.qty_total != previous_qty:
             service.add_observation(item, f"Contagem corrigida: {previous_qty if previous_qty is not None else 'não contado'}"
                                           f" → {item.qty_total if item.qty_total is not None else 'não contado'}",

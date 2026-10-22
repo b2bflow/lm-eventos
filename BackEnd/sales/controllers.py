@@ -39,7 +39,8 @@ class CatalogController(APIView):
         table = effective_price_table()
         cfg = LmSettings.get()
         items = []
-        for item in CATALOG:
+        # Catálogo fixo + itens alugáveis criados pela tela de Estoque
+        for item in [*CATALOG, *table["extra_items"].values()]:
             if not item["rentable"]:
                 continue
             price = unit_price(item["code"], table)

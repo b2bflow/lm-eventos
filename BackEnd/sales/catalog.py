@@ -125,6 +125,18 @@ CATALOG = [
 
 CATALOG_BY_CODE = {item["code"]: item for item in CATALOG}
 
+# Bloco da proposta pela linha do estoque (itens criados pela tela de Estoque, fora do CATALOG)
+LINE_BLOCKS = {
+    "Q30": "estrutura", "Q15": "estrutura", "Acessórios": "estrutura", "Som": "som",
+    "Iluminação": "iluminacao", "Vídeo": "video", "Palco e praticáveis": "palco",
+}
+
+
+def catalog_item_from_inventory(doc) -> dict:
+    """Item criado no Estoque no formato do catálogo (cobrança por peça/unidade, sem metragem)."""
+    return _item(doc.code, doc.line, doc.name, doc.billing_unit or "unidade", None, doc.qty_total, doc.size,
+                 owned=doc.owned, block=LINE_BLOCKS.get(doc.line, "outros"), note=doc.note, rentable=doc.rentable)
+
 # Custos operacionais (seção 5.3)
 OPERATIONAL_COSTS = {
     "carga": {"label": "Carga (2 x R$ 150)", "price": 300.0},
@@ -197,9 +209,9 @@ def merge_price_table(overrides: dict | None) -> dict:
     table = default_price_table()
     overrides = overrides or {}
     table["metro_price"].update(overrides.get("metro_price") or {})
+    # Inclui códigos fora do CATALOG: itens criados pela tela de Estoque também têm preço
     for code, values in (overrides.get("items") or {}).items():
-        if code in table["items"]:
-            table["items"][code].update(values or {})
+        table["items"].setdefault(code, {"sale_price": None, "cost": None}).update(values or {})
     table["operational_costs"].update(overrides.get("operational_costs") or {})
     if overrides.get("sound_tiers"):
         table["sound_tiers"] = overrides["sound_tiers"]
