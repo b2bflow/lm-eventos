@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Phone, Tag, Edit, User, CheckCircle, ArrowLeft, History, SquareKanban, Contact, UserCheck } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { formatSafeDate } from "@/lib/dateUtils";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, OWNER_LABELS, PRODUCT_LABELS, resolveStage } from "@/constants/mappings";
+import { NewLeadDialog } from "@/components/domain/funnel/NewLeadDialog";
 
 const NO_ASSIGNEE = "__none__";
 
@@ -41,6 +43,7 @@ interface ClientProfileProps {
     assignee?: string | null;
     customer_product?: string | null;
     customer_human_operator?: boolean;
+    customer_funnel_entered_at?: string | null;
   } | undefined;
   onEdit: () => void; 
   onCloseMobile?: () => void; 
@@ -58,8 +61,10 @@ const getStatusDisplay = (status: string | undefined) => {
 
 export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversation, isClosed, onSelectConversation, onAssign, onCall }: ClientProfileProps) {
   const navigate = useNavigate();
+  const [converting, setConverting] = useState(false);
 
   if (!customer) return null;
+  const inFunnel = !!customer.customer_funnel_entered_at;
 
   // Se a conversa já foi fechada, exibe o status "congelado" dela, caso contrário, o atual do banco.
   const displayStatus = isClosed && customer.final_customer_status ? customer.final_customer_status : customer.customer_status;
@@ -92,10 +97,17 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Button size="sm" variant="outline" onClick={() => navigate(`/funil?lead=${customer.id}`)}
-            disabled={customer.customer_human_operator} title={customer.customer_human_operator ? "Parceiro não entra no funil" : "Abrir o card do lead"}>
-            <SquareKanban className="w-4 h-4 mr-1" /> Card no funil
-          </Button>
+          {inFunnel ? (
+            <Button size="sm" variant="outline" onClick={() => navigate(`/funil?lead=${customer.id}`)}
+              disabled={customer.customer_human_operator} title={customer.customer_human_operator ? "Parceiro não entra no funil" : "Abrir o card do lead"}>
+              <SquareKanban className="w-4 h-4 mr-1" /> Card no funil
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setConverting(true)}
+              disabled={customer.customer_human_operator} title={customer.customer_human_operator ? "Parceiro não entra no funil" : "Abrir um lead no funil para este contato"}>
+              <SquareKanban className="w-4 h-4 mr-1" /> Converter em lead
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => navigate(`/contatos?contato=${customer.id}`)}>
             <Contact className="w-4 h-4 mr-1" /> Contato
           </Button>
@@ -271,6 +283,8 @@ export function ClientProfile({ customer, onEdit, onCloseMobile, onCloseConversa
         )}
 
       </div>
+      <NewLeadDialog open={converting} onClose={() => setConverting(false)}
+        contact={{ id: customer.id, name: customer.customer_name, phone: customer.customer_phone }} />
     </div>
   );
 }

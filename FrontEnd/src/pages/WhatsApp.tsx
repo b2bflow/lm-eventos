@@ -25,6 +25,7 @@ import {
   useConversations,
   useMessages,
   type Conversa,
+  type ConversationFilters,
   type ConversationTab,
   type NewMessageEvent,
 } from "@/hooks/useConversations";
@@ -72,7 +73,7 @@ export default function WhatsApp() {
   const [isSending, setIsSending] = useState(false);
   const [activeTab, setActiveTab] = useState<ConversationTab>("OPEN");
   const [searchInput, setSearchInput] = useState("");
-  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [listFilters, setListFilters] = useState<ConversationFilters>({});
   const [callOpen, setCallOpen] = useState(false);
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [closeStatus, setCloseStatus] = useState<"WON" | "LOST">("WON");
@@ -92,7 +93,7 @@ export default function WhatsApp() {
     fetchNextPage: fetchMoreConversations,
     hasNextPage: hasMoreConversations,
     isFetchingNextPage: isFetchingMoreConversations,
-  } = useConversations(activeTab, search, assigneeFilter);
+  } = useConversations(activeTab, search, listFilters);
 
   const selectedConversationObj =
     conversations.find((c) => c.id === selectedConversationId) ??
@@ -379,6 +380,7 @@ export default function WhatsApp() {
       customer_status: c.final_customer_status || c.customer_status,
       needs_attention: c.needs_attention,
       assignee: c.assignee,
+      aiQualified: !!c.customer_ai_qualified_at,
     }));
     contactCandidates.forEach((contact) =>
       items.push({
@@ -425,8 +427,8 @@ export default function WhatsApp() {
                 search={searchInput}
                 onSearchChange={setSearchInput}
                 onLoadMore={handleLoadMoreConversations}
-                assignee={assigneeFilter}
-                onAssigneeChange={setAssigneeFilter}
+                filters={listFilters}
+                onFiltersChange={setListFilters}
                 hasMore={!!hasMoreConversations}
                 isLoading={isLoadingConversations}
                 isLoadingMore={isFetchingMoreConversations || !!startingCustomerId}

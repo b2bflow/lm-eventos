@@ -8,6 +8,9 @@ from datetime import datetime
 from mongoengine.queryset.visitor import Q
 import re
 
+# Etiquetas de atendimento humano: a plataforma grava OPERADOR; a IA, ao transferir, grava as outras.
+OPERATOR_TAGS = ['OPERADOR', 'operador_humano', 'operador humano', 'orcamento']
+
 
 class ConversationRepository(IConversationRepository):
     @staticmethod
@@ -49,6 +52,10 @@ class ConversationRepository(IConversationRepository):
             # Ajuste aqui: Se 'customer' for string, usa ela direto. Se for objeto, pega o .id
             customer_id = customer if isinstance(customer, str) else str(getattr(customer, 'id', customer))
 
+            # Conversa nova atendida pela IA: o contato entra no funil (ver crm.services.funnel_entry)
+            from crm.services.funnel_entry import enter_funnel
+            enter_funnel(customer_id, only_eligible=True)
+
             logger.info(f"[ConversationRepository] Nova conversa iniciada para o Paciente {customer_id}. Tag definida como: {conv.tag}")
             return conv
 
@@ -76,10 +83,12 @@ class ConversationRepository(IConversationRepository):
 
     @staticmethod
     def filtered_queryset(search: str | None = None, tag: str | None = None, needs_attention: bool | None = None, status: str | None = None,
-                          assignee: str | None = None):
+                          assignee: str | None = None, ai_qualified: bool | None = None):
         """Conversas filtradas no banco: busca por nome ou telefone do cliente, etiqueta, atenção e situação.
 
         status: OPEN (abertas) ou CLOSED (fechadas e arquivadas).
+        tag: AGENTE (IA atendendo) ou OPERADOR (inclui as variações gravadas pela IA ao transferir).
+        ai_qualified: só conversas de leads qualificados pela IA (Customer.ai_qualified_at).
         """
         from mongoengine.queryset.visitor import Q
         queryset = ConversationModel.objects.all()
@@ -96,8 +105,12 @@ class ConversationRepository(IConversationRepository):
                 customer_filter = customer_filter | Q(phone__icontains=digits)
             customer_ids = [c.id for c in Customer.objects(customer_filter).only('id')]
             queryset = queryset.filter(customer__in=customer_ids)
-        if tag:
+        if tag == 'OPERADOR':
+            queryset = queryset.filter(tag__in=OPERATOR_TAGS)
+        elif tag:
             queryset = queryset.filter(tag=tag)
+        if ai_qualified:
+            queryset = queryset.filter(customer__in=list(Customer.objects(ai_qualified_at__ne=None).scalar('id')))
         if needs_attention is not None:
             queryset = queryset.filter(needs_attention=needs_attention)
         if assignee == 'none':

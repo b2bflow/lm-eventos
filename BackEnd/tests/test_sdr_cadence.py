@@ -30,7 +30,7 @@ def service():
 @pytest.fixture
 def sent_lead():
     customer = Customer(name="Paula", phone="5562988887777", customer_state_now="PROPOSAL_SENT",
-                        proposal_sent_at=SENT_AT, product="corporativo").save()
+                        proposal_sent_at=SENT_AT, product="corporativo", funnel_entered_at=SENT_AT).save()
     ConversationModel(customer=customer, tag="AGENTE").save()
     return customer
 

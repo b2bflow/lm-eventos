@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Check, ListTodo, Loader2, Search, X } from "lucide-react";
+import { Check, ListTodo, Loader2, Plus, Search, X } from "lucide-react";
 import { endOfDay } from "date-fns";
 import { PageShell } from "@/components/shared/PageShell";
 import { FilterBar } from "@/components/shared/FilterBar";
@@ -17,6 +17,7 @@ import { useFunnelBoard, useLeadActions, useSdrQueue, type FunnelFilters, type S
 import { FunnelBoardView } from "@/components/domain/funnel/FunnelBoardView";
 import { LeadDrawer } from "@/components/domain/funnel/LeadDrawer";
 import { LostReasonDialog } from "@/components/domain/funnel/LeadDialogs";
+import { NewLeadDialog } from "@/components/domain/funnel/NewLeadDialog";
 
 const ALL = "__all__";
 
@@ -69,6 +70,7 @@ export default function Funil() {
   const [searchInput, setSearchInput] = useState("");
   const [showQueue, setShowQueue] = useState(false);
   const [pendingLost, setPendingLost] = useState<string | null>(null);
+  const [newLeadOpen, setNewLeadOpen] = useState(false);
   const openLeadId = searchParams.get("lead");
 
   useEffect(() => {
@@ -101,18 +103,25 @@ export default function Funil() {
   };
 
   const totalLeads = board ? LEAD_STATUS_OPTIONS.reduce((sum, stage) => sum + (board[stage]?.count ?? 0), 0) : 0;
-  const filtered = !!(filters.search || filters.product || filters.owner || filters.flag || filters.include_human);
+  const filtered = !!(filters.search || filters.product || filters.owner || filters.flag || filters.include_human
+    || filters.ai_qualified);
 
   return (
     <PageShell
       title="Funil de vendas"
       actions={(
-        <Button variant={showQueue ? "default" : "outline"} onClick={() => setShowQueue(!showQueue)}>
-          <ListTodo className="w-4 h-4 sm:mr-2" />
-          <span className="hidden sm:inline">Fila da SDR</span>
-          <span className="ml-1.5 tabular-nums">{dueToday.length}</span>
-          {overdue > 0 && <span className="ml-1.5 px-1.5 rounded-full bg-red-600 text-white text-[10px] leading-4">{overdue}</span>}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setNewLeadOpen(true)}>
+            <Plus className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Novo lead</span>
+          </Button>
+          <Button variant={showQueue ? "default" : "outline"} onClick={() => setShowQueue(!showQueue)}>
+            <ListTodo className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Fila da SDR</span>
+            <span className="ml-1.5 tabular-nums">{dueToday.length}</span>
+            {overdue > 0 && <span className="ml-1.5 px-1.5 rounded-full bg-red-600 text-white text-[10px] leading-4">{overdue}</span>}
+          </Button>
+        </div>
       )}
     >
       <FilterBar
@@ -129,6 +138,10 @@ export default function Funil() {
         <FilterSelect value={filters.product} onChange={(product) => setFilters({ ...filters, product })} placeholder="Todos os produtos" options={PRODUCT_LABELS} />
         <FilterSelect value={filters.owner} onChange={(owner) => setFilters({ ...filters, owner })} placeholder="Todos os responsáveis" options={OWNER_LABELS} />
         <FilterSelect value={filters.flag} onChange={(flag) => setFilters({ ...filters, flag })} placeholder="Todas as sinalizações" options={FLAG_LABELS} />
+        <div className="flex items-center gap-2 px-1">
+          <Switch id="ai-qualified" checked={!!filters.ai_qualified} onCheckedChange={(v) => setFilters({ ...filters, ai_qualified: v })} />
+          <Label htmlFor="ai-qualified" className="text-sm font-normal">Só qualificados pela IA</Label>
+        </div>
         <div className="flex items-center gap-2 px-1">
           <Switch id="include-human" checked={!!filters.include_human} onCheckedChange={(v) => setFilters({ ...filters, include_human: v })} />
           <Label htmlFor="include-human" className="text-sm font-normal">Incluir parceiros</Label>
@@ -162,6 +175,7 @@ export default function Funil() {
       )}
 
       <LeadDrawer leadId={openLeadId} onClose={() => openLead(null)} />
+      <NewLeadDialog open={newLeadOpen} onClose={() => setNewLeadOpen(false)} />
       <LostReasonDialog
         open={!!pendingLost}
         onClose={() => setPendingLost(null)}

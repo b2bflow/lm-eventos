@@ -347,6 +347,12 @@ class QuoteService:
 
         self.customer_repo.update(id=updated["customer_id"], attributes=customer_updates)
 
+        # A IA (summary_tool / visita_tecnica, sem usuário) só pede WAITING_BUDGET quando termina a
+        # qualificação: lead "Qualificado pela IA" e no funil.
+        if user is None and data.get("status") == "WAITING_BUDGET":
+            from crm.services.funnel_entry import mark_ai_qualified
+            mark_ai_qualified(updated["customer_id"])
+
         if self._budget_was_first_filled(existing_quote, data):
             self._mark_budget_and_notify_finance(updated)
 

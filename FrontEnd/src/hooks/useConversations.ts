@@ -22,6 +22,8 @@ export interface Conversa {
   handover_at?: string | null;
   customer_product?: string | null;
   customer_human_operator?: boolean;
+  customer_ai_qualified_at?: string | null;
+  customer_funnel_entered_at?: string | null;
 }
 
 export interface CursorPage<T> {
@@ -53,13 +55,23 @@ export interface NewMessageEvent {
 const PAGE_SIZE = 20;
 const MESSAGES_PAGE_SIZE = 30;
 
-export const conversationsKey = (tab: ConversationTab, search: string, assignee = "") =>
-  ["conversations", { tab, search, assignee }] as const;
+/** Filtros da lista além da aba e da busca: responsável, quem atende (IA/operador) e qualificados pela IA. */
+export interface ConversationFilters {
+  assignee?: string;
+  attendance?: "" | "AGENTE" | "OPERADOR";
+  aiQualified?: boolean;
+}
 
-async function fetchConversations(tab: ConversationTab, search: string, cursor: string | null, assignee = "") {
+export const conversationsKey = (tab: ConversationTab, search: string, filters: ConversationFilters = {}) =>
+  ["conversations", { tab, search, ...filters }] as const;
+
+async function fetchConversations(tab: ConversationTab, search: string, cursor: string | null,
+  filters: ConversationFilters = {}) {
   const params: Record<string, string | number> = { page_size: PAGE_SIZE, status: tab };
   if (search) params.search = search;
-  if (assignee) params.assignee = assignee;
+  if (filters.assignee) params.assignee = filters.assignee;
+  if (filters.attendance) params.tag = filters.attendance;
+  if (filters.aiQualified) params.ai_qualified = "true";
   if (cursor) params.cursor = cursor;
   const { data } = await api.get<CursorPage<Conversa>>("/chat/conversations/", { params });
   return data;
@@ -150,8 +162,8 @@ export async function refreshFirstConversationPages(queryClient: QueryClient) {
   await Promise.all(
     queries.map(async ([key, data]) => {
       if (!data?.pages?.length) return;
-      const filters = (key[1] ?? {}) as { tab?: ConversationTab; search?: string; assignee?: string };
-      const fresh = await fetchConversations(filters.tab ?? "OPEN", filters.search ?? "", null, filters.assignee ?? "");
+      const { tab, search, ...filters } = (key[1] ?? {}) as { tab?: ConversationTab; search?: string } & ConversationFilters;
+      const fresh = await fetchConversations(tab ?? "OPEN", search ?? "", null, filters);
       const freshIds = new Set(fresh.results.map((c) => c.id));
       queryClient.setQueryData<ConversationsData>(key, (old) => {
         if (!old) return old;
@@ -166,11 +178,11 @@ export async function refreshFirstConversationPages(queryClient: QueryClient) {
   );
 }
 
-export function useConversations(tab: ConversationTab, search: string, assignee = "") {
+export function useConversations(tab: ConversationTab, search: string, filters: ConversationFilters = {}) {
   const queryClient = useQueryClient();
   const query = useInfiniteQuery({
-    queryKey: conversationsKey(tab, search, assignee),
-    queryFn: ({ pageParam }) => fetchConversations(tab, search, pageParam, assignee),
+    queryKey: conversationsKey(tab, search, filters),
+    queryFn: ({ pageParam }) => fetchConversations(tab, search, pageParam, filters),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.has_more ? last.next_cursor : undefined),
   });

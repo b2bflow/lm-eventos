@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileUp, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,19 @@ import { errorDetail, useCreateContact, useImportPartners, type ImportResult } f
 
 const NONE = "__none__";
 
-export function NewContactDialog({ open, onClose, onCreated }: {
+export function NewContactDialog({ open, onClose, onCreated, initial }: {
   open: boolean; onClose: () => void; onCreated: (id: string) => void;
+  /** Pré-preenche o formulário (ex.: o que foi digitado na busca da calculadora). */
+  initial?: { name?: string; phone?: string };
 }) {
   const create = useCreateContact();
   const [form, setForm] = useState({ name: "", phone: "", email: "", company: "", role: "", contact_type: "lead", origin: "" });
   const [partner, setPartner] = useState(false);
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open && initial) setForm((f) => ({ ...f, name: initial.name || f.name, phone: initial.phone || f.phone }));
+  }, [open, initial]);
 
   const reset = () => {
     setForm({ name: "", phone: "", email: "", company: "", role: "", contact_type: "lead", origin: "" });

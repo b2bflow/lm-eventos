@@ -41,7 +41,7 @@ class ConversationViewSet(ModelViewSet):
     def list(self, request, *args, **kwargs) -> Response:
         """Lista paginada por cursor, da conversa mais recente para a mais antiga.
 
-        Query: page_size (padrão 20, máx. 50), cursor, search (nome ou telefone), tag, needs_attention, assignee,
+        Query: page_size (padrão 20, máx. 50), cursor, search (nome ou telefone), tag, needs_attention, assignee, ai_qualified,
         status (OPEN ou CLOSED). Resposta: {results, next_cursor, has_more, total}.
         """
         try:
@@ -53,6 +53,7 @@ class ConversationViewSet(ModelViewSet):
                 needs_attention=_parse_bool(params.get('needs_attention')),
                 status=params.get('status') or None,
                 assignee=params.get('assignee') or None,
+                ai_qualified=_parse_bool(params.get('ai_qualified')),
             )
             items, next_cursor = paginate_desc(queryset, 'updated_at', params.get('cursor'), page_size)
             serializer = self.get_serializer(items, many=True)

@@ -215,10 +215,14 @@ class PipelineService:
 
     # --- Quadro -------------------------------------------------------------------------
 
-    def _board_queryset(self, product=None, owner=None, flag=None, search=None, include_human=False):
-        queryset = Customer.objects(contact_type__nin=['parceiro', 'fornecedor', 'candidato'])
+    def _board_queryset(self, product=None, owner=None, flag=None, search=None, include_human=False,
+                        ai_qualified=False):
+        # Só quem entrou no funil depois de zerado (crm.services.funnel_entry)
+        queryset = Customer.objects(contact_type__nin=['parceiro', 'fornecedor', 'candidato'], funnel_entered_at__ne=None)
         if not include_human:
             queryset = queryset.filter(human_operator__ne=True)
+        if ai_qualified:
+            queryset = queryset.filter(ai_qualified_at__ne=None)
         if product:
             queryset = queryset.filter(product=product)
         if owner:

@@ -170,17 +170,24 @@ def test_flags_next_action_note_call_and_timeline(api_client):
 
 @pytest.mark.django_db
 def test_board_groups_by_stage_with_filters_and_db_pagination(api_client):
+    entered = datetime.utcnow()
     for i in range(35):
-        make_customer(customer_state_now=domain.NEW_LEAD, product="estrutura_porta" if i % 2 else "corporativo")
-    make_customer(customer_state_now=domain.QUALIFIED, product="corporativo", flags=["aguardando_erica"])
-    make_customer(customer_state_now=domain.QUALIFIED, human_operator=True)
-    raw_legacy("WON")
+        make_customer(customer_state_now=domain.NEW_LEAD, product="estrutura_porta" if i % 2 else "corporativo",
+                      funnel_entered_at=entered)
+    make_customer(customer_state_now=domain.QUALIFIED, product="corporativo", flags=["aguardando_erica"],
+                  funnel_entered_at=entered, ai_qualified_at=entered)
+    make_customer(customer_state_now=domain.QUALIFIED, human_operator=True, funnel_entered_at=entered)
+    raw_legacy("WON", funnel_entered_at=entered)
+    make_customer(customer_state_now=domain.QUALIFIED, product="social")  # lead antigo: fora do funil zerado
 
     board = api_client.get("/api/v1/crm/funnel/").data
     assert board[domain.NEW_LEAD]["count"] == 35 and len(board[domain.NEW_LEAD]["results"]) == 30
     assert board[domain.NEW_LEAD]["has_more"] is True
-    assert board[domain.QUALIFIED]["count"] == 1  # operador humano fica fora por padrão
+    assert board[domain.QUALIFIED]["count"] == 1  # operador humano e lead antigo ficam fora
     assert board[domain.CONTRACT_SIGNED]["count"] == 1  # legado aparece na coluna nova
+
+    only_ai = api_client.get("/api/v1/crm/funnel/", {"ai_qualified": "true"}).data
+    assert only_ai[domain.QUALIFIED]["count"] == 1 and only_ai[domain.NEW_LEAD]["count"] == 0
 
     more = api_client.get("/api/v1/crm/funnel/", {"stage": "NEW_LEAD", "offset": 30}).data
     assert len(more[domain.NEW_LEAD]["results"]) == 5

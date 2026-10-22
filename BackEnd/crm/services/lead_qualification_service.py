@@ -10,6 +10,7 @@ from crm.models.custumer_model import Customer
 from crm.models.lm_settings_model import LmSettings
 from crm.repositories.log_service_repository import ServiceLogRepository
 from crm.services.business_hours import first_call_due, to_local
+from crm.services.funnel_entry import enter_funnel
 from crm.services.notification_service import card_link, format_phone
 from utils.logger import logger
 from utils.safe_url import safe_media_url
@@ -158,6 +159,8 @@ class LeadQualificationService:
             customer=customer, operator_id=self._operator(user), action_type="LEAD_UPDATED",
             description=f"Atendimento iniciado: {domain.PRODUCTS[product]}.", metadata={"product": product},
         )
+        if enter_funnel(customer):
+            customer.reload()
         return customer.to_dict()
 
     def save_field(self, customer_id: str, field: str, value, user=None) -> dict:

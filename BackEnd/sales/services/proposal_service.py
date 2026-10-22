@@ -186,6 +186,9 @@ class ProposalService:
             description=f"Proposta v{proposal.version} ({mode}) salva: {format_brl(proposal.total)}.",
             metadata={"proposal_id": str(proposal.id), "version": proposal.version, "total": proposal.total},
         )
+        # Fazer proposta é atender: o lead passa a aparecer no funil
+        from crm.services.funnel_entry import enter_funnel
+        enter_funnel(customer)
         if result.locked:
             self._request_approval(proposal, user)
         return proposal.to_dict()

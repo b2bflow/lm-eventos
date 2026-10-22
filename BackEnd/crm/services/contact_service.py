@@ -30,6 +30,7 @@ EMPTY_LEAD = {
     "flags": [], "quoted_amount": 0, "contract_value": 0, "event_date": None, "event_title": None,
     "celebration_type": None, "guest_count": 0, "venue": None, "needs_erica": False, "qualified_at": None,
     "first_contact_at": None, "proposal_sent_at": None, "next_step": None, "next_action_at": None,
+    "ai_qualified_at": None,
 }
 
 PHONE_HEADERS = {"telefone", "phone", "celular", "numero", "whatsapp", "fone", "contato_telefone"}
@@ -328,11 +329,16 @@ class ContactService:
             raise ValueError(f"Produto inválido: {product}.")
         customer = _get(customer_id)
         has_lead = in_funnel(customer) and (customer.product or customer.stage != domain.NEW_LEAD)
-        if has_lead and customer.stage not in CLOSED_STAGES:
+        # Lead de antes do funil zerado (fora do quadro): vai para o histórico e o contato começa um novo.
+        stale_lead = has_lead and customer.funnel_entered_at is None
+        if has_lead and not stale_lead and customer.stage not in CLOSED_STAGES:
             raise ValueError("Este contato já tem um lead em andamento. Encerre-o (contrato assinado ou perdido) "
                              "antes de abrir outro.")
         if customer.human_operator:
             raise ValueError("Contato de parceiro fica com a Erica e não entra no funil. Desmarque 'parceiro' antes.")
+        if stale_lead and customer.stage not in CLOSED_STAGES:
+            self.archive_current_lead(customer, user=user)
+            customer.reload()
         if (customer.contact_type or "lead") not in ("lead", "cliente"):
             customer.contact_type = "lead"
             customer.save()

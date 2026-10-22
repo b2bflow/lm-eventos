@@ -74,6 +74,9 @@ class SdrTaskService:
         queryset = SdrTask.objects(status=status)
         if customer_id:
             queryset = queryset.filter(customer=customer_id)
+        else:
+            # Fila da SDR: só leads do funil (os antigos ficaram de fora quando o funil foi zerado)
+            queryset = queryset.filter(customer__in=list(Customer.objects(funnel_entered_at__ne=None).scalar('id')))
         if due_before:
             queryset = queryset.filter(due_at__lt=due_before)
         return [t.to_dict() for t in queryset.order_by('due_at').limit(limit)]
@@ -89,7 +92,7 @@ class SdrTaskService:
         created = 0
         candidates = Customer.objects(
             customer_state_now__in=[domain.NEW_LEAD, 'ANALYSIS'], human_operator__ne=True,
-            contact_type__in=['lead', None], created_at__lte=cutoff,
+            contact_type__in=['lead', None], created_at__lte=cutoff, funnel_entered_at__ne=None,
         )
         for customer in candidates:
             last_incoming = MessageModel.objects(customer=customer, direction='INCOMING').order_by('-created_at').first()
@@ -141,7 +144,8 @@ class SdrTaskService:
                         if task_type in TASK_TYPES), reverse=True)
         result = {"follow_ups": 0, "lost": 0}
         candidates = Customer.objects(customer_state_now__in=[domain.PROPOSAL_SENT, 'NEGOTIATING'],
-                                      human_operator__ne=True, proposal_sent_at__ne=None)
+                                      human_operator__ne=True, proposal_sent_at__ne=None,
+                                      funnel_entered_at__ne=None)
         for customer in candidates:
             cycle = self._cycle_key(customer)
             sent_day = to_local(customer.proposal_sent_at).date()

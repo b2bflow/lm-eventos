@@ -112,7 +112,8 @@ def test_new_lead_archives_closed_lead_with_history(api_client, lost_lead):
 
 @pytest.mark.django_db
 def test_new_lead_refused_while_current_lead_is_open(api_client, lost_lead):
-    lost_lead.update(customer_state_now="PROPOSAL_SENT", proposal_sent_at=datetime.utcnow())
+    lost_lead.update(customer_state_now="PROPOSAL_SENT", proposal_sent_at=datetime.utcnow(),
+                     funnel_entered_at=datetime.utcnow())
     resp = api_client.post(f"{CONTACTS}{lost_lead.id}/new-lead/", {"product": "social"}, format="json")
     assert resp.status_code == 400
     assert Opportunity.objects.count() == 0

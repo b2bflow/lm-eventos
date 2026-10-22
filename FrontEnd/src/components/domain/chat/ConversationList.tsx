@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
-import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2 } from "lucide-react";
+import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2, BadgeCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_SOLID, OWNER_LABELS, resolveStage } from "@/constants/mappings";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-const ALL_ASSIGNEES = "__all__";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import type { ConversationFilters } from "@/hooks/useConversations";
+
+const ALL = "__all__";
 
 interface Conversation {
   id: string;
@@ -20,6 +21,8 @@ interface Conversation {
   customer_status?: string;
   needs_attention?: boolean;
   assignee?: string | null;
+  /** Lead qualificado pela IA (Customer.ai_qualified_at). */
+  aiQualified?: boolean;
 }
 
 export type ConversationListItem = Conversation;
@@ -37,9 +40,9 @@ interface ConversationListProps {
   hasMore: boolean;
   isLoading?: boolean;
   isLoadingMore?: boolean;
-  /** Filtro por responsável: "" (todas), sdr, erica, lucia ou none (sem responsável). */
-  assignee?: string;
-  onAssigneeChange?: (value: string) => void;
+  /** Responsável ("" todas, sdr, erica, lucia ou none), quem atende (IA/operador) e só qualificados pela IA. */
+  filters?: ConversationFilters;
+  onFiltersChange?: (filters: ConversationFilters) => void;
 }
 
 const getStatusDisplay = (status: string | undefined) => {
@@ -50,7 +53,7 @@ const getStatusDisplay = (status: string | undefined) => {
 export function ConversationList({
   conversations, selectedId, onSelect, onToggleTag,
   activeTab, onTabChange, search, onSearchChange,
-  onLoadMore, hasMore, isLoading, isLoadingMore, assignee = "", onAssigneeChange,
+  onLoadMore, hasMore, isLoading, isLoadingMore, filters = {}, onFiltersChange,
 }: ConversationListProps) {
   // A aba e a busca são filtradas no backend; a lista já chega filtrada e paginada.
   const filteredConversations = conversations;
@@ -109,15 +112,38 @@ export function ConversationList({
           />
         </div>
 
-        {onAssigneeChange && (
-          <Select value={assignee || ALL_ASSIGNEES} onValueChange={(v) => onAssigneeChange(v === ALL_ASSIGNEES ? "" : v)}>
-            <SelectTrigger className="h-9 mt-2 text-sm bg-card/50"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_ASSIGNEES}>Todos os responsáveis</SelectItem>
-              {Object.entries(OWNER_LABELS).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
-              <SelectItem value="none">Sem responsável</SelectItem>
-            </SelectContent>
-          </Select>
+        {onFiltersChange && (
+          <>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <Select value={filters.attendance || ALL}
+                onValueChange={(v) => onFiltersChange({ ...filters, attendance: v === ALL ? "" : (v as "AGENTE" | "OPERADOR") })}>
+                <SelectTrigger className="h-9 text-sm bg-card/50" aria-label="Atendimento"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>IA e operador</SelectItem>
+                  <SelectItem value="AGENTE">Agente IA</SelectItem>
+                  <SelectItem value="OPERADOR">Operador</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filters.assignee || ALL} onValueChange={(v) => onFiltersChange({ ...filters, assignee: v === ALL ? "" : v })}>
+                <SelectTrigger className="h-9 text-sm bg-card/50" aria-label="Responsável"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>Todos os responsáveis</SelectItem>
+                  {Object.entries(OWNER_LABELS).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
+                  <SelectItem value="none">Sem responsável</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <button type="button" onClick={() => onFiltersChange({ ...filters, aiQualified: !filters.aiQualified })}
+              aria-pressed={!!filters.aiQualified}
+              className={cn(
+                "mt-2 w-full flex items-center justify-center gap-1.5 h-8 rounded-md border text-xs font-semibold transition-colors",
+                filters.aiQualified
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-card/50 text-muted-foreground border-border/60 hover:text-foreground"
+              )}>
+              <BadgeCheck className="w-3.5 h-3.5" /> Só qualificados pela IA
+            </button>
+          </>
         )}
       </div>
 
@@ -209,6 +235,12 @@ export function ConversationList({
                             )}>
                               {statusInfo.label}
                             </div>
+                            {conv.aiQualified && (
+                              <span className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                                title="Lead qualificado pela IA">
+                                <BadgeCheck className="w-3 h-3" />Qualificado IA
+                              </span>
+                            )}
                             {conv.assignee && (
                               <span className="px-2 py-1 rounded-full text-[10px] font-bold border border-border/60 text-muted-foreground">
                                 {OWNER_LABELS[conv.assignee] || conv.assignee}

@@ -20,6 +20,7 @@ class FunnelBoardController(APIView):
     """GET /crm/funnel/: colunas por etapa, paginadas no banco.
 
     Query: product, owner, flag, search, include_human (operador humano fica fora por padrão),
+    ai_qualified (só leads qualificados pela IA),
     per_stage (padrão 30, máx. 100), stage + offset para carregar mais de uma coluna.
     """
     permission_classes = [IsAuthenticated]
@@ -40,6 +41,7 @@ class FunnelBoardController(APIView):
                 flag=params.get('flag') or None,
                 search=params.get('search') or None,
                 include_human=_bool(params.get('include_human')),
+                ai_qualified=_bool(params.get('ai_qualified')),
             )
             return Response(board)
         except ValueError as ve:

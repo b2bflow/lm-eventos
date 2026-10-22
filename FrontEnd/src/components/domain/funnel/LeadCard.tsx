@@ -1,5 +1,5 @@
 import { useDraggable } from "@dnd-kit/core";
-import { CalendarDays, Clock, Paperclip, UserRound } from "lucide-react";
+import { BadgeCheck, CalendarDays, Clock, Paperclip, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { FLAG_LABELS, OWNER_LABELS, PRODUCT_LABELS } from "@/constants/mappings";
@@ -46,6 +46,12 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
         {lead.event_date && (
           <span className="flex items-center gap-1">
             <CalendarDays className="w-3 h-3" /> {formatDay(lead.event_date)}
+          </span>
+        )}
+        {lead.ai_qualified_at && (
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold"
+            title="Lead qualificado pela IA">
+            <BadgeCheck className="w-3 h-3" /> Qualificado IA
           </span>
         )}
         {lead.attachments?.length > 0 && (

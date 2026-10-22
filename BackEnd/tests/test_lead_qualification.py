@@ -156,16 +156,19 @@ def test_qualify_outside_business_hours_schedules_next_day(lead):
 @pytest.mark.django_db
 def test_stale_new_lead_gets_retomar_task_once():
     now = datetime(2026, 10, 16, 15, 0)
-    stale = Customer(name="Parado", phone="5562911110000", created_at=now - timedelta(hours=30)).save()
+    stale = Customer(name="Parado", phone="5562911110000", created_at=now - timedelta(hours=30),
+                     funnel_entered_at=now - timedelta(hours=30)).save()
     conv = ConversationModel(customer=stale).save()
     MessageModel(conversation=conv, customer=stale, role="user", direction="INCOMING", content="oi",
                  created_at=now - timedelta(hours=26)).save()
-    recent = Customer(name="Ativo", phone="5562911110001", created_at=now - timedelta(hours=30)).save()
+    recent = Customer(name="Ativo", phone="5562911110001", created_at=now - timedelta(hours=30),
+                      funnel_entered_at=now - timedelta(hours=30)).save()
     conv2 = ConversationModel(customer=recent).save()
     MessageModel(conversation=conv2, customer=recent, role="user", direction="INCOMING", content="oi",
                  created_at=now - timedelta(hours=2)).save()
     Customer(name="Parceiro", phone="5562911110002", created_at=now - timedelta(hours=30), human_operator=True).save()
     Customer(name="Qualificado", phone="5562911110003", created_at=now - timedelta(hours=30), customer_state_now="QUALIFIED").save()
+    Customer(name="Antigo", phone="5562911110004", created_at=now - timedelta(hours=30)).save()  # fora do funil zerado
 
     service = CrmContainer.get_sdr_task_service()
     assert service.create_stale_lead_tasks(now=now) == 1

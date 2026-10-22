@@ -18,6 +18,8 @@ export interface FunnelLead {
   product?: string | null;
   owner?: string;
   flags: string[];
+  ai_qualified_at?: string | null;
+  funnel_entered_at?: string | null;
   event_date?: string | null;
   event_title?: string | null;
   guest_count?: number;
@@ -57,6 +59,7 @@ export interface FunnelFilters {
   flag?: string;
   search?: string;
   include_human?: boolean;
+  ai_qualified?: boolean;
 }
 
 export interface TimelineEntry {
@@ -132,6 +135,7 @@ const cleanFilters = (filters: FunnelFilters) => {
   if (filters.flag) params.flag = filters.flag;
   if (filters.search) params.search = filters.search;
   if (filters.include_human) params.include_human = "true";
+  if (filters.ai_qualified) params.ai_qualified = "true";
   return params;
 };
 
