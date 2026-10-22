@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, CalendarHeart, DoorOpen, Loader2, Minus, Package, Plus, Save, Search, UserRound, X } from "lucide-react";
+import { Building2, CalendarHeart, DoorOpen, Loader2, Minus, Package, Plus, Save, UserRound, X } from "lucide-react";
 import { PageShell } from "@/components/shared/PageShell";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -12,11 +12,12 @@ import api from "@/services/api";
 import { cn } from "@/lib/utils";
 import { formatBRL, phoneDisplay } from "@/lib/format";
 import { PRODUCT_LABELS } from "@/constants/mappings";
-import { isAdminUser, useCurrentUser, useLead, type FunnelLead } from "@/hooks/useFunnel";
+import { isAdminUser, useCurrentUser, useLead } from "@/hooks/useFunnel";
 import { useCatalog, useProposal, type QuoteResult } from "@/hooks/useSales";
 import { QuoteSummary } from "@/components/domain/sales/QuoteSummary";
 import { EventFormFields } from "@/components/domain/sales/EventFormFields";
 import { SingleProductFields } from "@/components/domain/sales/SingleProductFields";
+import { ContactPicker } from "@/components/domain/contacts/ContactPicker";
 import {
   answeredYes, emptyEvent, emptySingleProduct, eventInputs, singleProductInputs, toIsoDay,
   type EventForm, type SingleProductForm,
@@ -34,42 +35,6 @@ function useDebounced<T>(value: T, delay: number) {
     return () => window.clearTimeout(t);
   }, [value, delay]);
   return debounced;
-}
-
-function LeadPicker({ onPick }: { onPick: (id: string) => void }) {
-  const [term, setTerm] = useState("");
-  const [focused, setFocused] = useState(false);
-  const search = useDebounced(term.trim(), 300);
-  const { data = [], isFetching } = useQuery({
-    queryKey: ["lead-picker", search],
-    queryFn: async () => (await api.get("/crm/customers/", { params: { search, page_size: 8 } })).data.results as FunnelLead[],
-    enabled: search.length >= 2,
-  });
-  const open = focused && search.length >= 2;
-  return (
-    <div className="relative w-full sm:w-[320px]">
-      <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
-      <Input value={term} onChange={(e) => setTerm(e.target.value)} onFocus={() => setFocused(true)}
-        onBlur={() => window.setTimeout(() => setFocused(false), 150)}
-        placeholder="Escolher lead (nome ou telefone)" className="pl-8" />
-      {isFetching && <Loader2 className="absolute right-2.5 top-2.5 w-4 h-4 animate-spin text-muted-foreground" />}
-      {open && (
-        <ul className="absolute z-30 mt-1 w-full rounded-xl border border-border/60 bg-popover shadow-lg divide-y divide-border/50 max-h-64 overflow-y-auto">
-          {data.length === 0 && !isFetching && <li className="px-3 py-2 text-sm text-muted-foreground">Nenhum lead encontrado.</li>}
-          {data.map((lead) => (
-            <li key={lead.id}>
-              <button className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60" onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onPick(lead.id)}>
-                <span className="font-medium text-foreground">{lead.name || "Sem nome"}</span>
-                <span className="text-muted-foreground"> · {phoneDisplay(lead.phone)}</span>
-                {lead.product && <span className="block text-xs text-muted-foreground">{PRODUCT_LABELS[lead.product]}</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 const MODE_INFO: Record<Mode, { label: string; hint: string; icon: typeof DoorOpen }> = {
@@ -118,22 +83,27 @@ export default function Calculadora() {
   const patchEvent = (variant: "corporativo" | "social") => (patch: Partial<EventForm>) =>
     setEvents((e) => ({ ...e, [variant]: { ...e[variant], ...patch } }));
 
-  // Pré-preenche com a qualificação do lead
+  // Pré-preenche com a qualificação do lead só o que ainda está vazio: escolher o cliente depois de
+  // digitar datas, quantidades ou o público não pode apagar nada.
   useEffect(() => {
     if (!lead || proposalId) return;
     const q = lead.qualification || {};
     const attachmentKinds = new Set((lead.attachments || []).map((a) => a.kind));
-    if (lead.product === "corporativo") setMode("corporativo");
-    if (lead.product === "social") setMode("social");
-    if (lead.product === "produto_unico") setMode("produto_unico");
-    if (lead.product === "estrutura_porta" || lead.product === "estrutura_montagem") setMode("porta");
-    setPickup(toIsoDay(q.data_retirada) || "");
-    setReturnDate(toIsoDay(q.data_devolucao) || "");
+    const pristine = !pickup && !returnDate && !Object.values(items).some((v) => v > 0)
+      && !events.corporativo.guests && !events.social.guests && !Object.values(single.items).some((v) => v > 0);
+    if (pristine) {
+      if (lead.product === "corporativo") setMode("corporativo");
+      if (lead.product === "social") setMode("social");
+      if (lead.product === "produto_unico") setMode("produto_unico");
+      if (lead.product === "estrutura_porta" || lead.product === "estrutura_montagem") setMode("porta");
+    }
+    setPickup((v) => v || toIsoDay(q.data_retirada) || "");
+    setReturnDate((v) => v || toIsoDay(q.data_devolucao) || "");
     const eventDay = toIsoDay(lead.event_date);
     setEvents((e) => ({
-      corporativo: { ...e.corporativo, guests: lead.guest_count || e.corporativo.guests, event_date: eventDay || e.corporativo.event_date },
-      social: {
-        ...e.social, guests: lead.guest_count || e.social.guests, event_date: eventDay || e.social.event_date,
+      corporativo: { ...e.corporativo, guests: e.corporativo.guests || lead.guest_count || 0, event_date: e.corporativo.event_date || eventDay },
+      social: e.social.guests ? { ...e.social, event_date: e.social.event_date || eventDay } : {
+        ...e.social, guests: lead.guest_count || 0, event_date: e.social.event_date || eventDay,
         dj: q.dj === undefined ? e.social.dj : answeredYes(q.dj),
         ceremony_sound: answeredYes(q.cerimonia) || e.social.ceremony_sound,
         has_project: answeredYes(q.projeto) || attachmentKinds.has("projeto"),
@@ -142,10 +112,12 @@ export default function Calculadora() {
     }));
     setSingle((f) => ({
       ...f,
-      event_date: toIsoDay(q.data_uso) || eventDay || f.event_date,
-      delivery: typeof q.forma_entrega === "string" && /entreg/i.test(q.forma_entrega) ? "entrega" : f.delivery,
+      event_date: f.event_date || toIsoDay(q.data_uso) || eventDay,
+      delivery: f.delivery === "retirada" && typeof q.forma_entrega === "string" && /entreg/i.test(q.forma_entrega) ? "entrega" : f.delivery,
       assembly: answeredYes(q.precisa_montagem) || f.assembly,
     }));
+    // Só ao trocar de lead; o estado atual é lido para não sobrescrever o que já foi digitado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead, proposalId]);
 
   // Abrindo uma proposta existente: carrega as entradas (salvar gera nova versão)
@@ -237,15 +209,15 @@ export default function Calculadora() {
                   {phoneDisplay(lead.phone)}{lead.product ? ` · ${PRODUCT_LABELS[lead.product]}` : ""}
                 </span>
               </span>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Trocar lead" onClick={() => setParams({})}><X className="w-4 h-4" /></Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Trocar cliente" onClick={() => setParams({})}><X className="w-4 h-4" /></Button>
             </div>
           ) : (
-            <LeadPicker onPick={(id) => setParams({ lead: id })} />
+            <ContactPicker onPick={(contact) => setParams({ lead: contact.id })} />
           )}
           {baseProposal ? (
             <StatusBadge tone="info" className="whitespace-normal">Editando a proposta v{baseProposal.version}: salvar gera uma nova versão</StatusBadge>
           ) : !leadId ? (
-            <span className="text-xs text-muted-foreground">Sem lead, a calculadora só simula.</span>
+            <span className="text-xs text-muted-foreground">Sem cliente, a calculadora só simula.</span>
           ) : null}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 rounded-xl bg-muted p-1">
@@ -352,7 +324,7 @@ export default function Calculadora() {
             {save.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             {preview.data?.requires_meeting ? "Salvar e chamar a Erica" : preview.data?.locked ? "Salvar e pedir aprovação" : "Salvar proposta"}
           </Button>
-          {!leadId && <p className="text-xs text-muted-foreground text-center">Escolha um lead acima para salvar.</p>}
+          {!leadId && <p className="text-xs text-muted-foreground text-center">Escolha o cliente acima para salvar.</p>}
         </div>
       </div>
     </PageShell>
