@@ -31,7 +31,7 @@ def test_context_formats_value_blocks_and_conditions():
                             valid_until=datetime(2026, 10, 21), issued_at=datetime(2026, 10, 16))
     assert ctx["total"] == "R$ 12.680,00"
     titles = [b["title"] for b in ctx["blocks"]]
-    assert titles == ["Estrutura", "Som", "Iluminação", "Vídeo", "Equipe"]
+    assert titles == ["Estrutura", "Sonorização", "Iluminação", "Vídeo", "Equipe"]
     assert ctx["blocks"][0]["items"] == ["01 Gol 3x4 m (Q30)"]  # o kit aparece montado, não peça a peça
     assert "08 Par LED" in ctx["blocks"][2]["items"]
     assert "06 m² Painel de LED (social, técnico incluso)" in ctx["blocks"][3]["items"]
@@ -43,6 +43,22 @@ def test_context_formats_value_blocks_and_conditions():
     assert ctx["validity"] == "Esta proposta tem validade de 05 (cinco) dias, até 21/10/2026."
     assert ctx["header"][:2] == ["Data do evento: 21/11/2026", "Local: JL Eventos"]
     assert ctx["issued_at"] == "16 de outubro de 2026"
+
+
+def test_context_follows_the_three_canva_models():
+    kwargs = dict(valid_until=datetime(2026, 10, 21), issued_at=datetime(2026, 10, 16))
+    social = build_pdf_context(social_proposal(), {"name": "Michele Cabral", "celebration_type": "Casamento"}, SETTINGS,
+                               **kwargs)
+    assert social["cover_name"] == "MICHELE CABRAL" and social["cover_date"] == "21/NOVEMBRO/2026"
+    assert social["total_label"] == "INVESTIMENTO" and "seu casamento" in social["mission"][0]
+    party = build_pdf_context(social_proposal(), {"name": "Ana", "celebration_type": "Aniversário"}, SETTINGS, **kwargs)
+    assert "casamento" not in " ".join(party["mission"]) and "seu evento" in party["mission"][0]
+    corporate = build_pdf_context({**social_proposal(), "mode": "corporativo"}, {"name": "Leandro"}, SETTINGS, **kwargs)
+    assert corporate["total_label"] == "CUSTO TOTAL" and "ambiente envolvente" in corporate["mission"][-1]
+    structure = build_pdf_context({"mode": "porta", "inputs": {}, "lines": [], "costs": [], "total": 300},
+                                  {"name": "Lucas"}, SETTINGS)
+    assert structure["cover_name"] is None and structure["cover_date"] is None
+    assert structure["mission"][0].startswith("Nossa missão é planejar, organizar")
 
 
 def test_context_porta_and_single_product():

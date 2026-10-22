@@ -1,12 +1,14 @@
 """PDF da proposta comercial, no visual do modelo atual da LM (`Proposta Comercial .pdf`).
 
-Páginas: capa (nome do cliente e data), missão, referências, página do evento (itens por bloco,
-incluso e não incluso, pagamento, validade e cancelamento; continua em mais páginas se precisar)
-e contato. Missão, referências e contato são as páginas do modelo atual, guardadas como imagem em
-`sales/pdf_assets/`; para trocar, substitua os arquivos mantendo os nomes. Capa e página do evento usam
-`fundo_capa.jpg` e `fundo_preco.jpg` (luz quente da referência do Canva). As fotos de referências mudam
-com o tipo de proposta (`referencias_<tipo>.jpg`, ver REFERENCE_ASSETS); sem o arquivo do tipo, vale
-`referencias.jpg`.
+Páginas: capa, missão, referências, página do evento (itens por bloco, incluso e não incluso,
+pagamento, validade e cancelamento; continua em mais páginas se precisar) e contato. Seguem os três
+modelos do Canva: estrutura (porta, sem nome na capa), corporativo e casamento/social (nome do
+cliente no alto da capa e data do evento embaixo). O texto da missão muda com o tipo da proposta
+(MISSION_TEXTS) e é desenhado sobre `fundo_missao.jpg`. Referências e contato são as páginas do
+modelo atual, guardadas como imagem em `sales/pdf_assets/`; para trocar, substitua os arquivos
+mantendo os nomes. Capa e página do evento usam `fundo_capa.jpg` e `fundo_preco.jpg` (luz quente da
+referência do Canva). As fotos de referências mudam com o tipo de proposta
+(`referencias_<tipo>.jpg`, ver REFERENCE_ASSETS); sem o arquivo do tipo, vale `referencias.jpg`.
 
 Valores dos itens: só aparecem com `inputs.show_item_prices` (desligado por padrão). Ligado, cada item
 sai com quantidade, preço unitário e subtotal (o preço editado na proposta, se houver), e o quadro
@@ -54,6 +56,51 @@ REFERENCE_ASSETS = {
 }
 
 
+MISSION_ESTRUTURA = [
+    "Nossa missão é planejar, organizar e produzir um espetáculo de diferentes linguagens com foco na "
+    "excelência e qualidade.",
+    "Com atendimento personalizado oferecemos uma ampla gama de serviços para transformar seu evento em "
+    "realidade.",
+    "Para isso, listamos o que será feito no seu evento nas páginas abaixo.",
+    "Tudo o que executamos é impulsionado com excelência e compromisso, desenvolvendo os melhores "
+    "resultados do mercado.",
+]
+MISSION_CORPORATIVO = [
+    "Nossa missão é dar vida ao planejamento do seu evento, transformando em realidade.",
+    "Proporcionamos um atendimento personalizado e único, garantindo uma experiência inesquecível.",
+    "Para isso, listamos o que será feito no seu evento nas páginas abaixo.",
+    "Tudo o que executamos é impulsionado com excelência e compromisso, desenvolvendo os melhores "
+    "resultados do mercado.",
+    "Transformamos o seu evento em um ambiente envolvente e inspirador, onde os participantes possam se "
+    "conectar, aprender e compartilhar ideias!",
+]
+MISSION_CASAMENTO = [
+    "Nossa missão é dar vida ao planejamento do seu casamento, transformando o sonho de um dia perfeito "
+    "em realidade.",
+    "Com atendimento personalizado, queremos que seu casamento seja único e traga as melhores experiências "
+    "para você e seus convidados.",
+    "Para isso, listamos o que será feito nas páginas abaixo.",
+    "Tudo o que fazemos é impulsionado pela excelência e compromisso de desenvolver os melhores serviços "
+    "do mercado.",
+    "Transformaremos seu casamento em uma experiência inesquecível!",
+]
+MISSION_SOCIAL = [text.replace("casamento", "evento") for text in MISSION_CASAMENTO]
+
+# Texto da página de missão por modo (os três modelos do Canva); social só diz "casamento" para casamento
+MISSION_TEXTS = {
+    "porta": MISSION_ESTRUTURA,
+    "produto_unico": MISSION_ESTRUTURA,
+    "corporativo": MISSION_CORPORATIVO,
+    "social": MISSION_SOCIAL,
+}
+
+
+def mission_text(mode: str | None, celebration_type: str | None = None) -> list[str]:
+    if mode == "social" and "casamento" in (celebration_type or "").lower():
+        return MISSION_CASAMENTO
+    return MISSION_TEXTS.get(mode, MISSION_ESTRUTURA)
+
+
 def asset(name: str, fallback: str) -> str:
     """Caminho do asset, ou do fallback quando o arquivo ainda não foi colocado em pdf_assets/."""
     path = ASSETS / name
@@ -63,10 +110,10 @@ def asset(name: str, fallback: str) -> str:
 BLOCK_ORDER = OrderedDict([
     ("estrutura", "Estrutura"),
     ("palco", "Palco e praticáveis"),
-    ("som", "Som"),
+    ("som", "Sonorização"),
     ("iluminacao", "Iluminação"),
     ("video", "Vídeo"),
-    ("outros", "Outros itens"),
+    ("outros", "Extra"),
 ])
 
 # Custos operacionais que aparecem como serviço da equipe
@@ -110,6 +157,11 @@ def _fmt_day(value) -> str:
 def _long_day(value) -> str:
     day = _day(value)
     return f"{day.day:02d} de {MONTHS[day.month - 1]} de {day.year}" if day else ""
+
+
+def _cover_day(value) -> str:
+    day = _day(value)
+    return f"{day.day:02d}/{MONTHS[day.month - 1].upper()}/{day.year}" if day else ""
 
 
 def _qty(value, unit: str) -> str:
@@ -219,6 +271,7 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
     if not proposal.get("with_invoice") and mode in ("corporativo", "social"):
         not_included.append("Nota fiscal")
 
+    event_day = inputs.get("event_date") or customer.get("event_date") or proposal.get("period_start")
     if mode == "porta":
         header = [f"Retirada: {_fmt_day(inputs.get('pickup_date') or proposal.get('period_start'))}",
                   f"Devolução: {_fmt_day(inputs.get('return_date'))}",
@@ -229,7 +282,6 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         if inputs.get("end_date"):
             header.insert(1, f"Devolução: {_fmt_day(inputs.get('end_date'))}")
     else:
-        event_day = inputs.get("event_date") or customer.get("event_date") or proposal.get("period_start")
         header = [f"Data do evento: {_fmt_day(event_day)}",
                   f"Local: {customer.get('venue') or qualification.get('local') or 'a definir'}",
                   f"Horário: {qualification.get('horario') or qualification.get('horario_evento') or 'a definir'}"]
@@ -259,6 +311,11 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         "client_name": customer.get("name") or customer.get("company") or "Cliente",
         "company": customer.get("company") if customer.get("name") else None,
         "issued_at": _long_day(issued_at),
+        "cover_name": (customer.get("name") or customer.get("company") or "").upper()
+        if mode in ("corporativo", "social") else None,
+        "cover_date": _cover_day(event_day) if mode in ("corporativo", "social") else None,
+        "mission": mission_text(mode, customer.get("celebration_type")),
+        "total_label": "INVESTIMENTO" if mode == "social" else "CUSTO TOTAL",
         "version": proposal.get("version") or 1,
         "title": MODE_TITLES.get(mode, "Proposta"),
         "mode": mode,
@@ -290,6 +347,7 @@ STYLES = {
     "small": _style("small", 10, MUTED, leading=13),
     "pill": _style("pill", 12, white, leading=15),
     "total": _style("total", 21, leading=26, font="Helvetica-Bold"),
+    "mission": _style("mission", 15, leading=20),
 }
 
 
@@ -303,7 +361,7 @@ class PaymentBox(Flowable):
         self.parts = (
             [Paragraph(escape(p), STYLES["pill"]) for p in context["payment"]],
             [Paragraph(escape(t), STYLES["item"]) for t in context.get("price_summary") or []],
-            Paragraph(f"VALOR TOTAL: {escape(context['total'])}", STYLES["total"]),
+            Paragraph(f"{context['total_label']}: {escape(context['total'])}", STYLES["total"]),
             [Paragraph(escape(t), STYLES["small"]) for t in
              filter(None, [context.get("invoice_note"), context["validity"], context["cancellation"]])],
         )
@@ -366,19 +424,27 @@ def _draw_cover(context):
         size = 230
         canvas.drawImage(str(ASSETS / "logo.png"), (w - size) / 2, h / 2 - size / 2 - 40, width=size, height=size,
                          mask="auto")
-        canvas.setFillColor(white)
-        canvas.setFont("Helvetica-Bold", 20)
-        canvas.drawCentredString(w / 2, 190, context["client_name"][:48])
-        canvas.setFont("Helvetica", 13)
-        y = 166
-        if context.get("company"):
-            canvas.drawCentredString(w / 2, y, context["company"][:60])
-            y -= 20
-        canvas.setFillColor(COPPER)
-        canvas.drawCentredString(w / 2, y, context["title"])
-        canvas.setFillColor(MUTED)
-        canvas.setFont("Helvetica", 11)
-        canvas.drawCentredString(w / 2, y - 20, f"Proposta v{context['version']} · {context['issued_at']}")
+        # corporativo e casamento/social: nome no alto e data do evento embaixo; estrutura fica só com o título
+        canvas.setFont("Helvetica-Bold", 15)
+        if context.get("cover_name"):
+            canvas.drawCentredString(w / 2, h - 96, context["cover_name"][:40])
+        if context.get("cover_date"):
+            canvas.drawCentredString(w / 2, 96, context["cover_date"])
+    return draw
+
+
+def _draw_mission(context):
+    def draw(canvas, doc):
+        w, h = PAGE
+        canvas.drawImage(asset("fundo_missao.jpg", "fundo.jpg"), 0, 0, width=w, height=h)
+        y = h - 262
+        for text in context["mission"]:
+            para = Paragraph(escape(text), STYLES["mission"])
+            _, para_h = para.wrap(w - 150, 1000)
+            para.drawOn(canvas, 75, y - para_h)
+            y -= para_h + 14
+        size = 130
+        canvas.drawImage(str(ASSETS / "logo.png"), (w - size) / 2, 70, width=size, height=size, mask="auto")
     return draw
 
 
@@ -419,7 +485,7 @@ def render_pdf(context: dict, compress: bool = True) -> bytes:
     content = Frame(x, y, fw, fh - 70, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0, id="content")
     doc.addPageTemplates([
         PageTemplate(id="capa", frames=[full], onPage=_draw_cover(context)),
-        PageTemplate(id="missao", frames=[full], onPage=_draw_image_page("missao.jpg")),
+        PageTemplate(id="missao", frames=[full], onPage=_draw_mission(context)),
         PageTemplate(id="referencias", frames=[full], onPage=_draw_image_page(
             REFERENCE_ASSETS.get(context.get("mode"), "referencias.jpg"), "referencias.jpg")),
         PageTemplate(id="evento", frames=[content], onPage=_draw_content(context)),
