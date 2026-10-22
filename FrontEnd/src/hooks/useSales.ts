@@ -176,6 +176,8 @@ export function useUpdatePriceSettings() {
     onSuccess: (data) => {
       queryClient.setQueryData(["sales-prices"], data);
       queryClient.invalidateQueries({ queryKey: ["sales-catalog"] });
+      // A calculadora aberta recalcula o resumo com os novos valores
+      queryClient.invalidateQueries({ queryKey: ["quote-preview"] });
     },
   });
 }

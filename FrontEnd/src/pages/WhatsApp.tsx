@@ -73,7 +73,25 @@ export default function WhatsApp() {
   const [isSending, setIsSending] = useState(false);
   const [activeTab, setActiveTab] = useState<ConversationTab>("OPEN");
   const [searchInput, setSearchInput] = useState("");
-  const [listFilters, setListFilters] = useState<ConversationFilters>({});
+  // Filtros da lista na URL (?atendimento=agente&responsavel=ia&qualificados=1): link e F5 mantêm a escolha
+  const [searchParams, setSearchParams] = useSearchParams();
+  const listFilters = useMemo<ConversationFilters>(() => {
+    const attendance = ({ agente: "AGENTE", operador: "OPERADOR" } as const)[searchParams.get("atendimento") ?? ""];
+    const assignee = searchParams.get("responsavel");
+    return {
+      ...(attendance ? { attendance } : {}),
+      ...(assignee ? { assignee } : {}),
+      ...(searchParams.get("qualificados") === "1" ? { aiQualified: true } : {}),
+    };
+  }, [searchParams]);
+  const setListFilters = (filters: ConversationFilters) => {
+    const params = new URLSearchParams(searchParams);
+    const put = (key: string, value?: string) => (value ? params.set(key, value) : params.delete(key));
+    put("atendimento", filters.attendance?.toLowerCase());
+    put("responsavel", filters.assignee);
+    put("qualificados", filters.aiQualified ? "1" : undefined);
+    setSearchParams(params, { replace: true });
+  };
   const [callOpen, setCallOpen] = useState(false);
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
   const [closeStatus, setCloseStatus] = useState<"WON" | "LOST">("WON");
@@ -328,9 +346,7 @@ export default function WhatsApp() {
         .catch(() => toast.error("Não foi possível abrir a conversa."));
     }
 
-    if (window.innerWidth < 1280) {
-      setIsProfileOpen(false);
-    }
+    setIsProfileOpen(false);
     markAsRead(id);
   };
 
@@ -358,12 +374,13 @@ export default function WhatsApp() {
   };
 
   // Atalho vindo de outras páginas (ex.: Contatos): /whatsapp?conversa=<id>
-  const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const id = searchParams.get("conversa");
     if (!id) return;
     handleSelectConversation(id);
-    setSearchParams({}, { replace: true });
+    const params = new URLSearchParams(searchParams);
+    params.delete("conversa");
+    setSearchParams(params, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -437,9 +454,7 @@ export default function WhatsApp() {
 
             <div className={cn(
               "flex-1 min-w-0 bg-background/50 transition-all duration-300",
-              selectedConversationId && !isProfileOpen ? "flex flex-col" : "hidden",
-              !isProfileOpen ? "md:flex md:flex-col" : "md:hidden",
-              "xl:flex xl:flex-col"
+              selectedConversationId ? "flex flex-col" : "hidden md:flex md:flex-col"
             )}>
               {selectedConversationId && selectedConversationObj ? (
                 <ChatArea
@@ -480,31 +495,27 @@ export default function WhatsApp() {
               )}
             </div>
 
-            {selectedConversationObj && isProfileOpen && (
-              <div className={cn(
-                  "flex-shrink-0 border-l border-border/50 bg-background/50 animate-in slide-in-from-right-10 duration-300",
-                  isProfileOpen ? "block md:flex md:flex-col" : "hidden",
-                  "w-full md:w-auto md:flex-1 xl:flex-none xl:w-80"
-              )}>
-                <ClientProfile
-                  customer={{
-                      ...selectedConversationObj,
-                      id: selectedConversationObj.customer,
-                      conversation_id: selectedConversationObj.id
-                  }}
-                  onEdit={() => setIsEditLeadOpen(true)}
-                  onCloseMobile={() => setIsProfileOpen(false)}
-                  onCloseConversation={() => setIsCloseDialogOpen(true)}
-                  isClosed={isClosed}
-                  onSelectConversation={handleSelectConversation}
-                  onAssign={(assignee) => assignMutation.mutate({ id: selectedConversationObj.id, assignee })}
-                  onCall={handleCall}
-                />
-              </div>
-            )}
           </div>
         </main>
       </div>
+
+      {selectedConversationObj && (
+        <ClientProfile
+          open={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          customer={{
+              ...selectedConversationObj,
+              id: selectedConversationObj.customer,
+              conversation_id: selectedConversationObj.id
+          }}
+          onEdit={() => setIsEditLeadOpen(true)}
+          onCloseConversation={() => setIsCloseDialogOpen(true)}
+          isClosed={isClosed}
+          onSelectConversation={handleSelectConversation}
+          onAssign={(assignee) => assignMutation.mutate({ id: selectedConversationObj.id, assignee })}
+          onCall={handleCall}
+        />
+      )}
 
       <CallDialog
         open={callOpen}

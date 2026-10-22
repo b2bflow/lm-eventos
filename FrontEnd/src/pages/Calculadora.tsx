@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, CalendarHeart, DoorOpen, Loader2, Minus, Package, Plus, Save, UserRound, X } from "lucide-react";
+import { Building2, CalendarHeart, DoorOpen, Loader2, Minus, Package, Plus, Save, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PriceSettings } from "@/components/features/settings/PriceSettings";
 import { PageShell } from "@/components/shared/PageShell";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,7 @@ import { QuoteSummary } from "@/components/domain/sales/QuoteSummary";
 import { EventFormFields } from "@/components/domain/sales/EventFormFields";
 import { SingleProductFields } from "@/components/domain/sales/SingleProductFields";
 import { ContactPicker } from "@/components/domain/contacts/ContactPicker";
-import { InventoryItemDrawer } from "@/components/domain/inventory/InventoryItemDrawer";
+import { InventoryItemDialog } from "@/components/domain/inventory/InventoryItemDialog";
 import {
   answeredYes, emptyEvent, emptySingleProduct, eventInputs, singleProductInputs, toIsoDay, withServiceDefaults,
   type EventForm, type SingleProductForm,
@@ -89,6 +91,9 @@ export default function Calculadora() {
       toast.error("Não foi possível abrir o item.");
     }
   };
+
+  // "Alterar valores": custos operacionais (mesmos da aba Valores de Configurações), só admin.
+  const [costsOpen, setCostsOpen] = useState(false);
 
   const [mode, setMode] = useState<Mode>("porta");
   const [pickup, setPickup] = useState("");
@@ -244,6 +249,11 @@ export default function Calculadora() {
     <PageShell
       title="Calculadora de proposta"
       maxWidthClassName="max-w-7xl"
+      actions={isAdmin && (
+        <Button variant="outline" className="gap-2" onClick={() => setCostsOpen(true)}>
+          <SlidersHorizontal className="w-4 h-4" /> Alterar valores
+        </Button>
+      )}
     >
       {/* Para quem e qual tipo de proposta */}
       <div className="glass rounded-2xl border border-border/50 p-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -392,7 +402,20 @@ export default function Calculadora() {
         </div>
       </div>
       {isAdmin && (
-        <InventoryItemDrawer itemId={priceItemId} onClose={() => setPriceItemId(null)} canEdit canEditPrice myId={me?.id} />
+        <InventoryItemDialog itemId={priceItemId} onClose={() => setPriceItemId(null)} canEdit canEditPrice myId={me?.id} />
+      )}
+      {isAdmin && (
+        <Dialog open={costsOpen} onOpenChange={setCostsOpen}>
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Custos operacionais</DialogTitle>
+              <DialogDescription>
+                Carga, montagem, frete, equipe e técnicos. Valem para todas as propostas novas; campo vazio volta ao padrão.
+              </DialogDescription>
+            </DialogHeader>
+            <PriceSettings only={["operational_costs"]} onSaved={() => setCostsOpen(false)} />
+          </DialogContent>
+        </Dialog>
       )}
     </PageShell>
   );

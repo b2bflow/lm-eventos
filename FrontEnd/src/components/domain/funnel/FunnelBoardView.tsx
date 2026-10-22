@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { DndContext, PointerSensor, TouchSensor, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LEAD_STAGE_TONES, LEAD_STATUS_LABELS, LEAD_STATUS_OPTIONS, type LeadStage } from "@/constants/mappings";
@@ -17,9 +17,11 @@ interface ColumnProps {
   loadingMore: boolean;
   onLoadMore: () => void;
   onOpen: (id: string) => void;
+  /** Só na coluna "Novo lead", onde entram os cards criados à mão. */
+  onAdd?: () => void;
 }
 
-function Column({ stage, leads, count, hasMore, loadingMore, onLoadMore, onOpen }: ColumnProps) {
+function Column({ stage, leads, count, hasMore, loadingMore, onLoadMore, onOpen, onAdd }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const value = leads.reduce((sum, l) => sum + (l.contract_value || l.quoted_amount || 0), 0);
   return (
@@ -40,6 +42,12 @@ function Column({ stage, leads, count, hasMore, loadingMore, onLoadMore, onOpen 
         <div className="mt-1 text-xs text-muted-foreground">{value > 0 ? `${formatBRL(value)}${hasMore ? " nesta página" : ""}` : "—"}</div>
       </header>
       <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-24">
+        {onAdd && (
+          <button type="button" onClick={onAdd}
+            className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-medium text-muted-foreground hover:border-primary/60 hover:text-primary hover:bg-primary/5 transition-colors">
+            <Plus className="w-3.5 h-3.5" /> Novo card
+          </button>
+        )}
         {leads.length === 0 && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Nenhum lead nesta etapa.</p>}
         {leads.map((lead) => (
           <LeadCard key={lead.id} lead={lead} onOpen={onOpen} />
@@ -59,9 +67,10 @@ interface FunnelBoardViewProps {
   filters: FunnelFilters;
   onOpen: (id: string) => void;
   onMove: (leadId: string, from: LeadStage, to: LeadStage) => void;
+  onAdd?: () => void;
 }
 
-export function FunnelBoardView({ board, filters, onOpen, onMove }: FunnelBoardViewProps) {
+export function FunnelBoardView({ board, filters, onOpen, onMove, onAdd }: FunnelBoardViewProps) {
   // Páginas extras carregadas por coluna ("Carregar mais"), zeradas quando o quadro recarrega.
   const [extra, setExtra] = useState<Partial<Record<LeadStage, { leads: FunnelLead[]; hasMore: boolean }>>>({});
   const [loadingStage, setLoadingStage] = useState<LeadStage | null>(null);
@@ -110,6 +119,7 @@ export function FunnelBoardView({ board, filters, onOpen, onMove }: FunnelBoardV
               loadingMore={loadingStage === stage}
               onLoadMore={() => loadMore(stage)}
               onOpen={onOpen}
+              onAdd={stage === "NEW_LEAD" ? onAdd : undefined}
             />
           );
         })}

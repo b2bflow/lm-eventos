@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 
 import Login from "./pages/LoginScreen";
@@ -13,7 +13,6 @@ import Leads from "./pages/Leads";
 import NotFound from "./pages/NotFound";
 import Settings from "@/pages/Settings";
 import Funil from "@/pages/Funil";
-import FunilLead from "@/pages/FunilLead";
 import Contatos from "@/pages/Contatos";
 import Calculadora from "@/pages/Calculadora";
 import Estoque from "@/pages/Estoque";
@@ -39,6 +38,12 @@ const PrivateRoute = ({ children, adminOnly = false }: { children: React.ReactNo
 
 const isAuthenticated = () => !!localStorage.getItem("accessToken");
 
+// Links da antiga página do lead: o lead agora abre em popup sobre o funil.
+const LeadPageRedirect = () => {
+  const { id } = useParams();
+  return <Navigate to={`/funil?lead=${id}`} replace />;
+};
+
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
@@ -54,7 +59,7 @@ const App = () => (
             <Route path="/whatsapp" element={<PrivateRoute><WhatsApp /></PrivateRoute>} />
             <Route path="/leads" element={<PrivateRoute><Leads /></PrivateRoute>} />
             <Route path="/funil" element={<PrivateRoute><Funil /></PrivateRoute>} />
-            <Route path="/funil/lead/:id" element={<PrivateRoute><FunilLead /></PrivateRoute>} />
+            <Route path="/funil/lead/:id" element={<LeadPageRedirect />} />
             <Route path="/contatos" element={<PrivateRoute><Contatos /></PrivateRoute>} />
             <Route path="/calculadora" element={<PrivateRoute><Calculadora /></PrivateRoute>} />
             <Route path="/estoque" element={<PrivateRoute><Estoque /></PrivateRoute>} />

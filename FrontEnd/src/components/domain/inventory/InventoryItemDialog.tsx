@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArchiveRestore, CalendarClock, ClipboardCheck, Loader2, Minus, Plus, Trash2 } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -378,7 +378,7 @@ function ReservationsSection({ item, canEdit, myId, onSaved }: {
   );
 }
 
-export function InventoryItemDrawer({ itemId, onClose, canEdit, canEditPrice = false, myId }: {
+export function InventoryItemDialog({ itemId, onClose, canEdit, canEditPrice = false, myId }: {
   itemId: string | null; onClose: () => void; canEdit: boolean; canEditPrice?: boolean; myId?: number;
 }) {
   const queryClient = useQueryClient();
@@ -414,23 +414,24 @@ export function InventoryItemDrawer({ itemId, onClose, canEdit, canEditPrice = f
   };
 
   return (
-    <Sheet open={!!itemId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto" onOpenAutoFocus={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); }}>
+    <Dialog open={!!itemId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-xl sm:max-h-[90vh]" onOpenAutoFocus={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); }}>
         {isLoading || !item ? (
           <div className="flex justify-center py-10">
-            <SheetTitle className="sr-only">Carregando item</SheetTitle>
+            <DialogTitle className="sr-only">Carregando item</DialogTitle>
             <Loader2 className="w-6 h-6 animate-spin" />
           </div>
         ) : (
           <div className="space-y-6">
-            <SheetHeader className="text-left space-y-1">
-              <SheetTitle>{item.name}</SheetTitle>
+            <DialogHeader className="text-left space-y-1">
+              <DialogTitle className="pr-6">{item.name}</DialogTitle>
+              <DialogDescription className="sr-only">Preço, quantidade, reservas e movimentações do item.</DialogDescription>
               <div className="flex flex-wrap gap-1 text-xs text-muted-foreground items-center">
                 <code>{item.code}</code>
                 {!item.active && <Badge variant="destructive" className="text-[10px]">removido</Badge>}
                 {!item.owned && <Badge variant="outline" className="text-[10px]">terceirizado</Badge>}
               </div>
-            </SheetHeader>
+            </DialogHeader>
 
             <PriceSection item={item} canEdit={canEditPrice} onSaved={refresh} />
             <QuantitySection item={item} canEdit={canEdit} onSaved={refresh} />
@@ -467,7 +468,7 @@ export function InventoryItemDrawer({ itemId, onClose, canEdit, canEditPrice = f
             )}
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

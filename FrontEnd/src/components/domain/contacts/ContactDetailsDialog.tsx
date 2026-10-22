@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { History, Loader2, MessageSquare, Phone, Plus, SquareKanban } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +46,7 @@ function Section({ title, children, action }: { title: string; children: React.R
   );
 }
 
-function LeadHistoryItem({ contactId, lead }: { contactId: string; lead: ContactLead }) {
+function LeadHistoryItem({ contactId, lead, inFunnel }: { contactId: string; lead: ContactLead; inFunnel: boolean }) {
   const [showTimeline, setShowTimeline] = useState(false);
   const { data: timeline = [], isLoading } = useContactLeadTimeline(showTimeline ? contactId : null, lead.id);
   const value = lead.contract_value || lead.quoted_amount;
@@ -55,6 +55,11 @@ function LeadHistoryItem({ contactId, lead }: { contactId: string; lead: Contact
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">Lead {lead.number}</span>
         {lead.current && <Badge>Atual</Badge>}
+        {lead.current && !inFunnel && (
+          <Badge variant="outline" className="text-muted-foreground" title="Lead de antes do início pela plataforma: não aparece no funil">
+            Fora do funil
+          </Badge>
+        )}
         <Badge variant="outline" className={LEAD_STATUS_STYLES[lead.stage]}>{LEAD_STATUS_LABELS[lead.stage] || lead.stage}</Badge>
         {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product] || lead.product}</Badge>}
       </div>
@@ -93,7 +98,7 @@ function LeadHistoryItem({ contactId, lead }: { contactId: string; lead: Contact
   );
 }
 
-export function ContactDrawer({ contactId, onClose }: { contactId: string | null; onClose: () => void }) {
+export function ContactDetailsDialog({ contactId, onClose }: { contactId: string | null; onClose: () => void }) {
   const navigate = useNavigate();
   const { data: contact, isLoading } = useContact(contactId);
   const { update, newLead } = useContactActions(contactId);
@@ -139,14 +144,18 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
   );
 
   return (
-    <Sheet open={!!contactId} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto p-0">
+    <Dialog open={!!contactId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl p-0 sm:p-0 gap-0 sm:max-h-[90vh]">
         {isLoading || !contact || !form ? (
-          <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          <div className="flex justify-center py-20">
+            <DialogTitle className="sr-only">Carregando contato</DialogTitle>
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
         ) : (
-          <div className="p-5 space-y-6">
-            <SheetHeader className="text-left space-y-2">
-              <SheetTitle className="pr-6">{contact.name || "Sem nome"}</SheetTitle>
+          <div className="p-5 sm:p-6 space-y-6">
+            <DialogHeader className="text-left space-y-2">
+              <DialogTitle className="pr-6">{contact.name || "Sem nome"}</DialogTitle>
+              <DialogDescription className="sr-only">Leads, dados e anexos do contato.</DialogDescription>
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <a href={`tel:+${contact.phone}`} className="flex items-center gap-1 hover:underline">
                   <Phone className="w-3.5 h-3.5" /> {phoneDisplay(contact.phone)}
@@ -155,10 +164,10 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                 <Badge variant="outline">{OWNER_LABELS[contact.owner] || contact.owner}</Badge>
                 {contact.human_operator && <Badge variant="destructive">Parceiro / operador humano</Badge>}
               </div>
-            </SheetHeader>
+            </DialogHeader>
 
             <div className="grid grid-cols-2 gap-2">
-              <Button size="sm" variant="outline" disabled={!currentLead} onClick={() => navigate(`/funil?lead=${contact.id}`)}>
+              <Button size="sm" variant="outline" disabled={!currentLead || !contact.in_funnel} onClick={() => navigate(`/funil?lead=${contact.id}`)}>
                 <SquareKanban className="w-4 h-4 mr-1" /> Abrir no funil
               </Button>
               <Button size="sm" variant="outline" disabled={!contact.conversation_id}
@@ -172,7 +181,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                 <p className="text-sm text-muted-foreground">Nenhum lead deste contato.</p>
               ) : (
                 <ul className="space-y-2">
-                  {contact.leads.map((lead) => <LeadHistoryItem key={lead.id} contactId={contact.id} lead={lead} />)}
+                  {contact.leads.map((lead) => <LeadHistoryItem key={lead.id} contactId={contact.id} lead={lead} inFunnel={contact.in_funnel} />)}
                 </ul>
               )}
             </Section>
@@ -240,7 +249,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
             )}
           </div>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

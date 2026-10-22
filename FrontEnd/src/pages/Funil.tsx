@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Columns3, List, ListTodo, Loader2, Plus, Search, X } from "lucide-react";
 import { endOfDay } from "date-fns";
 import { PageShell } from "@/components/shared/PageShell";
@@ -18,6 +18,7 @@ import { FunnelBoardView } from "@/components/domain/funnel/FunnelBoardView";
 import { FunnelListView } from "@/components/domain/funnel/FunnelListView";
 import { LostReasonDialog } from "@/components/domain/funnel/LeadDialogs";
 import { NewLeadDialog } from "@/components/domain/funnel/NewLeadDialog";
+import { LeadDetailsDialog } from "@/components/domain/funnel/LeadDetailsDialog";
 
 const ALL = "__all__";
 
@@ -66,19 +67,16 @@ function QueueList({ title, tasks, onOpen, onDone }: {
 
 export default function Funil() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState<FunnelFilters>({});
   const [searchInput, setSearchInput] = useState("");
   const [showQueue, setShowQueue] = useState(false);
   const [pendingLost, setPendingLost] = useState<string | null>(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
-  const linkedLeadId = searchParams.get("lead");
+  // Lead aberto em popup sobre o funil (/funil?lead=<id>, também usado pelos links das outras telas)
+  const openLeadId = searchParams.get("lead");
   const view = searchParams.get("view") === "lista" ? "lista" : "quadro";
-
-  // Links antigos (/funil?lead=<id>) abrem a página do lead
-  useEffect(() => {
-    if (linkedLeadId) navigate(`/funil/lead/${linkedLeadId}`, { replace: true });
-  }, [linkedLeadId, navigate]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setFilters((f) => ({ ...f, search: searchInput.trim() || undefined })), 400);
@@ -94,7 +92,21 @@ export default function Funil() {
   const dueToday = queue.filter((t) => new Date(utcIso(t.due_at)).getTime() <= todayLimit);
   const upcoming = queue.filter((t) => new Date(utcIso(t.due_at)).getTime() > todayLimit);
 
-  const openLead = (id: string) => navigate(`/funil/lead/${id}`);
+  const openLead = (id: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("lead", id);
+    setSearchParams(params, { state: { leadPopup: true } });
+  };
+  const closeLead = () => {
+    // Aberto aqui no funil: volta no histórico (o Voltar do navegador também fecha o popup)
+    if ((location.state as { leadPopup?: boolean } | null)?.leadPopup) {
+      navigate(-1);
+      return;
+    }
+    const params = new URLSearchParams(searchParams);
+    params.delete("lead");
+    setSearchParams(params, { replace: true });
+  };
   const setView = (next: "quadro" | "lista") => {
     const params = new URLSearchParams(searchParams);
     if (next === "lista") params.set("view", "lista");
@@ -190,10 +202,11 @@ export default function Funil() {
       ) : isLoading || !board ? (
         <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
       ) : (
-        <FunnelBoardView board={board} filters={filters} onOpen={openLead} onMove={handleMove} />
+        <FunnelBoardView board={board} filters={filters} onOpen={openLead} onMove={handleMove} onAdd={() => setNewLeadOpen(true)} />
       )}
 
       <NewLeadDialog open={newLeadOpen} onClose={() => setNewLeadOpen(false)} />
+      <LeadDetailsDialog leadId={openLeadId} onClose={closeLead} />
       <LostReasonDialog
         open={!!pendingLost}
         onClose={() => setPendingLost(null)}

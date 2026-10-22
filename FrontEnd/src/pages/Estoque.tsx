@@ -21,7 +21,7 @@ import { formatBRL } from "@/lib/format";
 import { isAdminUser, useCurrentUser } from "@/hooks/useFunnel";
 import { useLmSettings } from "@/hooks/useLmSettings";
 import { useInventory, type InventoryRow } from "@/hooks/useSales";
-import { InventoryItemDrawer } from "@/components/domain/inventory/InventoryItemDrawer";
+import { InventoryItemDialog } from "@/components/domain/inventory/InventoryItemDialog";
 import { INVENTORY_LINES } from "@/components/domain/inventory/constants";
 import { NewInventoryItemDialog } from "@/components/domain/inventory/NewInventoryItemDialog";
 
@@ -379,7 +379,7 @@ export default function Estoque() {
               </>
             )}
 
-      <InventoryItemDrawer itemId={openItem} onClose={() => setOpenItem(null)} canEdit={canEdit} canEditPrice={isAdmin} myId={me?.id} />
+      <InventoryItemDialog itemId={openItem} onClose={() => setOpenItem(null)} canEdit={canEdit} canEditPrice={isAdmin} myId={me?.id} />
       <NewInventoryItemDialog open={creating} onOpenChange={setCreating} defaultLine={line ?? undefined} onCreated={setOpenItem}
         canEditPrice={isAdmin} />
     </PageShell>

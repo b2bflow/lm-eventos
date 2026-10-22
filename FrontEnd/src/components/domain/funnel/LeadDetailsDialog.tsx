@@ -1,19 +1,18 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowLeft, BadgeCheck, Calculator, CalendarPlus, Check, CheckCircle2, Contact, FileText, Loader2, MessageSquare, Pencil,
+  BadgeCheck, Calculator, CalendarPlus, Check, CheckCircle2, Contact, FileText, Loader2, MessageSquare, Pencil,
   Phone, PhoneCall, Send, ThumbsDown, ThumbsUp, Trophy, XCircle,
 } from "lucide-react";
-import { PageShell } from "@/components/shared/PageShell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import api from "@/services/api";
@@ -193,24 +192,25 @@ function ActivitiesTab({ leadId }: { leadId: string }) {
   return (
     <div className="space-y-4">
       <Card title="Nova atividade">
-        <div className="grid grid-cols-1 sm:grid-cols-[160px_minmax(0,1fr)_150px_110px_auto] gap-2 items-end">
-          <div className="space-y-1">
+        {/* Quebra de linha conforme a largura do popup: o título nunca fica espremido */}
+        <div className="flex flex-wrap gap-2 items-end">
+          <div className="space-y-1 w-full sm:w-40">
             <Label className="text-xs">Tipo</Label>
             <Select value={form.type} onValueChange={(type) => setForm({ ...form, type })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{Object.entries(ACTIVITY_TYPES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1 min-w-[12rem]">
             <Label htmlFor="activity-title" className="text-xs">Título</Label>
             <Input id="activity-title" value={form.title} placeholder="Ex.: ligar para confirmar a data"
               onChange={(e) => setForm({ ...form, title: e.target.value })} onKeyDown={(e) => e.key === "Enter" && create()} />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 w-[150px]">
             <Label htmlFor="activity-date" className="text-xs">Data</Label>
             <Input id="activity-date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 w-[110px]">
             <Label htmlFor="activity-time" className="text-xs">Hora</Label>
             <Input id="activity-time" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
           </div>
@@ -378,8 +378,21 @@ function WhatsAppTab({ lead }: { lead: FunnelLead }) {
   );
 }
 
-export default function FunilLead() {
-  const { id = null } = useParams();
+/** Lead aberto pelo funil (card, lista ou fila da SDR), em popup centralizado sobre o quadro. */
+export function LeadDetailsDialog({ leadId, onClose }: { leadId: string | null; onClose: () => void }) {
+  return (
+    <Dialog open={!!leadId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="sm:max-w-6xl h-[calc(100dvh-1.5rem)] sm:h-[90vh] p-0 sm:p-0 gap-0 flex flex-col overflow-hidden"
+        onOpenAutoFocus={(e) => { e.preventDefault(); (e.currentTarget as HTMLElement).focus(); }}
+      >
+        {leadId && <LeadDetails id={leadId} onClose={onClose} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
   const navigate = useNavigate();
   const { data: lead, isLoading, isError } = useLead(id);
   const actions = useLeadActions(id);
@@ -394,7 +407,6 @@ export default function FunilLead() {
     setNextAt(toLocalInput(lead?.next_action_at));
   }, [lead?.id, lead?.next_step, lead?.next_action_at]);
 
-  const back = () => (window.history.length > 1 ? navigate(-1) : navigate("/funil"));
   const changeStage = (stage: LeadStage) => {
     if (stage === "LOST") setLostOpen(true);
     else actions.changeStage({ stage }).catch(() => undefined);
@@ -402,16 +414,15 @@ export default function FunilLead() {
 
   if (isLoading || !lead) {
     return (
-      <PageShell title="Lead">
-        <div className="flex flex-col items-center gap-3 py-20 text-muted-foreground">
-          {isError ? (
-            <>
-              <p className="text-sm">Lead não encontrado.</p>
-              <Button variant="outline" onClick={() => navigate("/funil")}>Voltar ao funil</Button>
-            </>
-          ) : <Loader2 className="w-6 h-6 animate-spin" />}
-        </div>
-      </PageShell>
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+        <DialogTitle className="sr-only">Lead</DialogTitle>
+        {isError ? (
+          <>
+            <p className="text-sm">Lead não encontrado.</p>
+            <Button variant="outline" onClick={onClose}>Voltar ao funil</Button>
+          </>
+        ) : <Loader2 className="w-6 h-6 animate-spin" />}
+      </div>
     );
   }
 
@@ -422,149 +433,150 @@ export default function FunilLead() {
   const won = lead.customer_state_now === "CONTRACT_SIGNED";
 
   return (
-    <PageShell title="Funil de vendas" maxWidthClassName="max-w-[1400px]">
+    <>
       {/* Cabeçalho */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex items-start gap-2 min-w-0">
-          <Button variant="ghost" size="icon" className="shrink-0" onClick={back} title="Voltar ao funil" aria-label="Voltar ao funil">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
+      <div className="shrink-0 space-y-3 border-b border-border/50 p-4 pr-12 sm:p-6 sm:pr-14">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <h2 className="text-xl sm:text-2xl font-bold text-foreground truncate">{lead.name || "Sem nome"}</h2>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
-              {lead.company && <span>{lead.company}</span>}
-              <Badge variant="outline" className={LEAD_STATUS_STYLES[lead.customer_state_now]}>{LEAD_STATUS_LABELS[lead.customer_state_now]}</Badge>
-              {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product]}</Badge>}
-              {lead.ai_qualified_at && (
-                <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> Qualificado IA
-                </Badge>
-              )}
-              {lead.human_operator && <Badge variant="destructive">Operador humano</Badge>}
-            </div>
+            <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground truncate">{lead.name || "Sem nome"}</DialogTitle>
+            <DialogDescription asChild>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
+                {lead.company && <span>{lead.company}</span>}
+                <Badge variant="outline" className={LEAD_STATUS_STYLES[lead.customer_state_now]}>{LEAD_STATUS_LABELS[lead.customer_state_now]}</Badge>
+                {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product]}</Badge>}
+                {lead.ai_qualified_at && (
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                    <BadgeCheck className="w-3 h-3 mr-1" /> Qualificado IA
+                  </Badge>
+                )}
+                {lead.human_operator && <Badge variant="destructive">Operador humano</Badge>}
+              </div>
+            </DialogDescription>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <Button variant="outline" onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-1.5" /> Editar</Button>
+            <Button variant="outline" onClick={() => navigate(`/calculadora?lead=${lead.id}`)}><Calculator className="w-4 h-4 mr-1.5" /> Calculadora</Button>
+            <Button variant="outline" onClick={() => navigate(`/agenda?lead=${lead.id}`)}><CalendarPlus className="w-4 h-4 mr-1.5" /> Agendar</Button>
+            <Button variant="outline" onClick={() => setCallOpen(true)}><PhoneCall className="w-4 h-4 mr-1.5" /> Ligação</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={won}
+              onClick={() => actions.changeStage({ stage: "CONTRACT_SIGNED" }).catch(() => undefined)}>
+              <Trophy className="w-4 h-4 mr-1.5" /> Ganho
+            </Button>
+            <Button variant="outline" className="text-rose-600 border-rose-500/40" disabled={lost} onClick={() => setLostOpen(true)}>
+              <XCircle className="w-4 h-4 mr-1.5" /> Perdido
+            </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 lg:justify-end">
-          <Button variant="outline" onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-1.5" /> Editar</Button>
-          <Button variant="outline" onClick={() => navigate(`/calculadora?lead=${lead.id}`)}><Calculator className="w-4 h-4 mr-1.5" /> Calculadora</Button>
-          <Button variant="outline" onClick={() => navigate(`/agenda?lead=${lead.id}`)}><CalendarPlus className="w-4 h-4 mr-1.5" /> Agendar</Button>
-          <Button variant="outline" onClick={() => setCallOpen(true)}><PhoneCall className="w-4 h-4 mr-1.5" /> Ligação</Button>
-          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={won}
-            onClick={() => actions.changeStage({ stage: "CONTRACT_SIGNED" }).catch(() => undefined)}>
-            <Trophy className="w-4 h-4 mr-1.5" /> Ganho
-          </Button>
-          <Button variant="outline" className="text-rose-600 border-rose-500/40" disabled={lost} onClick={() => setLostOpen(true)}>
-            <XCircle className="w-4 h-4 mr-1.5" /> Perdido
-          </Button>
-        </div>
+
+        <StageStepper stage={lead.customer_state_now} onChange={changeStage} />
+        {lost && (
+          <p className="rounded-xl border border-rose-500/30 bg-rose-500/5 px-4 py-2 text-sm text-rose-600">
+            Lead perdido{lead.lost_reason ? `: ${LOST_REASON_LABELS[lead.lost_reason] || lead.lost_reason}` : ""}. Clique numa etapa para reabrir.
+          </p>
+        )}
       </div>
 
-      <StageStepper stage={lead.customer_state_now} onChange={changeStage} />
-      {lost && (
-        <p className="rounded-xl border border-rose-500/30 bg-rose-500/5 px-4 py-2 text-sm text-rose-600">
-          Lead perdido{lead.lost_reason ? `: ${LOST_REASON_LABELS[lead.lost_reason] || lead.lost_reason}` : ""}. Clique numa etapa para reabrir.
-        </p>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-4 items-start">
-        {/* Coluna da esquerda */}
-        <div className="space-y-4">
-          <Card title="Negócio">
-            <dl className="space-y-1.5">
-              <Field label="Valor">{value > 0 ? <span className="font-semibold">{formatBRL(value)}</span> : null}</Field>
-              <Field label="Produto">{lead.product ? PRODUCT_LABELS[lead.product] : null}</Field>
-              <Field label="Origem">{lead.origin ? ORIGIN_LABELS[lead.origin] || lead.origin : null}</Field>
-              <Field label="Responsável">{OWNER_LABELS[lead.owner || "sdr"]}</Field>
-              <Field label="Data do evento">{lead.event_date ? formatDay(lead.event_date) : null}</Field>
-              <Field label="Público">{lead.guest_count ? `${lead.guest_count} pessoas` : null}</Field>
-              <Field label="Local">{lead.venue}</Field>
-            </dl>
-          </Card>
-
-          <Card title="Contato" action={(
-            <button className="flex items-center gap-1 text-xs text-muted-foreground hover:underline" onClick={() => navigate(`/contatos?contato=${lead.id}`)}>
-              <Contact className="w-3.5 h-3.5" /> Leads anteriores
-            </button>
-          )}>
-            <dl className="space-y-1.5">
-              <Field label="Telefone">
-                <a href={`tel:+${lead.phone}`} className="inline-flex items-center gap-1 hover:underline"><Phone className="w-3.5 h-3.5" /> {phoneDisplay(lead.phone)}</a>
-              </Field>
-              <Field label="E-mail">{lead.email}</Field>
-              <Field label="Empresa">{lead.company}</Field>
-              <Field label="Cargo">{lead.role}</Field>
-            </dl>
-          </Card>
-
-          <Card title="Qualificação">
-            {qualificationEntries.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum dado coletado ainda.</p>
-            ) : (
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-4 items-start">
+          {/* Coluna da esquerda */}
+          <div className="space-y-4">
+            <Card title="Negócio">
               <dl className="space-y-1.5">
-                {qualificationEntries.map(([key, v]) => <Field key={key} label={key.replace(/_/g, " ")}>{String(v)}</Field>)}
+                <Field label="Valor">{value > 0 ? <span className="font-semibold">{formatBRL(value)}</span> : null}</Field>
+                <Field label="Produto">{lead.product ? PRODUCT_LABELS[lead.product] : null}</Field>
+                <Field label="Origem">{lead.origin ? ORIGIN_LABELS[lead.origin] || lead.origin : null}</Field>
+                <Field label="Responsável">{OWNER_LABELS[lead.owner || "sdr"]}</Field>
+                <Field label="Data do evento">{lead.event_date ? formatDay(lead.event_date) : null}</Field>
+                <Field label="Público">{lead.guest_count ? `${lead.guest_count} pessoas` : null}</Field>
+                <Field label="Local">{lead.venue}</Field>
               </dl>
-            )}
-            {lead.pending_fields.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                <span className="text-xs text-muted-foreground">Pendências:</span>
-                {lead.pending_fields.map((field) => (
-                  <span key={field} className="text-xs px-2 py-0.5 rounded bg-rose-500/10 text-rose-600">{field.replace(/_/g, " ")}</span>
-                ))}
-              </div>
-            )}
-          </Card>
+            </Card>
 
-          <Card title="Sinalizações">
-            <div className="flex flex-wrap gap-1.5">
-              {Object.entries(FLAG_LABELS).map(([flag, label]) => {
-                const active = lead.flags.includes(flag);
-                return (
-                  <button key={flag}
-                    onClick={() => actions.setFlags(active ? { remove: [flag] } : { add: [flag] }).catch(() => undefined)}
-                    className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors",
-                      active ? "bg-amber-500 text-white border-amber-500" : "border-border text-muted-foreground hover:bg-secondary")}>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
+            <Card title="Contato" action={(
+              <button className="flex items-center gap-1 text-xs text-muted-foreground hover:underline" onClick={() => navigate(`/contatos?contato=${lead.id}`)}>
+                <Contact className="w-3.5 h-3.5" /> Leads anteriores
+              </button>
+            )}>
+              <dl className="space-y-1.5">
+                <Field label="Telefone">
+                  <a href={`tel:+${lead.phone}`} className="inline-flex items-center gap-1 hover:underline"><Phone className="w-3.5 h-3.5" /> {phoneDisplay(lead.phone)}</a>
+                </Field>
+                <Field label="E-mail">{lead.email}</Field>
+                <Field label="Empresa">{lead.company}</Field>
+                <Field label="Cargo">{lead.role}</Field>
+              </dl>
+            </Card>
 
-          <Card title="Próxima ação">
-            <Input value={nextStep} onChange={(e) => setNextStep(e.target.value)} placeholder="Ex.: ligar para fechar" />
-            <div className="flex gap-2">
-              <Input type="datetime-local" value={nextAt} onChange={(e) => setNextAt(e.target.value)} />
-              <Button size="sm" className="shrink-0 h-10"
-                onClick={() => actions.setNextAction({ next_step: nextStep, next_action_at: nextAt ? new Date(nextAt).toISOString() : null }).catch(() => undefined)}>
-                Salvar
-              </Button>
-            </div>
-          </Card>
-        </div>
-
-        {/* Área principal */}
-        <Tabs defaultValue="atividades" className="min-w-0">
-          <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="atividades">Atividades</TabsTrigger>
-            <TabsTrigger value="propostas">Propostas</TabsTrigger>
-            <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-            <TabsTrigger value="anexos">Anexos{lead.attachments.length ? ` (${lead.attachments.length})` : ""}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="atividades"><ActivitiesTab leadId={lead.id} /></TabsContent>
-          <TabsContent value="propostas"><ProposalsTab lead={lead} /></TabsContent>
-          <TabsContent value="whatsapp"><WhatsAppTab lead={lead} /></TabsContent>
-          <TabsContent value="anexos">
-            <Card title="Anexos">
-              {lead.attachments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum anexo. Arquivos que o cliente manda (projeto, orçamento) aparecem aqui.</p>
+            <Card title="Qualificação">
+              {qualificationEntries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum dado coletado ainda.</p>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {lead.attachments.map((attachment) => <AttachmentView key={attachment.url} attachment={attachment} />)}
+                <dl className="space-y-1.5">
+                  {qualificationEntries.map(([key, v]) => <Field key={key} label={key.replace(/_/g, " ")}>{String(v)}</Field>)}
+                </dl>
+              )}
+              {lead.pending_fields.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-xs text-muted-foreground">Pendências:</span>
+                  {lead.pending_fields.map((field) => (
+                    <span key={field} className="text-xs px-2 py-0.5 rounded bg-rose-500/10 text-rose-600">{field.replace(/_/g, " ")}</span>
+                  ))}
                 </div>
               )}
             </Card>
-          </TabsContent>
-        </Tabs>
+
+            <Card title="Sinalizações">
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(FLAG_LABELS).map(([flag, label]) => {
+                  const active = lead.flags.includes(flag);
+                  return (
+                    <button key={flag}
+                      onClick={() => actions.setFlags(active ? { remove: [flag] } : { add: [flag] }).catch(() => undefined)}
+                      className={cn("text-xs px-2.5 py-1 rounded-full border transition-colors",
+                        active ? "bg-amber-500 text-white border-amber-500" : "border-border text-muted-foreground hover:bg-secondary")}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+
+            <Card title="Próxima ação">
+              <Input value={nextStep} onChange={(e) => setNextStep(e.target.value)} placeholder="Ex.: ligar para fechar" />
+              <div className="flex gap-2">
+                <Input type="datetime-local" value={nextAt} onChange={(e) => setNextAt(e.target.value)} />
+                <Button size="sm" className="shrink-0 h-10"
+                  onClick={() => actions.setNextAction({ next_step: nextStep, next_action_at: nextAt ? new Date(nextAt).toISOString() : null }).catch(() => undefined)}>
+                  Salvar
+                </Button>
+              </div>
+            </Card>
+          </div>
+
+          {/* Área principal */}
+          <Tabs defaultValue="atividades" className="min-w-0">
+            <TabsList className="w-full justify-start overflow-x-auto">
+              <TabsTrigger value="atividades">Atividades</TabsTrigger>
+              <TabsTrigger value="propostas">Propostas</TabsTrigger>
+              <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+              <TabsTrigger value="anexos">Anexos{lead.attachments.length ? ` (${lead.attachments.length})` : ""}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="atividades"><ActivitiesTab leadId={lead.id} /></TabsContent>
+            <TabsContent value="propostas"><ProposalsTab lead={lead} /></TabsContent>
+            <TabsContent value="whatsapp"><WhatsAppTab lead={lead} /></TabsContent>
+            <TabsContent value="anexos">
+              <Card title="Anexos">
+                {lead.attachments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum anexo. Arquivos que o cliente manda (projeto, orçamento) aparecem aqui.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                    {lead.attachments.map((attachment) => <AttachmentView key={attachment.url} attachment={attachment} />)}
+                  </div>
+                )}
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
 
       <EditLeadDialog lead={lead} open={editOpen} onClose={() => setEditOpen(false)} />
@@ -578,6 +590,6 @@ export default function FunilLead() {
           setCallOpen(false);
           actions.logCall({ outcome, notes }).catch(() => undefined);
         }} />
-    </PageShell>
+    </>
   );
 }

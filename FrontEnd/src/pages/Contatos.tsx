@@ -14,7 +14,7 @@ import {
 import { formatDay, phoneDisplay } from "@/lib/format";
 import { isAdminUser, useCurrentUser } from "@/hooks/useFunnel";
 import { useContacts, type ContactFilters, type ContactSummary } from "@/hooks/useContacts";
-import { ContactDrawer } from "@/components/domain/contacts/ContactDrawer";
+import { ContactDetailsDialog } from "@/components/domain/contacts/ContactDetailsDialog";
 import { ImportPartnersDialog, NewContactDialog } from "@/components/domain/contacts/ContactDialogs";
 
 const ALL = "__all__";
@@ -169,7 +169,7 @@ export default function Contatos() {
         </span>
       </p>
 
-      <ContactDrawer contactId={openId} onClose={() => openContact(null)} />
+      <ContactDetailsDialog contactId={openId} onClose={() => openContact(null)} />
       <NewContactDialog open={newOpen} onClose={() => setNewOpen(false)}
         onCreated={(id) => { setNewOpen(false); openContact(id); }} />
       <ImportPartnersDialog open={importOpen} onClose={() => setImportOpen(false)} />

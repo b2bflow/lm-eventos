@@ -24,9 +24,9 @@ const rowKey = (section: Section, row: PriceRow & { line?: string; code?: string
 
 const asText = (value: number | null) => (value == null ? "" : String(value).replace(".", ","));
 
-function toDraft(data: PriceSettingsData): Draft {
+function toDraft(data: PriceSettingsData, sections: typeof SECTIONS): Draft {
   const draft = {} as Draft;
-  for (const { key } of SECTIONS) {
+  for (const { key } of sections) {
     draft[key] = Object.fromEntries(data[key].map((row) => [rowKey(key, row), asText(row.price)]));
   }
   return draft;
@@ -43,21 +43,30 @@ function rowLabel(section: Section, row: PriceSettingsData[Section][number]) {
   return (row as { label: string }).label;
 }
 
-/** Aba "Valores": preços gerais da calculadora (só admin). Campo vazio volta ao padrão do catálogo. */
-export function PriceSettings() {
+/**
+ * Aba "Valores": preços gerais da calculadora (só admin). Campo vazio volta ao padrão do catálogo.
+ * `only` mostra só algumas seções (ex.: popup "Alterar valores" da Calculadora, só custos operacionais).
+ */
+export function PriceSettings({ only, onSaved }: { only?: Section[]; onSaved?: () => void } = {}) {
   const { data, isLoading, isError } = usePriceSettings();
   const update = useUpdatePriceSettings();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const onlyKey = only?.join(",");
+  const sections = useMemo(
+    () => (onlyKey ? SECTIONS.filter((s) => onlyKey.split(",").includes(s.key)) : SECTIONS),
+    [onlyKey],
+  );
+  const single = sections.length === 1;
 
   useEffect(() => {
-    if (data) setDraft(toDraft(data));
-  }, [data]);
+    if (data) setDraft(toDraft(data, sections));
+  }, [data, sections]);
 
   const patch = useMemo(() => {
     if (!data || !draft) return {} as PriceSettingsPatch;
-    const original = toDraft(data);
+    const original = toDraft(data, sections);
     const out: PriceSettingsPatch = {};
-    for (const { key } of SECTIONS) {
+    for (const { key } of sections) {
       for (const [code, text] of Object.entries(draft[key])) {
         if (text.trim() === original[key][code]) continue;
         const value = text.trim() === "" ? null : parseMoney(text);
@@ -65,7 +74,7 @@ export function PriceSettings() {
       }
     }
     return out;
-  }, [data, draft]);
+  }, [data, draft, sections]);
 
   const changed = Object.keys(patch).length > 0;
   const invalid = Object.values(patch).some((values) =>
@@ -74,7 +83,10 @@ export function PriceSettings() {
 
   const save = () =>
     update.mutate(patch, {
-      onSuccess: () => toast.success("Valores salvos. A calculadora já usa os novos preços."),
+      onSuccess: () => {
+        toast.success("Valores salvos. A calculadora já usa os novos preços.");
+        onSaved?.();
+      },
       onError: (e) =>
         toast.error((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Não foi possível salvar os valores."),
     });
@@ -88,12 +100,14 @@ export function PriceSettings() {
 
   return (
     <div className="space-y-6">
-      {SECTIONS.map(({ key, title, hint }) => (
-        <section key={key} className="p-6 rounded-2xl border border-border/50 bg-background/40 shadow-sm">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
-            <p className="text-sm text-muted-foreground">{hint}</p>
-          </div>
+      {sections.map(({ key, title, hint }) => (
+        <section key={key} className={single ? "" : "p-6 rounded-2xl border border-border/50 bg-background/40 shadow-sm"}>
+          {!single && (
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+              <p className="text-sm text-muted-foreground">{hint}</p>
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2 sm:items-end">
             {data[key].map((row) => {
               const code = rowKey(key, row);
@@ -133,7 +147,7 @@ export function PriceSettings() {
 
       <div className="flex items-center justify-end gap-3">
         {invalid && <span className="text-sm text-destructive">Confira os valores: use números positivos.</span>}
-        <Button variant="outline" disabled={!changed || update.isPending} onClick={() => setDraft(toDraft(data))}>
+        <Button variant="outline" disabled={!changed || update.isPending} onClick={() => setDraft(toDraft(data, sections))}>
           Descartar
         </Button>
         <Button disabled={!changed || invalid || update.isPending} onClick={save} className="gap-2">
