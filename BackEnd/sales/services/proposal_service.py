@@ -11,13 +11,14 @@ from crm import domain
 from crm.container import CrmContainer
 from crm.models.custumer_model import Customer
 from crm.models.lm_settings_model import LmSettings
+from crm.models.sdr_task_model import SdrTask
 from crm.repositories.log_service_repository import ServiceLogRepository
 from crm.services.business_hours import business_slot, to_local
 from crm.services.notification_service import card_link, format_phone
 from crm.services.pipeline_service import PermissionDeniedError
 from inventory.services.inventory_service import InventoryService
 from sales.formatting import format_brl
-from sales.models import Proposal
+from sales.models import STATUS_LABELS, Proposal
 from sales.services.pricing_service import calc_config, effective_price_table
 from sales.services.proposal_pdf import build_pdf_context, file_name as pdf_file_name, render_pdf
 from sales.services.quote_calculator import (
@@ -501,6 +502,86 @@ class ProposalService:
         proposal.save()
         self.inventory.release(str(proposal.id))
         return proposal.to_dict()
+
+    # --- Exclusão ------------------------------------------------------------------------
+
+    @staticmethod
+    def _restored_status(proposal: Proposal, now: datetime) -> str:
+        """Status de uma versão substituída que volta a ser a atual (o status anterior não é guardado)."""
+        if proposal.sent_at:
+            return "vencida" if proposal.valid_until and proposal.valid_until < now else "enviada"
+        decision = (proposal.approval or {}).get("decision")
+        if decision in ("aprovada", "recusada"):
+            return decision
+        if proposal.lock_reasons and (proposal.approval or {}).get("requested_at"):
+            return "aguardando_aprovacao"
+        return "rascunho"
+
+    def delete(self, proposal_id: str, user=None) -> dict:
+        """Apaga a proposta do banco. O PDF é gerado a partir dela, então some junto (inclusive o link
+        enviado ao cliente, que passa a dar "proposta não encontrada").
+
+        Proposta aceita não sai (reservou o estoque e é a base do contrato): desfaça o aceite antes.
+        Se era a versão atual, a versão anterior volta a ser a atual. Sem nenhuma proposta enviada,
+        o lead em "Proposta enviada" volta para "Lead qualificado" e a cadência de follow-up para."""
+        proposal = _proposal(proposal_id)
+        self._check_current_lead(proposal)
+        if proposal.status == "aceita":
+            raise ValueError("Proposta aceita não pode ser excluída: ela reservou o estoque. Volte o card para "
+                             "'Proposta enviada' (desfaz o aceite) e depois exclua.")
+        customer = proposal.customer
+        customer_id = str(customer.id)
+        deleted = {"id": str(proposal.id), "version": proposal.version, "status": proposal.status,
+                   "total": proposal.total, "sent": bool(proposal.sent_at)}
+        now = datetime.utcnow()
+
+        self.inventory.release(deleted["id"])
+        SdrTask.objects(customer=customer, status="pending", metadata__proposal_id=deleted["id"]).update(
+            set__status="canceled")
+        proposal.delete()
+
+        restored = None
+        if deleted["status"] != "substituida":
+            top = Proposal.objects(customer=customer, opportunity_id=None).order_by("-version").first()
+            if top and top.status == "substituida":
+                top.status = self._restored_status(top, now)
+                top.updated_at = now
+                top.save()
+                restored = top
+
+        waiting = Proposal.objects(customer=customer, status="aguardando_aprovacao").count()
+        flag_on = "aguardando_aprovacao_desconto" in (customer.flags or [])
+        if waiting and not flag_on:
+            CrmContainer.get_pipeline_service().set_flags(customer_id, add=["aguardando_aprovacao_desconto"], user=user)
+        elif not waiting and flag_on:
+            CrmContainer.get_pipeline_service().set_flags(customer_id, remove=["aguardando_aprovacao_desconto"], user=user)
+
+        description = f"Proposta v{deleted['version']} ({format_brl(deleted['total'])}) excluída com o PDF."
+        if restored:
+            description += f" A v{restored.version} voltou a ser a proposta atual ({STATUS_LABELS[restored.status].lower()})."
+        ServiceLogRepository.create_log(
+            customer=customer, operator_id=_operator(user), action_type="PROPOSAL_DELETED", description=description,
+            metadata={"proposal_id": deleted["id"], "version": deleted["version"], "status": deleted["status"],
+                      "total": deleted["total"], "restored_id": str(restored.id) if restored else None},
+        )
+
+        if deleted["sent"]:
+            customer.reload()
+            last_sent = (Proposal.objects(customer=customer, opportunity_id=None, sent_at__ne=None)
+                         .order_by("-version").first())
+            if customer.quoted_amount == deleted["total"]:
+                # O valor do card é o da última proposta enviada
+                customer.quoted_amount = last_sent.total if last_sent else 0
+                customer.updated_at = now
+                customer.save()
+                _mirror_value_to_quote(customer, customer.quoted_amount)
+            if not last_sent:
+                Customer.objects(id=customer.id).update(set__proposal_sent_at=None)
+                if customer.stage == domain.PROPOSAL_SENT:
+                    CrmContainer.get_pipeline_service().change_stage(
+                        customer_id, domain.QUALIFIED, user=user, system=True,
+                        note="Não sobrou proposta enviada depois da exclusão.")
+        return {"deleted": deleted, "restored": restored.to_dict() if restored else None}
 
     def expire(self, now: datetime | None = None) -> int:
         now = now or datetime.utcnow()

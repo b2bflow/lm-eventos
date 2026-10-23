@@ -11,6 +11,9 @@ from crm.models.log_service_model import ServiceLog
 from crm.repositories.log_service_repository import ServiceLogRepository
 from users.permissions import ADMIN, PORTA, user_role
 
+# Resultado do card arquivado -> etapa (a aba "Arquivados" do funil tem só estas duas colunas)
+ARCHIVE_STAGES = {'ganho': domain.CONTRACT_SIGNED, 'perdido': domain.LOST}
+
 CALL_OUTCOMES = {
     'atendeu': 'Atendeu',
     'nao_atendeu': 'Não atendeu',
@@ -106,6 +109,10 @@ class PipelineService:
             customer.next_action_at = None
         elif previous == domain.LOST:
             customer.lost_reason = None
+        # Arquivado só fica quem está ganho ou perdido: reabrir o lead devolve o card para "Ativos".
+        unarchived = customer.funnel_archived_at is not None and target not in ARCHIVE_STAGES.values()
+        if unarchived:
+            customer.funnel_archived_at = None
         customer.save()
 
         undo_acceptance = (previous == domain.PROPOSAL_ACCEPTED and target in (domain.PROPOSAL_SENT, domain.LOST)) or (
@@ -125,6 +132,8 @@ class PipelineService:
         description = f"Etapa: {domain.STAGE_LABELS[previous]} -> {domain.STAGE_LABELS[target]}."
         if target == domain.LOST:
             description += f" Motivo: {domain.LOST_REASONS[lost_reason]}."
+        if unarchived:
+            description += " Card voltou para os ativos."
         if note:
             description += f" {note}"
         ServiceLogRepository.create_log(
@@ -219,6 +228,7 @@ class PipelineService:
             raise ValueError("Lead com proposta aceita ou contrato assinado não sai do funil: "
                              "marque como perdido antes, para liberar o estoque reservado.")
         customer.funnel_entered_at = None
+        customer.funnel_archived_at = None
         customer.next_action_at = None
         customer.updated_at = datetime.utcnow()
         customer.save()
@@ -227,6 +237,48 @@ class PipelineService:
         ServiceLogRepository.create_log(
             customer=customer, operator_id=_operator_id(user), action_type='FUNNEL_REMOVED',
             description=f"Card excluído do funil (etapa {domain.STAGE_LABELS[customer.stage]}).",
+            metadata={"stage": customer.stage},
+        )
+        return customer.to_dict()
+
+    def archive(self, customer_id: str, result: str, lost_reason: str | None = None, user=None) -> dict:
+        """Arquiva o card (aba "Arquivados" do funil) como ganho ou perdido. Se o lead ainda não está
+        nessa etapa, muda antes com as regras de sempre: ganho exige proposta aceita (e o papel de
+        quem registra contrato), perdido exige o motivo. Nada é apagado; desarquivar devolve o card."""
+        target = ARCHIVE_STAGES.get(result)
+        if not target:
+            raise ValueError("Informe se o lead foi ganho ou perdido.")
+        customer = _get_document(customer_id)
+        if customer.funnel_entered_at is None:
+            raise ValueError("Este lead não está no funil.")
+        if customer.funnel_archived_at is not None:
+            raise ValueError("Este card já está arquivado.")
+        if customer.stage != target:
+            self.change_stage(customer_id, target, user=user, lost_reason=lost_reason)
+            customer = _get_document(customer_id)
+        now = datetime.utcnow()
+        customer.funnel_archived_at = now
+        customer.next_action_at = None
+        customer.updated_at = now
+        customer.save()
+        ServiceLogRepository.create_log(
+            customer=customer, operator_id=_operator_id(user), action_type='FUNNEL_ARCHIVED',
+            description=f"Card arquivado como {'ganho' if target == domain.CONTRACT_SIGNED else 'perdido'}.",
+            metadata={"result": result, "stage": target},
+        )
+        return customer.to_dict()
+
+    def unarchive(self, customer_id: str, user=None) -> dict:
+        """Devolve o card arquivado para os ativos, na mesma etapa (contrato assinado ou perdido)."""
+        customer = _get_document(customer_id)
+        if customer.funnel_archived_at is None:
+            raise ValueError("Este card não está arquivado.")
+        customer.funnel_archived_at = None
+        customer.updated_at = datetime.utcnow()
+        customer.save()
+        ServiceLogRepository.create_log(
+            customer=customer, operator_id=_operator_id(user), action_type='FUNNEL_UNARCHIVED',
+            description=f"Card desarquivado (etapa {domain.STAGE_LABELS[customer.stage]}).",
             metadata={"stage": customer.stage},
         )
         return customer.to_dict()
@@ -240,9 +292,11 @@ class PipelineService:
     # --- Quadro -------------------------------------------------------------------------
 
     def _board_queryset(self, product=None, owner=None, flag=None, search=None, include_human=False,
-                        ai_qualified=False):
+                        ai_qualified=False, archived=False):
         # Só quem entrou no funil depois de zerado (crm.services.funnel_entry)
         queryset = Customer.objects(contact_type__nin=['parceiro', 'fornecedor', 'candidato'], funnel_entered_at__ne=None)
+        # Abas do funil: "Ativos" (padrão) ou "Arquivados" (ganhos e perdidos arquivados)
+        queryset = queryset.filter(funnel_archived_at__ne=None) if archived else queryset.filter(funnel_archived_at=None)
         if not include_human:
             queryset = queryset.filter(human_operator__ne=True)
         if ai_qualified:
@@ -314,11 +368,12 @@ class PipelineService:
                 "results": self._cards(items)}
 
     def board(self, stages: list[str] | None = None, per_stage: int = 30, offsets: dict | None = None, **filters) -> dict:
-        """Colunas do funil: {stage: {count, results, offset, has_more}}. Cada coluna paginada no banco."""
+        """Colunas do funil: {stage: {count, results, offset, has_more}}. Cada coluna paginada no banco.
+        Arquivados (`archived=True`) têm só as colunas de ganho e perdido."""
         offsets = offsets or {}
         columns = {}
         base = self._board_queryset(**filters)
-        for stage in stages or domain.STAGES:
+        for stage in stages or (ARCHIVE_STAGES.values() if filters.get('archived') else domain.STAGES):
             queryset = self._stage_queryset(base, stage)
             offset = int(offsets.get(stage, 0) or 0)
             total = queryset.count()

@@ -33,6 +33,7 @@ class CustomerDTO(serializers.Serializer):
     owner = serializers.CharField(required=False)
     human_operator = serializers.BooleanField(required=False)
     funnel_entered_at = serializers.CharField(allow_null=True, required=False)
+    funnel_archived_at = serializers.CharField(allow_null=True, required=False)
     ai_qualified_at = serializers.CharField(allow_null=True, required=False)
     product = serializers.CharField(allow_null=True, required=False)
     qualification = serializers.DictField(required=False)

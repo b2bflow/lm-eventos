@@ -42,6 +42,9 @@ class ServiceLog(Document):
         ('CONTACT_UPDATED', 'Contato atualizado'),
         ('NEW_LEAD_OPENED', 'Novo lead aberto'),
         ('FUNNEL_REMOVED', 'Card excluído do funil'),
+        ('FUNNEL_ARCHIVED', 'Card arquivado'),
+        ('FUNNEL_UNARCHIVED', 'Card desarquivado'),
+        ('PROPOSAL_DELETED', 'Proposta excluída'),
         ('HANDOVER', 'Passagem entre IA e humano'),
         ('CONVERSATION_ASSIGNED', 'Conversa atribuída'),
     )

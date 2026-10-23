@@ -126,6 +126,11 @@ class ProposalDetailController(APIView):
         from sales.services.proposal_service import _proposal
         return Response(_proposal(proposal_id).to_dict())
 
+    @_handle
+    def delete(self, request, proposal_id):
+        """Exclui a proposta (e o PDF, que é gerado a partir dela). Aceita não pode."""
+        return Response(service.delete(proposal_id, user=request.user))
+
 
 class ProposalActionController(APIView):
     """POST /sales/proposals/<id>/<approve|send|send-whatsapp|accept|reject>/."""

@@ -26,6 +26,7 @@ class Customer(Document):
         'indexes': [
             'name', 'phone', 'customer_state_now', '-created_at',
             'product', 'owner', 'human_operator', 'flags', 'next_action_at', 'funnel_entered_at',
+            'funnel_archived_at',
         ],
         'strict': False
     }
@@ -88,6 +89,9 @@ class Customer(Document):
     # Funil "zerado": só aparece quem entrou depois (atendido/qualificado pela IA ou lead aberto à mão).
     # Vazio = fora do funil (leads antigos). Ver crm.services.funnel_entry.
     funnel_entered_at = DateTimeField(null=True)
+    # Card arquivado (aba "Arquivados" do funil): só lead ganho (contrato assinado) ou perdido.
+    # Reabrir o lead (voltar a uma etapa em andamento) ou abrir um lead novo desarquiva.
+    funnel_archived_at = DateTimeField(null=True)
     ai_qualified_at = DateTimeField(null=True)  # a IA terminou a qualificação (cotação em WAITING_BUDGET)
 
     created_at = DateTimeField(default=datetime.utcnow)  # UTC sem fuso, como o resto do banco
@@ -149,6 +153,7 @@ class Customer(Document):
             "lead_number": self.lead_number or 1,
             "lead_started_at": _iso(self.lead_started_at),
             "funnel_entered_at": _iso(self.funnel_entered_at),
+            "funnel_archived_at": _iso(self.funnel_archived_at),
             "ai_qualified_at": _iso(self.ai_qualified_at),
             "blocked_until": _iso(self.blocked_until),
             "silenced_until": _iso(self.silenced_until),

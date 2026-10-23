@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
-import { BadgeCheck, CalendarDays, Clock, FileText, Paperclip, Send, UserRound } from "lucide-react";
+import { Archive, ArchiveRestore, BadgeCheck, CalendarDays, Clock, Eye, FileText, Paperclip, Send, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -15,68 +15,60 @@ const SENDABLE = ["rascunho", "aprovada", "enviada"];
 /** Botões dentro do card não abrem o lead nem começam o arrasto. */
 const stop = { onPointerDown: (e: PointerEvent) => e.stopPropagation(), onKeyDown: (e: KeyboardEvent) => e.stopPropagation() };
 
+const CARD_CLASSES = "rounded-xl border border-border/60 bg-card p-3 space-y-2";
+
 function ProposalAttachment({ lead }: { lead: FunnelLead }) {
   const proposal = lead.current_proposal!;
   const actions = useLeadActions(lead.id);
   const sendable = SENDABLE.includes(proposal.status);
+  const again = proposal.status === "enviada";
 
   const send = (e: MouseEvent) => {
     e.stopPropagation();
-    const again = proposal.status === "enviada" ? " de novo" : "";
-    if (!window.confirm(`Enviar${again} a proposta v${proposal.version} (${formatBRL(proposal.total)}) no WhatsApp de ${lead.name || lead.phone}?`)) return;
+    if (!window.confirm(`Enviar${again ? " de novo" : ""} a proposta v${proposal.version} (${formatBRL(proposal.total)}) no WhatsApp de ${lead.name || lead.phone}?`)) return;
     actions.sendProposalWhatsApp(proposal.id).catch(() => undefined);
   };
 
   return (
-    <div className="flex items-center gap-1.5">
-      <button type="button" {...stop}
-        onClick={(e) => { e.stopPropagation(); openProposalPdf(proposal.id).catch(() => toast.error("Não foi possível gerar o PDF.")); }}
-        title={`${proposal.file_name} (${proposal.status_label}). Abrir o PDF`}
-        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border/60 bg-secondary/40 px-2 py-1 text-[11px] text-foreground hover:border-primary/50">
+    // Versão, status e valor do PDF: o valor no alto do card é o da última proposta enviada
+    <div className="rounded-lg border border-border/60 bg-secondary/30 p-1.5 space-y-1.5">
+      <div className="flex items-center gap-1.5 px-0.5 text-[11px]">
         <FileText className="w-3.5 h-3.5 shrink-0 text-rose-600" />
-        {/* Versão e valor do PDF: o valor no alto do card é o da última proposta enviada */}
-        <span className="shrink-0">PDF v{proposal.version}</span>
-        <span className="ml-auto shrink-0 font-semibold tabular-nums">{formatBRL(proposal.total)}</span>
-      </button>
-      {sendable ? (
-        <button type="button" {...stop} onClick={send} disabled={actions.isPending}
-          title={proposal.status === "enviada" ? "Reenviar no WhatsApp" : "Enviar no WhatsApp"}
-          className="flex shrink-0 items-center gap-1 rounded-lg bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
-          <Send className="w-3 h-3" /> {proposal.status === "enviada" ? "Reenviar" : "Enviar"}
+        <span className="shrink-0 whitespace-nowrap font-medium text-foreground">Proposta v{proposal.version}</span>
+        <span className="min-w-0 truncate text-muted-foreground" title={proposal.status_label}>· {proposal.status_label}</span>
+        <span className="ml-auto shrink-0 font-semibold tabular-nums text-foreground">{formatBRL(proposal.total)}</span>
+      </div>
+      <div className="flex gap-1.5">
+        <button type="button" {...stop}
+          onClick={(e) => { e.stopPropagation(); openProposalPdf(proposal.id).catch(() => toast.error("Não foi possível gerar o PDF.")); }}
+          title={`Abrir ${proposal.file_name}`}
+          className="flex flex-1 items-center justify-center gap-1 rounded-md border border-border/70 bg-background px-2 py-1 text-[11px] font-medium text-foreground hover:border-primary/50 hover:text-primary">
+          <Eye className="w-3.5 h-3.5" /> Ver PDF
         </button>
-      ) : (
-        <span className="min-w-0 max-w-[30%] truncate text-[10px] text-muted-foreground" title={proposal.status_label}>{proposal.status_label}</span>
-      )}
+        {sendable && (
+          <button type="button" {...stop} onClick={send} disabled={actions.isPending}
+            title={again ? "Reenviar no WhatsApp do cliente (PDF com nova validade)" : "Enviar no WhatsApp do cliente"}
+            className="flex flex-1 items-center justify-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+            <Send className="w-3 h-3" /> {again ? "Reenviar" : "Enviar"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-interface LeadCardProps {
+interface LeadCardContentProps {
   lead: FunnelLead;
-  onOpen: (id: string) => void;
+  /** Botão rápido no rodapé: arquivar (ganho/perdido nos ativos) ou desarquivar (nos arquivados). */
+  onArchive?: (lead: FunnelLead) => void;
+  onUnarchive?: (lead: FunnelLead) => void;
 }
 
-export function LeadCard({ lead, onOpen }: LeadCardProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: lead.id,
-    data: { stage: lead.customer_state_now },
-  });
-  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+/** Conteúdo do card, usado no quadro e na cópia que acompanha o mouse ao arrastar. */
+export function LeadCardContent({ lead, onArchive, onUnarchive }: LeadCardContentProps) {
   const value = lead.contract_value || lead.quoted_amount;
-
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      onClick={() => onOpen(lead.id)}
-      className={cn(
-        "rounded-xl border border-border/60 bg-card p-3 cursor-grab active:cursor-grabbing touch-none select-none",
-        "hover:border-primary/50 transition-colors space-y-2",
-        isDragging && "opacity-60 ring-2 ring-primary/40 z-50"
-      )}
-    >
+    <>
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-semibold text-foreground leading-tight line-clamp-2">{lead.name || lead.phone}</h4>
         {value ? <span className="text-sm font-bold tabular-nums text-foreground shrink-0">{formatBRL(value)}</span> : null}
@@ -126,10 +118,68 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
         ) : (
           <span />
         )}
-        <span className="flex items-center gap-1 text-muted-foreground shrink-0">
-          <UserRound className="w-3 h-3" /> {OWNER_LABELS[lead.owner || "sdr"]}
+        <span className="flex items-center gap-2 shrink-0">
+          {onArchive && (
+            <button type="button" {...stop} onClick={(e) => { e.stopPropagation(); onArchive(lead); }}
+              title="Arquivar o card (vai para a aba Arquivados)"
+              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground">
+              <Archive className="w-3 h-3" /> Arquivar
+            </button>
+          )}
+          {onUnarchive && (
+            <button type="button" {...stop} onClick={(e) => { e.stopPropagation(); onUnarchive(lead); }}
+              title="Devolver o card para os ativos"
+              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground">
+              <ArchiveRestore className="w-3 h-3" /> Desarquivar
+            </button>
+          )}
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <UserRound className="w-3 h-3" /> {OWNER_LABELS[lead.owner || "sdr"]}
+          </span>
         </span>
       </div>
+    </>
+  );
+}
+
+interface LeadCardProps extends LeadCardContentProps {
+  onOpen: (id: string) => void;
+}
+
+export function LeadCard({ lead, onOpen, ...quick }: LeadCardProps) {
+  // Ao arrastar, quem anda é a cópia do DragOverlay (por cima de tudo); o card fica no lugar, apagado.
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: lead.id,
+    data: { stage: lead.customer_state_now, lead },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      onClick={() => onOpen(lead.id)}
+      className={cn(
+        CARD_CLASSES, "cursor-grab active:cursor-grabbing touch-none select-none hover:border-primary/50 transition-colors",
+        isDragging && "opacity-40 border-dashed border-primary/50"
+      )}
+    >
+      <LeadCardContent lead={lead} {...quick} />
+    </div>
+  );
+}
+
+/** Cópia do card que segue o mouse durante o arrasto (renderizada no DragOverlay).
+ *  `hint`: o que acontece ao soltar ali (ex.: sobre a aba Arquivados, que fica escondida atrás do card). */
+export function LeadCardOverlay({ lead, hint }: { lead: FunnelLead; hint?: string | null }) {
+  return (
+    <div className={cn(CARD_CLASSES, "cursor-grabbing shadow-2xl ring-2 ring-primary/40 rotate-[1.5deg]", hint && "ring-primary")}>
+      {hint && (
+        <div className="-mx-3 -mt-3 mb-2 flex items-center gap-1.5 rounded-t-xl bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+          <Archive className="w-3.5 h-3.5" /> {hint}
+        </div>
+      )}
+      <LeadCardContent lead={lead} />
     </div>
   );
 }

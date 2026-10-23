@@ -31,6 +31,8 @@ export interface FunnelLead {
   flags: string[];
   ai_qualified_at?: string | null;
   funnel_entered_at?: string | null;
+  /** Card na aba "Arquivados" do funil (ganho ou perdido arquivado). */
+  funnel_archived_at?: string | null;
   event_date?: string | null;
   event_title?: string | null;
   guest_count?: number;
@@ -73,7 +75,12 @@ export interface FunnelFilters {
   search?: string;
   include_human?: boolean;
   ai_qualified?: boolean;
+  /** Aba "Arquivados": só ganhos e perdidos arquivados. */
+  archived?: boolean;
 }
+
+/** Resultado de um card arquivado (backend: pipeline_service.ARCHIVE_STAGES). */
+export type ArchiveResult = "ganho" | "perdido";
 
 export interface TimelineEntry {
   id: string;
@@ -170,6 +177,7 @@ const cleanFilters = (filters: FunnelFilters) => {
   if (filters.search) params.search = filters.search;
   if (filters.include_human) params.include_human = "true";
   if (filters.ai_qualified) params.ai_qualified = "true";
+  if (filters.archived) params.archived = "true";
   return params;
 };
 
@@ -257,20 +265,29 @@ export function useLeadActions(id: string | null) {
     queryClient.invalidateQueries({ queryKey: ["leads"] });
   };
   const mutation = useMutation({
-    mutationFn: (v: { path: string; body?: unknown; success: string; fallback: string }) => api.post(v.path, v.body),
+    mutationFn: (v: { path: string; body?: unknown; method?: "post" | "delete"; success: string; fallback: string; undo?: () => void }) =>
+      v.method === "delete" ? api.delete(v.path) : api.post(v.path, v.body),
     onSuccess: (_data, v) => {
-      toast.success(v.success);
+      toast.success(v.success, v.undo ? { action: { label: "Desfazer", onClick: v.undo } } : undefined);
       refresh();
     },
     onError: (error, v) => toast.error(errorDetail(error, v.fallback)),
   });
-  const post = (path: string, body: unknown, success: string, fallback: string) =>
-    mutation.mutateAsync({ path, body, success, fallback });
+  const post = (path: string, body: unknown, success: string, fallback: string, undo?: () => void) =>
+    mutation.mutateAsync({ path, body, success, fallback, undo });
+  const unarchive = (leadId?: string) =>
+    post(`/crm/customers/${leadId ?? id}/unarchive/`, {}, "Card de volta aos ativos.", "Não foi possível desarquivar o card.");
 
   return {
     isPending: mutation.isPending,
     changeStage: (body: { stage: LeadStage; lost_reason?: string }, leadId?: string) =>
       post(`/crm/customers/${leadId ?? id}/stage/`, body, "Etapa atualizada.", "Não foi possível mudar a etapa."),
+    /** Ganho exige proposta aceita; perdido pede o motivo se o lead ainda não está perdido. */
+    archive: (body: { result: ArchiveResult; lost_reason?: string }, leadId?: string) =>
+      post(`/crm/customers/${leadId ?? id}/archive/`, body,
+        body.result === "ganho" ? "Card arquivado como ganho." : "Card arquivado como perdido.",
+        "Não foi possível arquivar o card.", () => unarchive(leadId).catch(() => undefined)),
+    unarchive,
     removeFromFunnel: () =>
       post(`/crm/customers/${id}/remove-from-funnel/`, {}, "Card excluído do funil.", "Não foi possível excluir o card do funil."),
     setFlags: (body: { add?: string[]; remove?: string[] }) =>
@@ -287,6 +304,10 @@ export function useLeadActions(id: string | null) {
       post(`/crm/tasks/${taskId}/done/`, {}, "Tarefa concluída.", "Não foi possível concluir a tarefa."),
     proposalAction: (proposalId: string, action: "send" | "accept" | "reject" | "approve", extra?: { approve?: boolean; note?: string }) =>
       post(`/sales/proposals/${proposalId}/${action}/`, extra ?? {}, "Proposta atualizada.", "Não foi possível atualizar a proposta."),
+    /** Apaga a proposta do banco (o PDF é gerado a partir dela e some junto). */
+    deleteProposal: (proposalId: string) =>
+      mutation.mutateAsync({ path: `/sales/proposals/${proposalId}/`, method: "delete", success: "Proposta excluída.",
+        fallback: "Não foi possível excluir a proposta." }),
     sendProposalWhatsApp: (proposalId: string) =>
       post(`/sales/proposals/${proposalId}/send-whatsapp/`, {}, "Proposta enviada no WhatsApp do cliente.",
         "Não foi possível enviar a proposta pelo WhatsApp."),

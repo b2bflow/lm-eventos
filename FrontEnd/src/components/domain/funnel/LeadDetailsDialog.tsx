@@ -3,10 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  BadgeCheck, Calculator, CalendarPlus, Check, CheckCircle2, Contact, FileText, Loader2, MessageSquare, Pencil,
-  Phone, PhoneCall, Send, ThumbsDown, ThumbsUp, Trash2, Trophy, XCircle,
+  Archive, ArchiveRestore, BadgeCheck, Calculator, CalendarPlus, Check, CheckCircle2, Contact, FileText, Loader2,
+  MessageSquare, MoreHorizontal, Pencil, Phone, PhoneCall, Send, ThumbsDown, ThumbsUp, Trash2, Trophy, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,10 +30,12 @@ import { formatBRL, formatDateTime, formatDay, isOverdue, phoneDisplay, utcIso }
 import { toIsoDay } from "@/lib/quoteForms";
 import {
   ACTIVITY_TYPES, isAdminUser, useCurrentUser, useLead, useLeadActions, useLeadTasks, useProposals, useTimeline,
-  type FunnelLead,
+  type FunnelLead, type Proposal,
 } from "@/hooks/useFunnel";
 import { AttachmentView } from "@/components/domain/funnel/AttachmentView";
-import { CallDialog, LostReasonDialog, RemoveFromFunnelDialog } from "@/components/domain/funnel/LeadDialogs";
+import {
+  ArchiveDialog, CallDialog, DeleteProposalDialog, LostReasonDialog, RemoveFromFunnelDialog,
+} from "@/components/domain/funnel/LeadDialogs";
 
 // Campos da qualificação já exibidos pelos campos do CRM (espelhados no backend)
 const MIRRORED_FIELDS = new Set(["nome", "email", "empresa", "cargo", "local", "data_evento", "publico"]);
@@ -271,6 +276,13 @@ function ProposalsTab({ lead }: { lead: FunnelLead }) {
   const { data: me } = useCurrentUser();
   const actions = useLeadActions(lead.id);
   const isAdmin = isAdminUser(me);
+  const [toDelete, setToDelete] = useState<Proposal | null>(null);
+  // Excluir a versão atual devolve a anterior (se estava substituída), como o backend faz
+  const restoresVersion = (() => {
+    if (!toDelete || toDelete.status === "substituida") return null;
+    const top = proposals.filter((p) => p.id !== toDelete.id).sort((a, b) => b.version - a.version)[0];
+    return top?.status === "substituida" ? top.version : null;
+  })();
 
   return (
     <Card title={`Propostas (${proposals.length})`}
@@ -296,9 +308,11 @@ function ProposalsTab({ lead }: { lead: FunnelLead }) {
                 </ul>
               )}
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="ghost" onClick={() => navigate(`/calculadora?lead=${lead.id}&proposal=${p.id}`)}>Abrir</Button>
+                <Button size="sm" variant="ghost" onClick={() => navigate(`/calculadora?lead=${lead.id}&proposal=${p.id}`)}>
+                  <Calculator className="w-4 h-4 mr-1" /> Abrir na calculadora
+                </Button>
                 <Button size="sm" variant="ghost" onClick={() => openProposalPdf(p.id).catch(() => toast.error("Não foi possível gerar o PDF."))}>
-                  <FileText className="w-4 h-4 mr-1" /> PDF
+                  <FileText className="w-4 h-4 mr-1" /> Ver PDF
                 </Button>
                 {isAdmin && p.status === "aguardando_aprovacao" && (
                   <>
@@ -326,11 +340,21 @@ function ProposalsTab({ lead }: { lead: FunnelLead }) {
                     <Button size="sm" variant="outline" onClick={() => actions.proposalAction(p.id, "reject").catch(() => undefined)}>Recusada</Button>
                   </>
                 )}
+                {/* Aceita reservou o estoque: o backend recusa; desfaz o aceite antes (card volta para Proposta enviada) */}
+                <span className="ml-auto" title={p.status === "aceita" ? "Proposta aceita não pode ser excluída: volte o card para Proposta enviada antes" : "Apaga a proposta e o PDF do banco"}>
+                  <Button size="sm" variant="ghost" disabled={p.status === "aceita"}
+                    className="text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10" onClick={() => setToDelete(p)}>
+                    <Trash2 className="w-4 h-4 mr-1" /> Excluir
+                  </Button>
+                </span>
               </div>
             </li>
           ))}
         </ul>
       )}
+      <DeleteProposalDialog proposal={toDelete} restoresVersion={restoresVersion} pending={actions.isPending}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => toDelete && actions.deleteProposal(toDelete.id).then(() => setToDelete(null)).catch(() => undefined)} />
     </Card>
   );
 }
@@ -400,6 +424,7 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
   const [callOpen, setCallOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [nextStep, setNextStep] = useState("");
   const [nextAt, setNextAt] = useState("");
 
@@ -430,53 +455,121 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
   const qualificationEntries = Object.entries(lead.qualification || {})
     .filter(([key, value]) => !MIRRORED_FIELDS.has(key) && value !== null && value !== "");
   const value = lead.contract_value || lead.quoted_amount || 0;
-  const lost = lead.customer_state_now === "LOST";
-  const won = lead.customer_state_now === "CONTRACT_SIGNED";
+  const stage = lead.customer_state_now;
+  const lost = stage === "LOST";
+  const won = stage === "CONTRACT_SIGNED";
+  const archived = !!lead.funnel_archived_at;
+  // Contrato assinado só sai de proposta aceita (mesma regra do quadro)
+  const canWin = stage === "PROPOSAL_ACCEPTED";
+  const archive = () => {
+    if (won || lost) actions.archive({ result: won ? "ganho" : "perdido" }).catch(() => undefined);
+    else setArchiveOpen(true);
+  };
 
   return (
     <>
-      {/* Cabeçalho */}
+      {/* Cabeçalho: quem é o lead, ações do dia a dia, resultado e etapas */}
       <div className="shrink-0 space-y-3 border-b border-border/50 p-4 pr-12 sm:p-6 sm:pr-14">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground truncate">{lead.name || "Sem nome"}</DialogTitle>
-            <DialogDescription asChild>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
-                {lead.company && <span>{lead.company}</span>}
-                <Badge variant="outline" className={LEAD_STATUS_STYLES[lead.customer_state_now]}>{LEAD_STATUS_LABELS[lead.customer_state_now]}</Badge>
-                {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product]}</Badge>}
-                {lead.ai_qualified_at && (
-                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
-                    <BadgeCheck className="w-3 h-3 mr-1" /> Qualificado IA
-                  </Badge>
-                )}
-                {lead.human_operator && <Badge variant="destructive">Operador humano</Badge>}
-              </div>
-            </DialogDescription>
-          </div>
-          <div className="flex flex-wrap gap-2 lg:justify-end">
-            <Button variant="outline" onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-1.5" /> Editar</Button>
-            <Button variant="outline" onClick={() => navigate(`/calculadora?lead=${lead.id}`)}><Calculator className="w-4 h-4 mr-1.5" /> Calculadora</Button>
-            <Button variant="outline" onClick={() => navigate(`/agenda?lead=${lead.id}`)}><CalendarPlus className="w-4 h-4 mr-1.5" /> Agendar</Button>
-            <Button variant="outline" onClick={() => setCallOpen(true)}><PhoneCall className="w-4 h-4 mr-1.5" /> Ligação</Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={won}
-              onClick={() => actions.changeStage({ stage: "CONTRACT_SIGNED" }).catch(() => undefined)}>
-              <Trophy className="w-4 h-4 mr-1.5" /> Ganho
-            </Button>
-            <Button variant="outline" className="text-rose-600 border-rose-500/40" disabled={lost} onClick={() => setLostOpen(true)}>
-              <XCircle className="w-4 h-4 mr-1.5" /> Perdido
-            </Button>
-            {lead.funnel_entered_at && (
-              <Button variant="ghost" className="text-muted-foreground hover:text-rose-600" onClick={() => setRemoveOpen(true)}
-                title="Tira o card do funil; o contato continua em Contatos">
-                <Trash2 className="w-4 h-4 mr-1.5" /> Excluir do funil
-              </Button>
+        <div className="min-w-0">
+          <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground truncate">{lead.name || "Sem nome"}</DialogTitle>
+          <DialogDescription asChild>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
+              {lead.company && <span>{lead.company}</span>}
+              <Badge variant="outline" className={LEAD_STATUS_STYLES[stage]}>{LEAD_STATUS_LABELS[stage]}</Badge>
+              {archived && <Badge variant="secondary"><Archive className="w-3 h-3 mr-1" /> Arquivado</Badge>}
+              {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product]}</Badge>}
+              {lead.ai_qualified_at && (
+                <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                  <BadgeCheck className="w-3 h-3 mr-1" /> Qualificado IA
+                </Badge>
+              )}
+              {lead.human_operator && <Badge variant="destructive">Operador humano</Badge>}
+            </div>
+          </DialogDescription>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Ações do lead">
+          {/* Trabalhar o lead */}
+          <Button size="sm" variant="outline" onClick={() => setCallOpen(true)} title="Registrar o resultado de uma ligação">
+            <PhoneCall className="w-4 h-4 mr-1.5" /> Registrar ligação
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/agenda?lead=${lead.id}`)} title="Marcar reunião, visita ou ligação na agenda">
+            <CalendarPlus className="w-4 h-4 mr-1.5" /> Agendar
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/calculadora?lead=${lead.id}`)} title="Montar uma proposta na calculadora">
+            <Calculator className="w-4 h-4 mr-1.5" /> Nova proposta
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} title="Editar nome, contato, evento e valores">
+            <Pencil className="w-4 h-4 mr-1.5" /> Editar dados
+          </Button>
+
+          {/* Resultado do lead */}
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:border-l sm:border-border/60 sm:pl-3">
+            {/* Com resultado, mostra só o resultado; em andamento, os dois botões */}
+            {won ? (
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-600/10 px-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                <Trophy className="w-4 h-4" /> Ganho
+              </span>
+            ) : lost ? (
+              <span className="inline-flex h-9 items-center gap-1.5 rounded-md bg-rose-500/10 px-3 text-sm font-semibold text-rose-600">
+                <XCircle className="w-4 h-4" /> Perdido
+              </span>
+            ) : (
+              <>
+                <span title={canWin ? "Registrar contrato assinado" : "Fica disponível quando o cliente aceitar a proposta"}>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!canWin}
+                    onClick={() => actions.changeStage({ stage: "CONTRACT_SIGNED" }).catch(() => undefined)}>
+                    <Trophy className="w-4 h-4 mr-1.5" /> Marcar ganho
+                  </Button>
+                </span>
+                <Button size="sm" variant="outline" className="text-rose-600 border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-700"
+                  onClick={() => setLostOpen(true)} title="Marcar como perdido (pede o motivo)">
+                  <XCircle className="w-4 h-4 mr-1.5" /> Marcar perdido
+                </Button>
+              </>
             )}
+            {lead.funnel_entered_at && (archived ? (
+              <Button size="sm" variant="secondary" onClick={() => actions.unarchive().catch(() => undefined)} title="Devolver o card para os ativos">
+                <ArchiveRestore className="w-4 h-4 mr-1.5" /> Desarquivar
+              </Button>
+            ) : (
+              <Button size="sm" variant="secondary" onClick={archive} title="Tirar o card do quadro e guardar em Arquivados (ganho ou perdido)">
+                <Archive className="w-4 h-4 mr-1.5" /> Arquivar
+              </Button>
+            ))}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="px-2" aria-label="Mais ações" title="Mais ações">
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => navigate(`/contatos?contato=${lead.id}`)}>
+                  <Contact className="w-4 h-4 mr-2" /> Ver no Contatos
+                </DropdownMenuItem>
+                {lead.funnel_entered_at && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-rose-600 focus:text-rose-600" onSelect={() => setRemoveOpen(true)}>
+                      <Trash2 className="w-4 h-4 mr-2" /> Excluir do funil
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        <StageStepper stage={lead.customer_state_now} onChange={changeStage} />
-        {lost && (
+        <StageStepper stage={stage} onChange={changeStage} />
+        {archived ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
+            <span>
+              Card arquivado em {formatDay(lead.funnel_archived_at!)} como {won ? "ganho" : "perdido"}
+              {lost && lead.lost_reason ? ` (${LOST_REASON_LABELS[lead.lost_reason] || lead.lost_reason})` : ""}.
+              {lost ? " Clique numa etapa para reabrir o lead." : ""}
+            </span>
+          </div>
+        ) : lost && (
           <p className="rounded-xl border border-rose-500/30 bg-rose-500/5 px-4 py-2 text-sm text-rose-600">
             Lead perdido{lead.lost_reason ? `: ${LOST_REASON_LABELS[lead.lost_reason] || lead.lost_reason}` : ""}. Clique numa etapa para reabrir.
           </p>
@@ -600,6 +693,11 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
       <RemoveFromFunnelDialog open={removeOpen} name={lead.name || "este lead"} pending={actions.isPending}
         onClose={() => setRemoveOpen(false)}
         onConfirm={() => actions.removeFromFunnel().then(() => { setRemoveOpen(false); onClose(); }).catch(() => undefined)} />
+      <ArchiveDialog lead={archiveOpen ? lead : null} pending={actions.isPending} onClose={() => setArchiveOpen(false)}
+        onConfirm={(result, lostReason) => {
+          setArchiveOpen(false);
+          actions.archive({ result, lost_reason: lostReason }).catch(() => undefined);
+        }} />
     </>
   );
 }

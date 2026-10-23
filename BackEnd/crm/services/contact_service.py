@@ -30,7 +30,7 @@ EMPTY_LEAD = {
     "flags": [], "quoted_amount": 0, "contract_value": 0, "event_date": None, "event_title": None,
     "celebration_type": None, "guest_count": 0, "venue": None, "needs_erica": False, "qualified_at": None,
     "first_contact_at": None, "proposal_sent_at": None, "next_step": None, "next_action_at": None,
-    "ai_qualified_at": None,
+    "ai_qualified_at": None, "funnel_archived_at": None,
 }
 
 PHONE_HEADERS = {"telefone", "phone", "celular", "numero", "whatsapp", "fone", "contato_telefone"}

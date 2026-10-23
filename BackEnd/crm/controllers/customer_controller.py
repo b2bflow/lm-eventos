@@ -198,6 +198,21 @@ class CustomerController(ViewSet):
 
     @action(detail=True, methods=['post'])
     @_card_action
+    def archive(self, request, pk=None) -> Response:
+        """Arquiva o card. Body: {result: ganho|perdido, lost_reason (perdido, se o lead ainda não está perdido)}."""
+        customer = CrmContainer.get_pipeline_service().archive(
+            pk, request.data.get('result'), lost_reason=request.data.get('lost_reason'), user=request.user)
+        return Response(CustomerDTO(customer).data)
+
+    @action(detail=True, methods=['post'])
+    @_card_action
+    def unarchive(self, request, pk=None) -> Response:
+        """Devolve o card arquivado para os ativos."""
+        customer = CrmContainer.get_pipeline_service().unarchive(pk, user=request.user)
+        return Response(CustomerDTO(customer).data)
+
+    @action(detail=True, methods=['post'])
+    @_card_action
     def flags(self, request, pk=None) -> Response:
         """Body: {add: [...], remove: [...]}."""
         customer = CrmContainer.get_pipeline_service().set_flags(
