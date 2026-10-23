@@ -1,10 +1,53 @@
 import { useDraggable } from "@dnd-kit/core";
-import { BadgeCheck, CalendarDays, Clock, Paperclip, UserRound } from "lucide-react";
+import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import { BadgeCheck, CalendarDays, Clock, FileText, Paperclip, Send, UserRound } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { FLAG_LABELS, OWNER_LABELS, PRODUCT_LABELS } from "@/constants/mappings";
 import { formatBRL, formatDateTime, formatDay, isOverdue } from "@/lib/format";
-import type { FunnelLead } from "@/hooks/useFunnel";
+import { openProposalPdf } from "@/hooks/useSales";
+import { useLeadActions, type FunnelLead } from "@/hooks/useFunnel";
+
+// Proposta que pode sair para o cliente (enviada também: reenviar gera o PDF de novo com nova validade)
+const SENDABLE = ["rascunho", "aprovada", "enviada"];
+
+/** Botões dentro do card não abrem o lead nem começam o arrasto. */
+const stop = { onPointerDown: (e: PointerEvent) => e.stopPropagation(), onKeyDown: (e: KeyboardEvent) => e.stopPropagation() };
+
+function ProposalAttachment({ lead }: { lead: FunnelLead }) {
+  const proposal = lead.current_proposal!;
+  const actions = useLeadActions(lead.id);
+  const sendable = SENDABLE.includes(proposal.status);
+
+  const send = (e: MouseEvent) => {
+    e.stopPropagation();
+    const again = proposal.status === "enviada" ? " de novo" : "";
+    if (!window.confirm(`Enviar${again} a proposta v${proposal.version} (${formatBRL(proposal.total)}) no WhatsApp de ${lead.name || lead.phone}?`)) return;
+    actions.sendProposalWhatsApp(proposal.id).catch(() => undefined);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button type="button" {...stop}
+        onClick={(e) => { e.stopPropagation(); openProposalPdf(proposal.id).catch(() => toast.error("Não foi possível gerar o PDF.")); }}
+        title={`${proposal.status_label}. Abrir o PDF`}
+        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border/60 bg-secondary/40 px-2 py-1 text-[11px] text-foreground hover:border-primary/50">
+        <FileText className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+        <span className="truncate">{proposal.file_name}</span>
+      </button>
+      {sendable ? (
+        <button type="button" {...stop} onClick={send} disabled={actions.isPending}
+          title={proposal.status === "enviada" ? "Reenviar no WhatsApp" : "Enviar no WhatsApp"}
+          className="flex shrink-0 items-center gap-1 rounded-lg bg-primary px-2 py-1 text-[11px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+          <Send className="w-3 h-3" /> {proposal.status === "enviada" ? "Reenviar" : "Enviar"}
+        </button>
+      ) : (
+        <span className="shrink-0 text-[10px] text-muted-foreground">{proposal.status_label}</span>
+      )}
+    </div>
+  );
+}
 
 interface LeadCardProps {
   lead: FunnelLead;
@@ -60,6 +103,8 @@ export function LeadCard({ lead, onOpen }: LeadCardProps) {
           </span>
         )}
       </div>
+
+      {lead.current_proposal && <ProposalAttachment lead={lead} />}
 
       {lead.flags?.length > 0 && (
         <div className="flex flex-wrap gap-1">

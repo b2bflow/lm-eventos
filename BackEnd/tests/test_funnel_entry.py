@@ -124,6 +124,27 @@ def test_saving_a_proposal_puts_lead_in_funnel(api_client):
 
 
 @pytest.mark.django_db
+def test_funnel_card_carries_the_current_proposal_pdf(api_client):
+    customer = Customer(name="Ana Card", phone="5562900000061").save()
+    body = {"customer_id": str(customer.id), "mode": "corporativo",
+            "inputs": {"guests": 80, "event_date": "2026-12-10", "operational": ["carga"]}}
+    api_client.post("/api/v1/sales/proposals/", body, format="json")
+    second = api_client.post("/api/v1/sales/proposals/", body, format="json").data
+
+    def card(data):
+        return next(c for column in data.values() for c in column["results"] if c["id"] == str(customer.id))
+
+    current = card(api_client.get("/api/v1/crm/funnel/").data)["current_proposal"]
+    assert current["id"] == second["id"] and current["version"] == 2
+    assert current["file_name"] == "Proposta_LM_Ana_Card_v2.pdf" and current["status"] == second["status"]
+    listed = api_client.get("/api/v1/crm/funnel/list/").data["results"]
+    assert next(c for c in listed if c["id"] == str(customer.id))["current_proposal"]["id"] == second["id"]
+    other = Customer(name="Sem proposta", phone="5562900000062", funnel_entered_at=datetime.utcnow()).save()
+    assert next(c for c in api_client.get("/api/v1/crm/funnel/list/").data["results"]
+                if c["id"] == str(other.id))["current_proposal"] is None
+
+
+@pytest.mark.django_db
 def test_funnel_list_view_uses_board_rules_and_paginates(api_client):
     now = datetime.utcnow()
     for i in range(3):

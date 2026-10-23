@@ -10,6 +10,17 @@ export interface Attachment {
   received_at?: string | null;
 }
 
+/** Proposta atual do lead (última versão), anexada no card do funil. */
+export interface CardProposal {
+  id: string;
+  version: number;
+  mode: string;
+  status: string;
+  status_label: string;
+  total: number;
+  file_name: string;
+}
+
 export interface FunnelLead {
   id: string;
   name: string | null;
@@ -31,6 +42,7 @@ export interface FunnelLead {
   qualification: Record<string, unknown>;
   pending_fields: string[];
   attachments: Attachment[];
+  current_proposal?: CardProposal | null;
   human_operator?: boolean;
   needs_erica?: boolean;
   lost_reason?: string | null;

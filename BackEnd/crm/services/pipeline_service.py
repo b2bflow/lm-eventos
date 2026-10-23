@@ -275,6 +275,33 @@ class PipelineService:
             return base.filter(Q(customer_state_now__in=sources) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at__ne=None)))
         return base.filter(customer_state_now__in=sources)
 
+    @staticmethod
+    def _cards(customers: list[Customer]) -> list[dict]:
+        """Cards do funil com a proposta atual do lead (última versão), que aparece anexada no card."""
+        from sales.models import STATUS_LABELS, Proposal
+        from sales.services.proposal_pdf import file_name
+
+        latest = {}
+        if customers:
+            proposals = (Proposal.objects(customer__in=[c.id for c in customers], opportunity_id=None,
+                                          status__ne='substituida')
+                         .no_dereference().only('id', 'customer', 'version', 'mode', 'status', 'total')
+                         .order_by('-version'))
+            for p in proposals:
+                latest.setdefault(str(getattr(p.customer, 'id', p.customer)), p)
+        cards = []
+        for customer in customers:
+            card = customer.to_dict()
+            p = latest.get(str(customer.id))
+            card["current_proposal"] = p and {
+                "id": str(p.id), "version": p.version, "mode": p.mode, "status": p.status,
+                "status_label": STATUS_LABELS.get(p.status, p.status), "total": p.total,
+                "file_name": file_name({"client_name": customer.name or customer.company or "Cliente",
+                                        "version": p.version}),
+            }
+            cards.append(card)
+        return cards
+
     def lead_list(self, offset: int = 0, limit: int = 50, stage: str | None = None, **filters) -> dict:
         """Funil em lista: os mesmos leads e filtros do quadro, numa lista só, paginada no banco."""
         base = self._board_queryset(**filters)
@@ -283,7 +310,7 @@ class PipelineService:
         total = queryset.count()
         items = list(queryset.order_by('-updated_at', '-id').skip(offset).limit(limit))
         return {"count": total, "offset": offset, "has_more": offset + len(items) < total,
-                "results": [c.to_dict() for c in items]}
+                "results": self._cards(items)}
 
     def board(self, stages: list[str] | None = None, per_stage: int = 30, offsets: dict | None = None, **filters) -> dict:
         """Colunas do funil: {stage: {count, results, offset, has_more}}. Cada coluna paginada no banco."""
@@ -300,6 +327,6 @@ class PipelineService:
                 "count": total,
                 "offset": offset,
                 "has_more": offset + len(items) < total,
-                "results": [c.to_dict() for c in items],
+                "results": self._cards(items),
             }
         return columns
