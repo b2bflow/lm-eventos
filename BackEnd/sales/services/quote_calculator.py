@@ -153,19 +153,28 @@ def unit_price(code: str, table: dict) -> Decimal | None:
     return None if price is None else money(price)
 
 
+# Unidades que aceitam quantidade quebrada (2,5 m² de palco, 7,5 m de passa-cabo); o resto é contado inteiro
+FRACTIONAL_UNITS = {"m²", "metro"}
+
+
 def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: dict | None, multiplier: int = 1,
-              note: str | None = None, block: str | None = None):
+              note: str | None = None, block: str | None = None, name: str | None = None):
+    """Uma linha da proposta. `name` troca o nome do catálogo quando a origem da linha precisa aparecer
+    para o cliente (ex.: microfone que a banda voz e violão soma, separado dos extras)."""
     item = catalog_item(code, table)
     qty = non_negative(qty, f"Quantidade de {item['name']}")
     if qty == 0:
         return
+    per_piece = item["billing_unit"] == "metro" and item.get("billed_length_m")
+    if qty != qty.to_integral_value() and (per_piece or item["billing_unit"] not in FRACTIONAL_UNITS):
+        raise ValueError(f"A quantidade de {item['name']} precisa ser um número inteiro.")
     catalog_price = unit_price(code, table)
     price = catalog_price
     override = (table.get("unit_overrides") or {}).get(code)
     if override not in (None, ""):
         price = money(non_negative(override, f"Preço de {item['name']}"))
     line = {
-        "code": code, "name": item["name"], "block": block or item.get("block") or "outros",
+        "code": code, "name": name or item["name"], "block": block or item.get("block") or "outros",
         # Torres cobradas por metro são pedidas em peças (o preço já é por peça)
         "qty": qty, "unit": "peça" if item["billing_unit"] == "metro" and item.get("billed_length_m") else item["billing_unit"],
         "unit_price": price if price is not None else None,
@@ -184,13 +193,18 @@ def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: di
     if availability is not None and code in availability:
         available = availability[code]
         line["available"] = available
+        # O mesmo item pode vir de mais de uma linha (banda + extras, kit + avulso): o estoque vale para a soma
+        requested = qty + sum((l["qty"] for l in result.lines if l["code"] == code), Decimal("0"))
+        warning = None
         if not item["owned"]:
-            result.warnings.append(f"{item['name']}: terceirizado, confirmar disponibilidade com o fornecedor.")
+            warning = f"{item['name']}: terceirizado, confirmar disponibilidade com o fornecedor."
         elif available is None:
-            result.warnings.append(f"{item['name']}: quantidade em estoque ainda não contada.")
-        elif qty > available:
+            warning = f"{item['name']}: quantidade em estoque ainda não contada."
+        elif requested > available:
             line["shortage"] = True
-            result.lock("estoque_insuficiente", f"{item['name']}: pedido {fmt_qty(qty)}, disponível {fmt_qty(available)}")
+            result.lock("estoque_insuficiente", f"{item['name']}: pedido {fmt_qty(requested)}, disponível {fmt_qty(available)}")
+        if warning and warning not in result.warnings:
+            result.warnings.append(warning)
     result.lines.append(line)
 
 
@@ -314,7 +328,8 @@ def _add_sound(result: QuoteResult, guests: int, band: str, dance_floor: bool, t
         _add_line(result, "som_backline", 1, table, availability)
         result.warnings.append("Banda completa: a Erica revisa o rider.")
     elif band == "voz_violao":
-        _add_line(result, "som_mic_sem_fio", 1, table, availability, note="Voz e violão")
+        _add_line(result, "som_mic_sem_fio", 1, table, availability, note="Voz e violão",
+                  name="Microfone sem fio (voz e violão)")
 
 
 def _check_guests(result: QuoteResult, guests: int, config: CalcConfig):

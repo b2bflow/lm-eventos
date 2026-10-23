@@ -29,6 +29,15 @@ def _user_info(user) -> tuple[str | None, str | None]:
     return str(user.id), name
 
 
+def _fractional_item(item) -> bool:
+    """Mesma regra da calculadora: só m² e metro corrido (passa-cabo) aceitam fração; torre é peça."""
+    from sales.catalog import CATALOG_BY_CODE
+    from sales.services.quote_calculator import FRACTIONAL_UNITS
+    if (CATALOG_BY_CODE.get(item.code) or {}).get("billed_length_m"):
+        return False
+    return item.billing_unit in FRACTIONAL_UNITS
+
+
 def _positive_qty(qty) -> float:
     if isinstance(qty, bool):
         raise ValueError("Informe a quantidade.")
@@ -154,6 +163,8 @@ class InventoryService:
         if not all(isinstance(v, (str, type(None))) for v in (client_name, customer_id, note)):
             raise ValueError("Cliente, lead e observação devem ser texto.")
         qty = _positive_qty(qty)
+        if not float(qty).is_integer() and not _fractional_item(item):
+            raise ValueError(f"A quantidade de {item.name} precisa ser um número inteiro.")
         if not item.active:
             raise ValueError("Item removido do estoque.")
         if end <= start:

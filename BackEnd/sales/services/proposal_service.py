@@ -88,6 +88,23 @@ def _customer(customer_id: str) -> Customer:
     return customer
 
 
+def _mirror_value_to_quote(customer: Customer, total: float, sent_at: datetime | None = None):
+    """Valor da proposta também na cotação ativa (coleção `quotes`), que o perfil do WhatsApp e a página
+    de Leads leem; sem isso, eles mostravam o valor antigo da cotação. Grava direto, sem o espelho
+    cotação -> lead (crm.services.quote_sync), que copiaria de volta os outros campos da cotação."""
+    try:
+        from crm.repositories.quote_repository import QuoteRepository
+        quote = QuoteRepository().get_active_by_customer(customer)
+        if not quote:
+            return
+        updates = {"set__quoted_amount": total, "set__updated_at": datetime.utcnow()}
+        if sent_at:
+            updates["set__proposal_sent_at"] = sent_at
+        type(quote).objects(id=quote.id).update_one(**updates)
+    except Exception as e:  # o valor no lead já está certo; a cotação é só espelho
+        logger.error(f"[Proposal] Falha ao levar o valor da proposta para a cotação: {e}")
+
+
 def _proposal(proposal_id: str) -> Proposal:
     try:
         proposal = Proposal.objects(id=ObjectId(proposal_id)).first()
@@ -282,6 +299,7 @@ class ProposalService:
         customer.proposal_sent_at = now
         customer.updated_at = now
         customer.save()
+        _mirror_value_to_quote(customer, proposal.total, sent_at=now)
         if customer.stage in (domain.NEW_LEAD, domain.QUALIFIED, domain.LOST):
             CrmContainer.get_pipeline_service().change_stage(str(customer.id), domain.PROPOSAL_SENT, user=user, system=True,
                                                              note=f"Proposta v{proposal.version} enviada.")
@@ -399,6 +417,12 @@ class ProposalService:
         proposal.accepted_at = now
         proposal.updated_at = now
         proposal.save()
+        # O valor do card e dos painéis passa a ser o da versão aceita (pode não ser a última enviada)
+        customer.reload()
+        customer.quoted_amount = proposal.total
+        customer.updated_at = now
+        customer.save()
+        _mirror_value_to_quote(customer, proposal.total)
         reserved = self.inventory.reserve(str(proposal.id), customer, proposal.lines, proposal.period_start,
                                           proposal.period_end)
         CrmContainer.get_sdr_task_service().cancel_pending_for_customer(str(customer.id))

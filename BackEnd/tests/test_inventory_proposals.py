@@ -92,6 +92,26 @@ def test_items_endpoint_shows_total_reserved_and_available_by_date(api_client, s
 # --- Proposta --------------------------------------------------------------------------------
 
 @pytest.mark.django_db
+def test_sent_and_accepted_value_reaches_card_and_quote(sdr_client, stock, lead, contacts, zapi_outbox):
+    from crm.models.quote_model import Quote
+    quote = Quote(customer=lead, status="BUDGET", quoted_amount=999).save()
+    first = sdr_client.post("/api/v1/sales/proposals/", {"customer_id": str(lead.id), "mode": "porta",
+                                                         "inputs": PORTA_INPUTS}, format="json").data
+    second = sdr_client.post("/api/v1/sales/proposals/", {"customer_id": str(lead.id), "mode": "porta", "inputs": {
+        **PORTA_INPUTS, "items": [{"code": "q30_torre_5m", "qty": 10}]}}, format="json").data
+    sdr_client.post(f"/api/v1/sales/proposals/{first['id']}/send/")
+    sdr_client.post(f"/api/v1/sales/proposals/{second['id']}/send/")
+    lead.reload()
+    quote.reload()
+    assert lead.quoted_amount == second["total"] == 750.0 and quote.quoted_amount == 750.0 and quote.proposal_sent_at
+    # O cliente aceitou a primeira versão: card, painéis e cotação passam a mostrar o valor dela
+    assert sdr_client.post(f"/api/v1/sales/proposals/{first['id']}/accept/").status_code == 200
+    lead.reload()
+    quote.reload()
+    assert lead.quoted_amount == first["total"] == 7660.0 and quote.quoted_amount == 7660.0
+
+
+@pytest.mark.django_db
 def test_full_porta_cycle_send_accept_reserves_stock(sdr_client, stock, lead, contacts, zapi_outbox):
     resp = sdr_client.post("/api/v1/sales/proposals/", {"customer_id": str(lead.id), "mode": "porta", "inputs": PORTA_INPUTS}, format="json")
     assert resp.status_code == 201, resp.data

@@ -61,6 +61,36 @@ def test_context_follows_the_three_canva_models():
     assert structure["mission"][0].startswith("Nossa missão é planejar, organizar")
 
 
+def test_pdf_lists_band_microphone_apart_and_quantities_match_the_lines():
+    from sales.services.quote_calculator import CorporateInput, calculate_corporativo
+    result = calculate_corporativo(CorporateInput(guests=2, band="voz_violao", extra_mics=2, digital_mixer=1),
+                                   merge_price_table(None)).to_dict()
+    proposal = {"mode": "corporativo", "inputs": {"show_item_prices": True}, "lines": result["lines"],
+                "costs": result["operational"], "items_total": result["items_total"], "total": result["total"]}
+    ctx = build_pdf_context(proposal, {"name": "João"}, SETTINGS)
+    items = [i for b in ctx["blocks"] for i in b["items"]]
+    assert "01 Microfone sem fio (voz e violão): R$ 150,00" in items
+    assert "02 Microfone sem fio adicional: R$ 150,00 cada = R$ 300,00" in items
+    # Cada quantidade do PDF bate com a soma das linhas do mesmo item
+    pdf_qty = sum(int(i.split()[0]) for i in items if "Microfone" in i)
+    assert pdf_qty == sum(l["qty"] for l in result["lines"] if l["code"] == "som_mic_sem_fio") == 3
+
+
+def test_pdf_separates_band_microphone_of_proposals_saved_before_the_fix():
+    # Linhas como as da v5 do Lead João: as duas com o nome do catálogo, só a observação diferente
+    mic = {"code": "som_mic_sem_fio", "name": "Microfone sem fio adicional", "block": "som", "unit": "unidade",
+           "unit_price": 150, "periods": 1}
+    lines = [{**mic, "qty": 1, "subtotal": 150, "note": "Voz e violão"}, {**mic, "qty": 2, "subtotal": 300, "note": "Adicionais"}]
+    ctx = build_pdf_context({"mode": "corporativo", "inputs": {}, "lines": lines, "costs": [], "total": 450}, {"name": "João"},
+                            SETTINGS)
+    assert ctx["blocks"][0]["items"] == ["01 Microfone sem fio (voz e violão)", "02 Microfone sem fio adicional"]
+    stage = {"code": "palco_forrado", "name": "Palco forrado", "block": "palco", "unit": "m²", "unit_price": 95, "qty": 7,
+             "subtotal": 665}
+    priced = build_pdf_context({"mode": "corporativo", "inputs": {"show_item_prices": True}, "lines": [stage], "costs": [],
+                                "total": 665}, {"name": "João"}, SETTINGS)
+    assert priced["blocks"][0]["items"] == ["07 m² Palco forrado: R$ 95,00 o m² = R$ 665,00"]
+
+
 def test_context_porta_and_single_product():
     porta = build_pdf_context({"mode": "porta", "inputs": {"pickup_date": "2026-10-23", "return_date": "2026-10-26"},
                                "lines": [{"code": "q30_torre_5m", "name": "Torre Q30 5 m", "block": "estrutura",

@@ -129,6 +129,37 @@ def test_corporate_without_invoice_skips_115():
     assert calculate_corporativo(data, TABLE).total == Decimal("1560.00")  # 1300 x 1,20
 
 
+def test_band_microphone_stays_apart_from_extra_mics():
+    # Voz e violão soma 1 microfone (regra da LM); os extras pedidos são outra linha, com o mesmo preço
+    result = calculate_corporativo(CorporateInput(guests=2, band="voz_violao", extra_mics=2), TABLE)
+    mics = [l for l in result.lines if l["code"] == "som_mic_sem_fio"]
+    assert [(l["name"], l["qty"]) for l in mics] == [("Microfone sem fio (voz e violão)", 1),
+                                                     ("Microfone sem fio adicional", 2)]
+    assert sum(l["subtotal"] for l in mics) == Decimal("450.00")
+    assert result.items_total == sum(l["subtotal"] for l in result.lines)
+
+
+def test_counted_items_need_whole_quantities():
+    with pytest.raises(ValueError, match="inteiro"):
+        calculate_corporativo(CorporateInput(guests=50, extra_mics=2.5), TABLE)
+    with pytest.raises(ValueError, match="inteiro"):
+        porta([{"code": "q30_torre_5m", "qty": 1.5}])  # torre cobrada por metro, mas pedida em peças
+    # m² e metro aceitam fração
+    stage = calculate_corporativo(CorporateInput(guests=50, stage_m2=2.5, pass_cable_m=7.5), TABLE)
+    assert codes(stage)["palco_forrado"]["qty"] == Decimal("2.5") and codes(stage)["palco_passa_cabo"]["qty"] == Decimal("7.5")
+
+
+def test_stock_check_adds_up_lines_of_the_same_item():
+    # 1 da banda + 2 extras = 3 pedidos; com 2 no estoque, cada linha sozinha passava
+    result = calculate_corporativo(CorporateInput(guests=2, band="voz_violao", extra_mics=2), TABLE,
+                                   availability={"som_mic_sem_fio": 2})
+    assert "estoque_insuficiente" in lock_codes(result)
+    assert any("pedido 3, disponível 2" in (r["detail"] or "") for r in result.lock_reasons)
+    ok = calculate_corporativo(CorporateInput(guests=2, band="voz_violao", extra_mics=2), TABLE,
+                               availability={"som_mic_sem_fio": 3})
+    assert "estoque_insuficiente" not in lock_codes(ok)
+
+
 def test_sub_and_band_rules():
     full_band = calculate_corporativo(CorporateInput(guests=180, band="completa"), TABLE)
     assert {"som_150_200", "som_sub_duplo", "som_backline"} <= set(codes(full_band))

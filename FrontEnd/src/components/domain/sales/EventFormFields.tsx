@@ -99,13 +99,13 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="nenhuma">Nenhuma</SelectItem>
-                <SelectItem value="voz_violao">Voz e violão</SelectItem>
+                <SelectItem value="voz_violao">Voz e violão (+1 microfone)</SelectItem>
                 <SelectItem value="completa">Completa (backline)</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <SwitchField id={id("pista")} label="Pista" checked={form.dance_floor} onChange={(v) => set("dance_floor", v)} />
-          <NumberField label="Microfones extras" value={form.extra_mics} onChange={(v) => set("extra_mics", v)} />
+          <NumberField label="Microfones extras" suffix="além dos inclusos" value={form.extra_mics} onChange={(v) => set("extra_mics", v)} />
           {!social && <NumberField label="Mesa digital" value={form.digital_mixer} onChange={(v) => set("digital_mixer", v)} />}
           {social && (
             <SwitchField id={id("cerimonia")} label="Som de cerimônia" checked={form.ceremony_sound}

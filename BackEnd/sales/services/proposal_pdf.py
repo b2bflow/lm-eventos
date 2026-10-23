@@ -175,6 +175,10 @@ def _validity_text(days: int, valid_until) -> str:
     return f"Esta proposta tem validade de {span}{until}."
 
 
+# Propostas salvas antes do microfone da banda ter nome próprio: a linha é reconhecida pela observação
+LEGACY_LINE_NAMES = {("som_mic_sem_fio", "Voz e violão"): "Microfone sem fio (voz e violão)"}
+
+
 def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_until=None,
                       issued_at: datetime | None = None) -> dict:
     """Dados da proposta já formatados para o PDF (sem banco: recebe dicionários)."""
@@ -200,8 +204,11 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
                                                                   "subtotal": 0.0, "unit_price": None})
             kit["subtotal"] += subtotal
             continue
-        key = line.get("code")
-        entry = blocks[block].setdefault(key, {"qty": 0, "unit": line.get("unit") or "unidade", "name": line.get("name"),
+        # Só soma linhas do mesmo item, com o mesmo nome e preço: o microfone da banda não some dentro dos
+        # extras e "cada x quantidade" sempre bate com o subtotal
+        name = LEGACY_LINE_NAMES.get((line.get("code"), line.get("note")), line.get("name"))
+        key = (line.get("code"), name, line.get("unit_price"))
+        entry = blocks[block].setdefault(key, {"qty": 0, "unit": line.get("unit") or "unidade", "name": name,
                                                "subtotal": 0.0, "unit_price": line.get("unit_price")})
         entry["qty"] += float(line.get("qty") or 0)
         entry["subtotal"] += subtotal
@@ -214,7 +221,8 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         if float(v["qty"]) == 1 and periods == 1:
             return f"{text}: {format_brl(v['subtotal'])}"
         weeks = f" x {periods} semanas" if periods > 1 else ""
-        return f"{text}: {format_brl(unit_price)} cada{weeks} = {format_brl(v['subtotal'])}"
+        per = {"m²": "o m²", "metro": "o metro"}.get(v["unit"], "cada")
+        return f"{text}: {format_brl(unit_price)} {per}{weeks} = {format_brl(v['subtotal'])}"
 
     block_list = [
         {"title": BLOCK_ORDER[key], "items": [item_text(v) for v in items.values()]}

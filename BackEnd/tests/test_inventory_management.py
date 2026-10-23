@@ -131,6 +131,13 @@ def test_manual_reservation_reduces_availability_and_can_be_cancelled(sdr_api, p
 
 
 @pytest.mark.django_db
+def test_manual_reservation_of_pieces_needs_whole_quantity(sdr_api, stock):
+    resp = sdr_api.post(f"{URL}/reservations/", {"item_id": str(_item().id), "qty": 1.5, "start": "2026-11-10",
+                                                 "end": "2026-11-12", "client_name": "Show"}, format="json")
+    assert resp.status_code == 400 and "inteiro" in resp.data["detail"]
+
+
+@pytest.mark.django_db
 def test_manual_reservation_needs_a_client(sdr_api, stock):
     resp = sdr_api.post(f"{URL}/reservations/", {"item_id": str(_item().id), "qty": 1, "start": "2026-11-10"},
                         format="json")
