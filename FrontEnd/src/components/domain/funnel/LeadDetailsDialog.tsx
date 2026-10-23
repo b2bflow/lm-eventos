@@ -470,41 +470,27 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
     <>
       {/* Cabeçalho: quem é o lead, ações do dia a dia, resultado e etapas */}
       <div className="shrink-0 space-y-3 border-b border-border/50 p-4 pr-12 sm:p-6 sm:pr-14">
-        <div className="min-w-0">
-          <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground truncate">{lead.name || "Sem nome"}</DialogTitle>
-          <DialogDescription asChild>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
-              {lead.company && <span>{lead.company}</span>}
-              <Badge variant="outline" className={LEAD_STATUS_STYLES[stage]}>{LEAD_STATUS_LABELS[stage]}</Badge>
-              {archived && <Badge variant="secondary"><Archive className="w-3 h-3 mr-1" /> Arquivado</Badge>}
-              {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product]}</Badge>}
-              {lead.ai_qualified_at && (
-                <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
-                  <BadgeCheck className="w-3 h-3 mr-1" /> Qualificado IA
-                </Badge>
-              )}
-              {lead.human_operator && <Badge variant="destructive">Operador humano</Badge>}
-            </div>
-          </DialogDescription>
-        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <DialogTitle className="text-xl sm:text-2xl font-bold text-foreground truncate">{lead.name || "Sem nome"}</DialogTitle>
+            <DialogDescription asChild>
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
+                {lead.company && <span>{lead.company}</span>}
+                <Badge variant="outline" className={LEAD_STATUS_STYLES[stage]}>{LEAD_STATUS_LABELS[stage]}</Badge>
+                {archived && <Badge variant="secondary"><Archive className="w-3 h-3 mr-1" /> Arquivado</Badge>}
+                {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product]}</Badge>}
+                {lead.ai_qualified_at && (
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-400">
+                    <BadgeCheck className="w-3 h-3 mr-1" /> Qualificado IA
+                  </Badge>
+                )}
+                {lead.human_operator && <Badge variant="destructive">Operador humano</Badge>}
+              </div>
+            </DialogDescription>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Ações do lead">
-          {/* Trabalhar o lead */}
-          <Button size="sm" variant="outline" onClick={() => setCallOpen(true)} title="Registrar o resultado de uma ligação">
-            <PhoneCall className="w-4 h-4 mr-1.5" /> Registrar ligação
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => navigate(`/agenda?lead=${lead.id}`)} title="Marcar reunião, visita ou ligação na agenda">
-            <CalendarPlus className="w-4 h-4 mr-1.5" /> Agendar
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => navigate(`/calculadora?lead=${lead.id}`)} title="Montar uma proposta na calculadora">
-            <Calculator className="w-4 h-4 mr-1.5" /> Nova proposta
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} title="Editar nome, contato, evento e valores">
-            <Pencil className="w-4 h-4 mr-1.5" /> Editar dados
-          </Button>
-
-          {/* Resultado do lead */}
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:border-l sm:border-border/60 sm:pl-3">
+          {/* Resultado do lead, ao lado do nome */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
             {/* Com resultado, mostra só o resultado; em andamento, os dois botões */}
             {won ? (
               <span className="inline-flex h-9 items-center gap-1.5 rounded-md bg-emerald-600/10 px-3 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
@@ -558,6 +544,22 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Ações do lead">
+          {/* Trabalhar o lead */}
+          <Button size="sm" variant="outline" onClick={() => setCallOpen(true)} title="Registrar o resultado de uma ligação">
+            <PhoneCall className="w-4 h-4 mr-1.5" /> Registrar ligação
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/agenda?lead=${lead.id}`)} title="Marcar reunião, visita ou ligação na agenda">
+            <CalendarPlus className="w-4 h-4 mr-1.5" /> Agendar
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigate(`/calculadora?lead=${lead.id}`)} title="Montar uma proposta na calculadora">
+            <Calculator className="w-4 h-4 mr-1.5" /> Nova proposta
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)} title="Editar nome, contato, evento e valores">
+            <Pencil className="w-4 h-4 mr-1.5" /> Editar dados
+          </Button>
         </div>
 
         <StageStepper stage={stage} onChange={changeStage} />
