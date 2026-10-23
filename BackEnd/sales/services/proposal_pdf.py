@@ -348,7 +348,8 @@ def _font(name: str) -> str:
 LAYOUTS = {
     "estrutura": {
         "header": {"size": 31, "base": 56.8, "step": 42.7},
-        "content": {"top": 324.5, "bottom": 1180, "width": 560, "title": 40, "item": 31},
+        "content": {"top": 324.5, "bottom": 1180, "width": 560, "title": 40, "item": 31, "after_title": 17.6,
+                    "between": 17.8},
         "pill": {"box": (138.5, 1209.4, 696.9, 1262.4), "size": 27},
         "total": {"base": 1310.7, "size": 35},
         "terms": {"top": 1334.7, "size": 22, "width": 600},
@@ -356,7 +357,8 @@ LAYOUTS = {
     },
     "corporativo": {
         "header": {"size": 25, "base": 67.2, "step": 34.5},
-        "content": {"top": 334.7, "bottom": 1236, "width": 560, "title": 40, "item": 25},
+        "content": {"top": 334.7, "bottom": 1236, "width": 560, "title": 40, "item": 25, "after_title": 14,
+                    "between": 17.6},
         "pill": {"box": (151.0, 1248.0, 664.8, 1290.0), "size": 13},
         "total": {"base": 1338.2, "size": 35},
         "terms": {"top": 1353.5, "size": 21.7, "width": 600},
@@ -364,7 +366,8 @@ LAYOUTS = {
     },
     "casamento": {
         "header": {"size": 25, "base": 67.2, "step": 34.5},
-        "content": {"top": 326.2, "bottom": 1162, "width": 560, "title": 40, "item": 25},
+        "content": {"top": 326.2, "bottom": 1162, "width": 560, "title": 40, "item": 25, "after_title": 0,
+                    "between": 11},
         "pill": {"box": (124.5, 1174.2, 662.1, 1220.8), "size": 18},
         "total": {"base": 1264.5, "size": 29},
         "terms": {"top": 1303.7, "size": 15, "width": 560},
@@ -376,7 +379,7 @@ LEADING = 1.378  # entrelinha dos itens no Canva (42,7 pt para fonte de 31)
 TEXT_SCALES = [1 - i * 0.05 for i in range(13)]  # de 100% até 40% para caber no quadro
 MISSION = {"top": 376.3, "size": 25, "step": 34.5, "width": 480}
 COVER_SIZE = 30
-COVER_TRACKING = 1.5  # espaçamento entre letras do nome e da data na capa
+COVER_TRACKING = 2.4  # espaçamento entre letras do nome e da data na capa (medido no Canva)
 
 
 class _Writer:
@@ -413,10 +416,12 @@ def _wrap(text: str, size: float, width: float, font="Montserrat") -> list[str]:
 
 def _price_sections(context: dict) -> list[dict]:
     sections = list(context["blocks"])
-    for title, items in (("Incluso", context["included"]), ("Não está incluso", context["not_included"]),
-                         ("Valores", context.get("price_summary") or [])):
+    # Incluso e não incluso em linha corrida, para não tomar o lugar dos itens no quadro
+    for title, items in (("Incluso", context["included"]), ("Não está incluso", context["not_included"])):
         if items:
-            sections.append({"title": title, "items": items})
+            sections.append({"title": title, "items": [" · ".join(items)]})
+    if context.get("price_summary"):
+        sections.append({"title": "Valores", "items": context["price_summary"]})
     return sections
 
 
@@ -428,9 +433,9 @@ def _layout_sections(sections: list[dict], spec: dict) -> tuple[float, list]:
         rows, y = [], spec["top"]
         for i, section in enumerate(sections):
             if i:
-                y += 18 * scale
+                y += spec["between"] * scale
             rows.append(("title", section["title"].upper(), y + ASCENT * title, title))
-            y += title * 1.22 + 17 * scale
+            y += title * 1.22 + spec["after_title"] * scale
             for text in section["items"]:
                 for part in _wrap(text, item, spec["width"]):
                     rows.append(("item", part, y + ASCENT * item, item))
