@@ -1,18 +1,19 @@
-"""PDF da proposta comercial, no visual do modelo atual da LM (`Proposta Comercial .pdf`).
+"""PDF da proposta comercial, igual aos três modelos do Canva da LM.
 
-Páginas: capa, missão, referências, página do evento (itens por bloco, incluso e não incluso,
-pagamento, validade e cancelamento; continua em mais páginas se precisar) e contato. Seguem os três
-modelos do Canva: estrutura (porta, sem nome na capa), corporativo e casamento/social (nome do
-cliente no alto da capa e data do evento embaixo). O texto da missão muda com o tipo da proposta
-(MISSION_TEXTS) e é desenhado sobre `fundo_missao.jpg`. Referências e contato são as páginas do
-modelo atual, guardadas como imagem em `sales/pdf_assets/`; para trocar, substitua os arquivos
-mantendo os nomes. Capa e página do evento usam `fundo_capa.jpg` e `fundo_preco.jpg` (luz quente da
-referência do Canva). As fotos de referências mudam com o tipo de proposta
-(`referencias_<tipo>.jpg`, ver REFERENCE_ASSETS); sem o arquivo do tipo, vale `referencias.jpg`.
+Os modelos (estrutura, corporativo e casamento) foram exportados do Canva e cada página virou imagem em
+`sales/pdf_assets/canva/<modelo>/pagina<N>.jpg` (ver `devtools/build_canva_pages.py`): capa, missão,
+referências, preços e contato. Capa e página de preços vêm sem os textos; a plataforma escreve por cima
+nome, data, cabeçalho do evento, itens por bloco, incluso e não incluso, forma de pagamento, total e
+condições, nas posições, fontes (Montserrat) e cores do Canva (LAYOUTS). Porta e produto único usam o
+modelo de estrutura; corporativo o corporativo; social o de casamento (evento social que não é casamento
+usa a missão sem texto, com o texto genérico por cima). Para mudar o visual, mude no Canva, exporte em PDF
+e rode o script de novo.
+
+Se os itens não cabem no quadro, o texto da página de preços diminui até caber (TEXT_SCALES).
 
 Valores dos itens: só aparecem com `inputs.show_item_prices` (desligado por padrão). Ligado, cada item
-sai com quantidade, preço unitário e subtotal (o preço editado na proposta, se houver), e o quadro
-de valores mostra itens, serviços, nota e ajustes antes do total.
+sai com quantidade, preço unitário e subtotal (o preço editado na proposta, se houver), e um bloco de
+valores mostra itens, serviços, nota e ajustes antes do total.
 
 `build_pdf_context` é pura (testável sem banco) e `render_pdf` desenha com ReportLab, que não
 depende de bibliotecas nativas (WeasyPrint exigiria GTK/Pango na imagem de deploy).
@@ -21,24 +22,20 @@ from collections import OrderedDict
 from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
-from xml.sax.saxutils import escape
 
-from reportlab.lib.colors import Color, HexColor, white
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.platypus import (
-    BaseDocTemplate, Flowable, Frame, KeepTogether, NextPageTemplate, PageBreak, PageTemplate, Paragraph, Spacer, Table,
-    TableStyle,
-)
+from reportlab.lib.colors import HexColor, white
+from reportlab.lib.utils import simpleSplit
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas as pdf_canvas
 
 from sales.formatting import format_brl
 
 ASSETS = Path(__file__).resolve().parent.parent / "pdf_assets"
-PAGE = (540, 960)  # 9:16, como o modelo atual
-COPPER = HexColor("#D4935A")
-COPPER_DARK = HexColor("#C98340")
+CANVA = ASSETS / "canva"
+PAGE = (810, 1440)  # tamanho da página exportada do Canva (story 9:16)
+COPPER = HexColor("#D3986B")
 TEXT = white
-MUTED = Color(1, 1, 1, alpha=0.72)
 
 MODE_TITLES = {
     "porta": "Locação de estrutura",
@@ -47,13 +44,8 @@ MODE_TITLES = {
     "produto_unico": "Locação de equipamento",
 }
 
-# Fotos da página de referências por modo da proposta
-REFERENCE_ASSETS = {
-    "corporativo": "referencias_corporativo.jpg",
-    "social": "referencias_social.jpg",
-    "porta": "referencias_estrutura.jpg",
-    "produto_unico": "referencias_produto.jpg",
-}
+# Modelo do Canva usado por cada modo da proposta
+MODE_MODELS = {"porta": "estrutura", "produto_unico": "estrutura", "corporativo": "corporativo", "social": "casamento"}
 
 
 MISSION_ESTRUTURA = [
@@ -99,12 +91,6 @@ def mission_text(mode: str | None, celebration_type: str | None = None) -> list[
     if mode == "social" and "casamento" in (celebration_type or "").lower():
         return MISSION_CASAMENTO
     return MISSION_TEXTS.get(mode, MISSION_ESTRUTURA)
-
-
-def asset(name: str, fallback: str) -> str:
-    """Caminho do asset, ou do fallback quando o arquivo ainda não foi colocado em pdf_assets/."""
-    path = ASSETS / name
-    return str(path if path.exists() else ASSETS / fallback)
 
 
 BLOCK_ORDER = OrderedDict([
@@ -159,9 +145,13 @@ def _long_day(value) -> str:
     return f"{day.day:02d} de {MONTHS[day.month - 1]} de {day.year}" if day else ""
 
 
-def _cover_day(value) -> str:
+def _cover_day(value, model: str) -> str:
+    """Data da capa como no Canva: "23 DE JULHO" (corporativo) ou "15/AGOSTO/2026" (casamento)."""
     day = _day(value)
-    return f"{day.day:02d}/{MONTHS[day.month - 1].upper()}/{day.year}" if day else ""
+    if not day:
+        return ""
+    month = MONTHS[day.month - 1].upper()
+    return f"{day.day:02d} DE {month}" if model == "corporativo" else f"{day.day:02d}/{month}/{day.year}"
 
 
 def _qty(value, unit: str) -> str:
@@ -285,8 +275,6 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         header = [f"Data do evento: {_fmt_day(event_day)}",
                   f"Local: {customer.get('venue') or qualification.get('local') or 'a definir'}",
                   f"Horário: {qualification.get('horario') or qualification.get('horario_evento') or 'a definir'}"]
-        if inputs.get("guests"):
-            header.append(f"Público: {int(inputs['guests'])} pessoas")
 
     price_summary = []
     if show_prices:
@@ -304,6 +292,7 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
             adjustment = proposal["manual_adjustment"]
             price_summary.append(f"Ajuste: {'-' if adjustment < 0 else '+'}{format_brl(abs(adjustment))}")
 
+    model = MODE_MODELS.get(mode, "estrutura")
     validity_days = int(settings.get("proposal_validity_days") or 5)
     payment = [settings.get("payment_terms_text") or "Forma de pagamento a combinar.",
                settings.get("down_payment_text") or "Sinal a combinar."]
@@ -311,9 +300,12 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         "client_name": customer.get("name") or customer.get("company") or "Cliente",
         "company": customer.get("company") if customer.get("name") else None,
         "issued_at": _long_day(issued_at),
-        "cover_name": (customer.get("name") or customer.get("company") or "").upper()
-        if mode in ("corporativo", "social") else None,
-        "cover_date": _cover_day(event_day) if mode in ("corporativo", "social") else None,
+        "model": model,
+        "cover_name": (customer.get("name") or customer.get("company") or "").upper() if model != "estrutura" else None,
+        "cover_date": _cover_day(event_day, model) if model != "estrutura" else None,
+        "issued_day": _fmt_day(issued_at),
+        "mission_page": "pagina2.jpg" if mode != "social" or mission_text(mode, customer.get("celebration_type"))
+        is MISSION_CASAMENTO else "pagina2_sem_texto.jpg",
         "mission": mission_text(mode, customer.get("celebration_type")),
         "total_label": "INVESTIMENTO" if mode == "social" else "CUSTO TOTAL",
         "version": proposal.get("version") or 1,
@@ -335,188 +327,206 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
 
 # --- Desenho -----------------------------------------------------------------------------
 
-def _style(name, size, color=TEXT, leading=None, font="Helvetica", space_after=0):
-    return ParagraphStyle(name, fontName=font, fontSize=size, leading=leading or size * 1.3, textColor=color,
-                          alignment=TA_CENTER, spaceAfter=space_after)
+FONT_FILES = {"Montserrat": "Montserrat-Regular.ttf", "Montserrat-SemiBold": "Montserrat-SemiBold.ttf"}
+FONT_FALLBACK = {"Montserrat": "Helvetica", "Montserrat-SemiBold": "Helvetica-Bold"}
 
 
-STYLES = {
-    "header": _style("header", 15, leading=20),
-    "block": _style("block", 15, COPPER, leading=19, space_after=3),
-    "item": _style("item", 11.5, leading=15),
-    "small": _style("small", 10, MUTED, leading=13),
-    "pill": _style("pill", 12, white, leading=15),
-    "total": _style("total", 21, leading=26, font="Helvetica-Bold"),
-    "mission": _style("mission", 15, leading=20),
+def _font(name: str) -> str:
+    """Montserrat (a fonte do Canva) de pdf_assets/fonts; sem o arquivo, Helvetica."""
+    if name in pdfmetrics.getRegisteredFontNames():
+        return name
+    path = ASSETS / "fonts" / FONT_FILES[name]
+    if not path.exists():
+        return FONT_FALLBACK[name]
+    pdfmetrics.registerFont(TTFont(name, str(path)))
+    return name
+
+
+# Posições do Canva em pontos, com y medido do alto da página (como no PDF exportado).
+# header: linhas de data/local/horário; content: área dos itens dentro do quadro; pill: faixa da forma de
+# pagamento; total e terms: valor e condições embaixo; cover_*: linha de base do nome e da data na capa.
+LAYOUTS = {
+    "estrutura": {
+        "header": {"size": 31, "base": 56.8, "step": 42.7},
+        "content": {"top": 324.5, "bottom": 1180, "width": 560, "title": 40, "item": 31},
+        "pill": {"box": (138.5, 1209.4, 696.9, 1262.4), "size": 27},
+        "total": {"base": 1310.7, "size": 35},
+        "terms": {"top": 1334.7, "size": 22, "width": 600},
+        "cover_name": None, "cover_date": None,
+    },
+    "corporativo": {
+        "header": {"size": 25, "base": 67.2, "step": 34.5},
+        "content": {"top": 334.7, "bottom": 1236, "width": 560, "title": 40, "item": 25},
+        "pill": {"box": (151.0, 1248.0, 664.8, 1290.0), "size": 13},
+        "total": {"base": 1338.2, "size": 35},
+        "terms": {"top": 1353.5, "size": 21.7, "width": 600},
+        "cover_name": 123.0, "cover_date": 1350.7,
+    },
+    "casamento": {
+        "header": {"size": 25, "base": 67.2, "step": 34.5},
+        "content": {"top": 326.2, "bottom": 1162, "width": 560, "title": 40, "item": 25},
+        "pill": {"box": (124.5, 1174.2, 662.1, 1220.8), "size": 18},
+        "total": {"base": 1264.5, "size": 29},
+        "terms": {"top": 1303.7, "size": 15, "width": 560},
+        "cover_name": 108.7, "cover_date": 1305.3,
+    },
 }
+ASCENT = 0.968  # linha de base = topo da caixa de texto + ASCENT * tamanho (medido no PDF do Canva)
+LEADING = 1.378  # entrelinha dos itens no Canva (42,7 pt para fonte de 31)
+TEXT_SCALES = [1 - i * 0.05 for i in range(13)]  # de 100% até 40% para caber no quadro
+MISSION = {"top": 376.3, "size": 25, "step": 34.5, "width": 480}
+COVER_SIZE = 30
+COVER_TRACKING = 1.5  # espaçamento entre letras do nome e da data na capa
 
 
-class PaymentBox(Flowable):
-    """Quadro final: forma de pagamento (faixa cobre), valor total, validade e cancelamento."""
+class _Writer:
+    """Escreve texto centralizado com y medido do alto da página; `trace` guarda o que foi escrito."""
 
-    def __init__(self, context: dict, width: float):
-        super().__init__()
-        self.context = context
-        self.box_width = width
-        self.parts = (
-            [Paragraph(escape(p), STYLES["pill"]) for p in context["payment"]],
-            [Paragraph(escape(t), STYLES["item"]) for t in context.get("price_summary") or []],
-            Paragraph(f"{context['total_label']}: {escape(context['total'])}", STYLES["total"]),
-            [Paragraph(escape(t), STYLES["small"]) for t in
-             filter(None, [context.get("invoice_note"), context["validity"], context["cancellation"]])],
-        )
+    def __init__(self, canvas, trace: list | None):
+        self.canvas = canvas
+        self.trace = trace
 
-    def wrap(self, avail_width, avail_height):
-        inner = self.box_width - 36
-        pills, summary, total, notes = self.parts
-        self._pill_h = sum(p.wrap(inner - 24, 1000)[1] for p in pills) + 16
-        self._summary_h = sum(p.wrap(inner, 1000)[1] for p in summary) + (6 if summary else 0)
-        self._total_h = total.wrap(inner, 1000)[1]
-        self._notes_h = sum(p.wrap(inner, 1000)[1] + 3 for p in notes)
-        self.height = 16 + self._pill_h + 10 + self._summary_h + self._total_h + 8 + self._notes_h + 14
-        return self.box_width, self.height
-
-    def draw(self):
-        c = self.canv
-        pills, summary, total, notes = self.parts
-        c.setStrokeColor(COPPER)
-        c.setLineWidth(1.2)
-        c.roundRect(0, 0, self.box_width, self.height, 18, stroke=1, fill=0)
-        y = self.height - 16
-        c.setFillColor(COPPER_DARK)
-        c.roundRect(18, y - self._pill_h, self.box_width - 36, self._pill_h, self._pill_h / 2 if self._pill_h < 40 else 14,
-                    stroke=0, fill=1)
-        py = y - 8
-        for p in pills:
-            _, h = p.wrap(self.box_width - 60, 1000)
-            p.drawOn(c, 30, py - h)
-            py -= h
-        y -= self._pill_h + 10
-        for p in summary:
-            _, h = p.wrap(self.box_width - 36, 1000)
-            p.drawOn(c, 18, y - h)
-            y -= h
-        if summary:
-            y -= 6
-        _, h = total.wrap(self.box_width - 36, 1000)
-        total.drawOn(c, 18, y - h)
-        y -= h + 8
-        for p in notes:
-            _, h = p.wrap(self.box_width - 36, 1000)
-            p.drawOn(c, 18, y - h)
-            y -= h + 3
+    def line(self, text: str, base: float, size: float, color=TEXT, font="Montserrat", tracking: float = 0.0,
+             max_width: float | None = None):
+        font = _font(font)
+        width = pdfmetrics.stringWidth(text, font, size) + tracking * max(len(text) - 1, 0)
+        if max_width and width > max_width:  # encolhe para caber na largura
+            size *= max_width / width
+            width = max_width
+        self.canvas.setFillColor(color)
+        self.canvas.setFont(font, size)
+        if tracking:
+            obj = self.canvas.beginText((PAGE[0] - width) / 2, PAGE[1] - base)
+            obj.setFont(font, size)
+            obj.setCharSpace(tracking)
+            obj.textOut(text)
+            self.canvas.drawText(obj)
+        else:
+            self.canvas.drawCentredString(PAGE[0] / 2, PAGE[1] - base, text)
+        if self.trace is not None:
+            self.trace.append(text)
 
 
-def _draw_image_page(name, fallback: str | None = None):
-    def draw(canvas, doc):
-        canvas.drawImage(asset(name, fallback or name), 0, 0, width=PAGE[0], height=PAGE[1])
-    return draw
+def _wrap(text: str, size: float, width: float, font="Montserrat") -> list[str]:
+    return simpleSplit(text, _font(font), size, width) or [""]
 
 
-def _draw_cover(context):
-    def draw(canvas, doc):
-        w, h = PAGE
-        canvas.drawImage(asset("fundo_capa.jpg", "fundo.jpg"), 0, 0, width=w, height=h)
-        canvas.setFillColor(COPPER)
-        canvas.setFont("Helvetica", 54)
-        canvas.drawCentredString(w / 2, h - 230, "PROPOSTA")
-        canvas.drawCentredString(w / 2, h - 292, "COMERCIAL")
-        size = 230
-        canvas.drawImage(str(ASSETS / "logo.png"), (w - size) / 2, h / 2 - size / 2 - 40, width=size, height=size,
-                         mask="auto")
-        # corporativo e casamento/social: nome no alto e data do evento embaixo; estrutura fica só com o título
-        canvas.setFont("Helvetica-Bold", 15)
-        if context.get("cover_name"):
-            canvas.drawCentredString(w / 2, h - 96, context["cover_name"][:40])
-        if context.get("cover_date"):
-            canvas.drawCentredString(w / 2, 96, context["cover_date"])
-    return draw
+def _price_sections(context: dict) -> list[dict]:
+    sections = list(context["blocks"])
+    for title, items in (("Incluso", context["included"]), ("Não está incluso", context["not_included"]),
+                         ("Valores", context.get("price_summary") or [])):
+        if items:
+            sections.append({"title": title, "items": items})
+    return sections
 
 
-def _draw_mission(context):
-    def draw(canvas, doc):
-        w, h = PAGE
-        canvas.drawImage(asset("fundo_missao.jpg", "fundo.jpg"), 0, 0, width=w, height=h)
-        y = h - 262
-        for text in context["mission"]:
-            para = Paragraph(escape(text), STYLES["mission"])
-            _, para_h = para.wrap(w - 150, 1000)
-            para.drawOn(canvas, 75, y - para_h)
-            y -= para_h + 14
-        size = 130
-        canvas.drawImage(str(ASSETS / "logo.png"), (w - size) / 2, 70, width=size, height=size, mask="auto")
-    return draw
+def _layout_sections(sections: list[dict], spec: dict) -> tuple[float, list]:
+    """Maior escala em que os blocos cabem no quadro: (escala, [(tipo, texto, linha de base, tamanho)])."""
+    available = spec["bottom"] - spec["top"]
+    for scale in TEXT_SCALES:
+        title, item = spec["title"] * scale, spec["item"] * scale
+        rows, y = [], spec["top"]
+        for i, section in enumerate(sections):
+            if i:
+                y += 18 * scale
+            rows.append(("title", section["title"].upper(), y + ASCENT * title, title))
+            y += title * 1.22 + 17 * scale
+            for text in section["items"]:
+                for part in _wrap(text, item, spec["width"]):
+                    rows.append(("item", part, y + ASCENT * item, item))
+                    y += item * LEADING
+        if y - spec["top"] <= available or scale == TEXT_SCALES[-1]:
+            return scale, rows
+    raise AssertionError("TEXT_SCALES vazio")
 
 
-FRAME = (36, 50, PAGE[0] - 72, PAGE[1] - 230)  # x, y, largura, altura do conteúdo
+def _draw_page_image(canvas, model: str, name: str):
+    canvas.drawImage(str(CANVA / model / name), 0, 0, width=PAGE[0], height=PAGE[1])
 
 
-def _draw_content(context):
-    def draw(canvas, doc):
-        w, h = PAGE
-        canvas.drawImage(asset("fundo_preco.jpg", "fundo.jpg"), 0, 0, width=w, height=h)
-        x, y, fw, fh = FRAME
-        canvas.setStrokeColor(COPPER)
-        canvas.setLineWidth(1.4)
-        canvas.roundRect(x - 12, y - 18, fw + 24, fh + 34, 26, stroke=1, fill=0)
-        size = 96
-        logo_y = y + fh + 16 - size / 2
-        canvas.setFillColor(HexColor("#000000"))
-        canvas.circle(w / 2, logo_y + size / 2, size / 2 + 4, stroke=0, fill=1)
-        canvas.drawImage(str(ASSETS / "logo.png"), (w - size) / 2, logo_y, width=size, height=size, mask="auto")
-        canvas.setFillColor(TEXT)
-        canvas.setFont("Helvetica", 14)
-        header = context["header"]
-        top = h - 34
-        for i, text in enumerate(header[:4]):
-            canvas.drawCentredString(w / 2, top - i * 19, text)
-    return draw
+def _draw_cover(write: _Writer, context: dict, layout: dict):
+    if layout["cover_name"] and context.get("cover_name"):
+        write.line(context["cover_name"][:40], layout["cover_name"], COVER_SIZE, COPPER, "Montserrat-SemiBold",
+                   COVER_TRACKING, max_width=PAGE[0] - 120)
+    if layout["cover_date"] and context.get("cover_date"):
+        write.line(context["cover_date"], layout["cover_date"], COVER_SIZE, COPPER, "Montserrat-SemiBold",
+                   COVER_TRACKING, max_width=PAGE[0] - 120)
 
 
-def render_pdf(context: dict, compress: bool = True) -> bytes:
+def _draw_mission(write: _Writer, context: dict):
+    base = MISSION["top"] + ASCENT * MISSION["size"]
+    for paragraph in context["mission"]:
+        for part in _wrap(paragraph, MISSION["size"], MISSION["width"]):
+            write.line(part, base, MISSION["size"])
+            base += MISSION["step"]
+        base += MISSION["step"]
+
+
+def _draw_prices(write: _Writer, context: dict, layout: dict):
+    header = layout["header"]
+    for i, text in enumerate(context["header"][:3]):
+        write.line(text, header["base"] + i * header["step"], header["size"], max_width=PAGE[0] - 80)
+
+    _, rows = _layout_sections(_price_sections(context), layout["content"])
+    for kind, text, base, size in rows:
+        write.line(text, base, size, COPPER if kind == "title" else TEXT)
+
+    # Forma de pagamento dentro da faixa: uma linha; se não couber legível, uma linha por texto
+    x0, y0, x1, y1 = layout["pill"]["box"]
+    size, inner = layout["pill"]["size"], (x1 - x0) - 40
+    one_line = " · ".join(context["payment"])
+    if pdfmetrics.stringWidth(one_line, _font("Montserrat"), size) * 0.65 <= inner or len(context["payment"]) == 1:
+        write.line(one_line, (y0 + y1) / 2 + 0.35 * size, size, max_width=inner)
+    else:
+        small = min(size * 0.65, (y1 - y0 - 8) / 2.3)
+        mid = (y0 + y1) / 2
+        for text, base in zip(context["payment"][:2], (mid - 0.15 * small, mid + 1.05 * small)):
+            write.line(text, base, small, max_width=inner)
+
+    total = layout["total"]
+    write.line(f"{context['total_label']}: {context['total']}", total["base"], total["size"], max_width=PAGE[0] - 100)
+
+    terms = layout["terms"]
+    lines = [t for t in (context.get("invoice_note"), context["validity"], context["cancellation"]) if t]
+    if context["model"] == "corporativo":
+        lines.append(f"Data: {context['issued_day']}")
+    size = terms["size"]
+    while True:  # diminui até as condições caberem até o fim da página
+        parts = [part for text in lines for part in _wrap(text, size, terms["width"])]
+        if terms["top"] + len(parts) * size * 1.25 <= PAGE[1] - 8 or size <= 9:
+            break
+        size -= 0.5
+    base = terms["top"] + ASCENT * size
+    for part in parts:
+        write.line(part, base, size)
+        base += size * 1.25
+
+
+def render_pdf(context: dict, compress: bool = True, trace: list | None = None) -> bytes:
+    """Desenha o PDF. `trace` (lista) recebe cada texto escrito por cima do Canva, para os testes."""
     buffer = BytesIO()
-    doc = BaseDocTemplate(
-        buffer, pagesize=PAGE, leftMargin=0, rightMargin=0, topMargin=0, bottomMargin=0,
-        title=f"Proposta comercial - {context['client_name']}", author="LM Eventos",
-        pageCompression=1 if compress else 0, invariant=1,
-    )
-    full = Frame(0, 0, PAGE[0], PAGE[1], leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0, id="full")
-    x, y, fw, fh = FRAME
-    content = Frame(x, y, fw, fh - 70, leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0, id="content")
-    doc.addPageTemplates([
-        PageTemplate(id="capa", frames=[full], onPage=_draw_cover(context)),
-        PageTemplate(id="missao", frames=[full], onPage=_draw_mission(context)),
-        PageTemplate(id="referencias", frames=[full], onPage=_draw_image_page(
-            REFERENCE_ASSETS.get(context.get("mode"), "referencias.jpg"), "referencias.jpg")),
-        PageTemplate(id="evento", frames=[content], onPage=_draw_content(context)),
-        PageTemplate(id="contato", frames=[full], onPage=_draw_image_page("contato.jpg")),
-    ])
+    canvas = pdf_canvas.Canvas(buffer, pagesize=PAGE, pageCompression=1 if compress else 0, invariant=1)
+    canvas.setTitle(f"Proposta comercial - {context['client_name']}")
+    canvas.setAuthor("LM Eventos")
+    model = context.get("model") or "estrutura"
+    layout = LAYOUTS[model]
+    write = _Writer(canvas, trace)
 
-    story = [Spacer(1, 1), NextPageTemplate("missao"), PageBreak(), Spacer(1, 1), NextPageTemplate("referencias"),
-             PageBreak(), Spacer(1, 1), NextPageTemplate("evento"), PageBreak()]
-    story.append(Paragraph(escape(context["title"].upper()), STYLES["block"]))
-    story.append(Spacer(1, 6))
-    for block in context["blocks"]:
-        part = [Paragraph(escape(block["title"].upper()), STYLES["block"])]
-        part += [Paragraph(escape(item), STYLES["item"]) for item in block["items"]]
-        story.append(KeepTogether(part))
-        story.append(Spacer(1, 7))
-    # Incluso e não incluso lado a lado
-    columns = [
-        [Paragraph(escape(title.upper()), STYLES["block"])] + [Paragraph(escape(i), STYLES["item"]) for i in items]
-        for title, items in (("Incluso", context["included"]), ("Não está incluso", context["not_included"])) if items
-    ]
-    if columns:
-        table = Table([columns], colWidths=[fw / len(columns)] * len(columns))
-        table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                                   ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 0),
-                                   ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
-        story.append(table)
-        story.append(Spacer(1, 7))
-    story.append(Spacer(1, 4))
-    story.append(PaymentBox(context, fw))
-    story += [NextPageTemplate("contato"), PageBreak(), Spacer(1, 1)]
-    doc.build(story)
+    _draw_page_image(canvas, model, "pagina1.jpg")
+    _draw_cover(write, context, layout)
+    canvas.showPage()
+    _draw_page_image(canvas, model, context.get("mission_page") or "pagina2.jpg")
+    if context.get("mission_page") == "pagina2_sem_texto.jpg":
+        _draw_mission(write, context)
+    canvas.showPage()
+    _draw_page_image(canvas, model, "pagina3.jpg")
+    canvas.showPage()
+    _draw_page_image(canvas, model, "pagina4.jpg")
+    _draw_prices(write, context, layout)
+    canvas.showPage()
+    _draw_page_image(canvas, model, "pagina5.jpg")
+    canvas.showPage()
+    canvas.save()
     return buffer.getvalue()
 
 
