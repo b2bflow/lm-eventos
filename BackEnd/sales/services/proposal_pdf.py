@@ -23,6 +23,7 @@ from datetime import date, datetime
 from io import BytesIO
 from pathlib import Path
 
+from reportlab import rl_config
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase import pdfmetrics
@@ -30,6 +31,11 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdf_canvas
 
 from sales.formatting import format_brl
+
+# As páginas do Canva entram como JPEG (~1,4 MB por PDF). Com ASCII85 ligado (padrão do ReportLab), cada
+# byte passa por um laço em Python puro (sem o acelerador em C): segundos de CPU por PDF em produção,
+# segurando os outros pedidos. Sem ele o JPEG vai binário no PDF, como é o normal.
+rl_config.useA85 = 0
 
 ASSETS = Path(__file__).resolve().parent.parent / "pdf_assets"
 CANVA = ASSETS / "canva"

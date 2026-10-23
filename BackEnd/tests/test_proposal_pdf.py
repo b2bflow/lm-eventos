@@ -103,6 +103,12 @@ def test_each_mode_uses_its_canva_model(mode, model):
     assert any(text.startswith("CUSTO TOTAL" if model != "casamento" else "INVESTIMENTO") for text in trace)
 
 
+def test_canva_pages_are_embedded_as_binary_jpeg():
+    # ASCII85 em Python puro levava segundos por PDF em produção e travava a abertura
+    data = render_pdf(build_pdf_context(social_proposal(), {"name": "Ana"}, SETTINGS), compress=False)
+    assert b"/DCTDecode" in data and b"ASCII85Decode" not in data
+
+
 def test_social_mission_page_follows_celebration_type():
     wedding = build_pdf_context(social_proposal(), {"name": "Ana", "celebration_type": "Casamento"}, SETTINGS)
     party = build_pdf_context(social_proposal(), {"name": "Ana", "celebration_type": "Aniversário"}, SETTINGS)
