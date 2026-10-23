@@ -31,10 +31,12 @@ function ProposalAttachment({ lead }: { lead: FunnelLead }) {
     <div className="flex items-center gap-1.5">
       <button type="button" {...stop}
         onClick={(e) => { e.stopPropagation(); openProposalPdf(proposal.id).catch(() => toast.error("Não foi possível gerar o PDF.")); }}
-        title={`${proposal.status_label}. Abrir o PDF`}
+        title={`${proposal.file_name} (${proposal.status_label}). Abrir o PDF`}
         className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-border/60 bg-secondary/40 px-2 py-1 text-[11px] text-foreground hover:border-primary/50">
         <FileText className="w-3.5 h-3.5 shrink-0 text-rose-600" />
-        <span className="truncate">{proposal.file_name}</span>
+        {/* Versão e valor do PDF: o valor no alto do card é o da última proposta enviada */}
+        <span className="shrink-0">PDF v{proposal.version}</span>
+        <span className="ml-auto shrink-0 font-semibold tabular-nums">{formatBRL(proposal.total)}</span>
       </button>
       {sendable ? (
         <button type="button" {...stop} onClick={send} disabled={actions.isPending}
@@ -43,7 +45,7 @@ function ProposalAttachment({ lead }: { lead: FunnelLead }) {
           <Send className="w-3 h-3" /> {proposal.status === "enviada" ? "Reenviar" : "Enviar"}
         </button>
       ) : (
-        <span className="shrink-0 text-[10px] text-muted-foreground">{proposal.status_label}</span>
+        <span className="min-w-0 max-w-[30%] truncate text-[10px] text-muted-foreground" title={proposal.status_label}>{proposal.status_label}</span>
       )}
     </div>
   );

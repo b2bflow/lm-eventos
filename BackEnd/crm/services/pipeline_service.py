@@ -113,6 +113,7 @@ class PipelineService:
         if undo_acceptance:
             from sales.services.proposal_service import ProposalService
             ProposalService().undo_acceptance(customer, back_to_sent=target == domain.PROPOSAL_SENT, user=user)
+            customer.reload()  # o valor do card pode ter voltado para o da última proposta enviada
 
         if target == domain.LOST:
             from crm.container import CrmContainer

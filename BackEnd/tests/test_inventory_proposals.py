@@ -109,6 +109,12 @@ def test_sent_and_accepted_value_reaches_card_and_quote(sdr_client, stock, lead,
     lead.reload()
     quote.reload()
     assert lead.quoted_amount == first["total"] == 7660.0 and quote.quoted_amount == 7660.0
+    # Desfez o aceite (voltou para enviada): o valor volta a ser o da última versão enviada
+    back = sdr_client.post(f"/api/v1/crm/customers/{lead.id}/stage/", {"stage": domain.PROPOSAL_SENT}, format="json")
+    assert back.status_code == 200, back.data
+    lead.reload()
+    quote.reload()
+    assert back.data["quoted_amount"] == lead.quoted_amount == 750.0 and quote.quoted_amount == 750.0
 
 
 @pytest.mark.django_db

@@ -469,6 +469,12 @@ class ProposalService:
             count += 1
         if count and customer.owner == "lucia" and not customer.human_operator:
             Customer.objects(id=customer.id).update(set__owner="sdr")
+        if count and back_to_sent:
+            # De volta a "enviada": o valor do card volta a ser o da última versão enviada
+            latest = Proposal.objects(customer=customer, opportunity_id=None, status="enviada").order_by("-version").first()
+            if latest:
+                Customer.objects(id=customer.id).update(set__quoted_amount=latest.total, set__updated_at=datetime.utcnow())
+                _mirror_value_to_quote(customer, latest.total)
         return count
 
     def reject(self, proposal_id: str, user=None, note: str | None = None) -> dict:
