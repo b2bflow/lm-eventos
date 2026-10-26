@@ -1,18 +1,24 @@
 """Cliente do Google Agenda (conta Contato LM, projeto Google Cloud "LM B2B Flow").
 
 Credenciais nunca ficam no repositório:
-- client secret OAuth: GOOGLE_OAUTH_CLIENT_FILE (caminho fora do repo) ou GOOGLE_OAUTH_CLIENT_JSON;
+- client secret OAuth: GOOGLE_OAUTH_CLIENT_FILE (caminho fora do repo) ou GOOGLE_OAUTH_CLIENT_JSON
+  (o JSON inteiro, ou ele em base64 — mais seguro de colar no painel de variáveis do Easypanel);
 - refresh token: LmSettings.google_refresh_token (gravado pelo callback OAuth) ou GOOGLE_REFRESH_TOKEN.
 """
+import base64
+import binascii
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from crm.models.lm_settings_model import LmSettings
+from crm.services.business_hours import to_utc_naive
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 TOKEN_URI = "https://oauth2.googleapis.com/token"
+# Marca nos eventos criados pela plataforma (extendedProperties.private), para separar dos da Erica no Google.
+ORIGIN_KEY, ORIGIN_VALUE = "origem", "lm-eventos"
 
 
 class GoogleNotConfigured(Exception):
@@ -23,7 +29,12 @@ def _client_config() -> dict:
     raw = os.getenv("GOOGLE_OAUTH_CLIENT_JSON", "").strip()
     path = os.getenv("GOOGLE_OAUTH_CLIENT_FILE", "").strip()
     if raw:
-        return json.loads(raw)
+        try:
+            if not raw.startswith("{"):
+                raw = base64.b64decode(raw).decode("utf-8")
+            return json.loads(raw)
+        except (ValueError, binascii.Error):
+            raise GoogleNotConfigured("GOOGLE_OAUTH_CLIENT_JSON inválido: use o JSON do client secret ou ele em base64.")
     if path and os.path.exists(path):
         with open(path, encoding="utf-8") as fh:
             return json.load(fh)
@@ -59,11 +70,12 @@ def _rfc3339(dt: datetime) -> str:
 
 
 def parse_google_datetime(value: dict) -> datetime:
-    """{dateTime|date} do Google -> datetime UTC sem fuso."""
+    """{dateTime|date} do Google -> datetime UTC sem fuso. Dia inteiro começa à meia-noite de Brasília."""
     if value.get("dateTime"):
         parsed = datetime.fromisoformat(value["dateTime"].replace("Z", "+00:00"))
         return parsed.astimezone(timezone.utc).replace(tzinfo=None)
-    return datetime.fromisoformat(value["date"])
+    day = date.fromisoformat(value["date"])
+    return to_utc_naive(datetime(day.year, day.month, day.day))
 
 
 class GoogleCalendarClient:
@@ -72,15 +84,23 @@ class GoogleCalendarClient:
 
     # --- OAuth ---------------------------------------------------------------------------
 
-    def authorization_url(self, state: str) -> str:
+    @staticmethod
+    def _flow(state: str | None, redirect: str | None):
         from google_auth_oauthlib.flow import Flow
-        flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect_uri(), state=state)
-        url, _ = flow.authorization_url(access_type="offline", prompt="consent", include_granted_scopes="true")
+        # Sem PKCE: a URL e a troca do código acontecem em requests diferentes e o verificador gerado na
+        # primeira se perderia (invalid_grant). O client é "web" e já se identifica pelo secret.
+        return Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect or redirect_uri(),
+                                       state=state, autogenerate_code_verifier=False)
+
+    def authorization_url(self, state: str | None, redirect: str | None = None) -> str:
+        url, _ = self._flow(state, redirect).authorization_url(
+            access_type="offline", prompt="consent", include_granted_scopes="true")
         return url
 
-    def exchange_code(self, code: str, state: str) -> str:
-        from google_auth_oauthlib.flow import Flow
-        flow = Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect_uri(), state=state)
+    def exchange_code(self, code: str, state: str | None, redirect: str | None = None) -> str:
+        # A conta pode já ter concedido outros escopos a este client: não tratar isso como erro.
+        os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+        flow = self._flow(state, redirect)
         flow.fetch_token(code=code)
         token = flow.credentials.refresh_token
         if not token:
@@ -116,6 +136,7 @@ class GoogleCalendarClient:
             "location": location,
             "start": {"dateTime": _rfc3339(start), "timeZone": "America/Sao_Paulo"},
             "end": {"dateTime": _rfc3339(end), "timeZone": "America/Sao_Paulo"},
+            "extendedProperties": {"private": {ORIGIN_KEY: ORIGIN_VALUE}},
         }
         if attendees:
             body["attendees"] = [{"email": email} for email in attendees]
@@ -126,6 +147,25 @@ class GoogleCalendarClient:
         return self.service.events().insert(
             calendarId=calendar_id(), body=body, conferenceDataVersion=1 if with_meet else 0,
         ).execute()
+
+    def update_event(self, google_event_id: str, title: str | None = None, start: datetime | None = None,
+                     end: datetime | None = None, description: str | None = None, location: str | None = None) -> dict:
+        """Altera só os campos informados (PATCH): convidados, Meet e o resto do evento ficam como estão."""
+        body = {}
+        if title is not None:
+            body["summary"] = title
+        if description is not None:
+            body["description"] = description
+        if location is not None:
+            body["location"] = location
+        if start is not None:
+            body["start"] = {"dateTime": _rfc3339(start), "timeZone": "America/Sao_Paulo"}
+        if end is not None:
+            body["end"] = {"dateTime": _rfc3339(end), "timeZone": "America/Sao_Paulo"}
+        return self.service.events().patch(calendarId=calendar_id(), eventId=google_event_id, body=body).execute()
+
+    def get_event(self, google_event_id: str) -> dict:
+        return self.service.events().get(calendarId=calendar_id(), eventId=google_event_id).execute()
 
     def calendar_info(self) -> dict:
         """Resumo da agenda conectada (nome e fuso), para conferir a conta autorizada."""

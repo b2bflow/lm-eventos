@@ -13,12 +13,16 @@ from crm.models.log_service_model import ServiceLog
 
 class FakeGoogle:
     def __init__(self):
-        self.created, self.deleted = [], []
+        self.created, self.deleted, self.updated = [], [], []
         self.items, self.next_token = [], "sync-1"
 
     def create_event(self, title, start, end, description="", location="", with_meet=False, attendees=None):
         self.created.append({"title": title, "with_meet": with_meet, "location": location})
         return {"id": f"g{len(self.created)}", "hangoutLink": "https://meet.google.com/abc-defg-hij" if with_meet else None}
+
+    def update_event(self, google_event_id, **changes):
+        self.updated.append((google_event_id, changes))
+        return {"id": google_event_id}
 
     def delete_event(self, google_event_id):
         self.deleted.append(google_event_id)
@@ -122,6 +126,9 @@ def test_sync_brings_google_events_and_cancellations(api_client, google):
     assert api_client.post("/api/v1/agenda/google/sync/").data == {"created": 2, "updated": 0, "removed": 0}
     event = CalendarEvent.objects.get(google_event_id="x1")
     assert event.start == datetime(2026, 10, 22, 13, 0) and event.type == "externo"
+    # Dia inteiro: meia-noite de Brasília (03h UTC), não meia-noite UTC (que cairia às 21h do dia anterior).
+    holiday = CalendarEvent.objects.get(google_event_id="x2")
+    assert (holiday.start, holiday.end) == (datetime(2026, 11, 2, 3, 0), datetime(2026, 11, 3, 3, 0))
     assert LmSettings.get().google_sync_token == "sync-1"
 
     google.items = [{"id": "x1", "status": "cancelled"}]
@@ -172,3 +179,43 @@ def test_google_connect_admin_only_and_callback_rejects_bad_state(api_client, mo
     assert APIClient().get("/api/v1/agenda/google/callback/", {"state": "forjado", "code": "x"}).status_code == 400
     status_data = api_client.get("/api/v1/agenda/google/status/").data
     assert status_data["connected"] is False and status_data["client_configured"] is False
+
+
+@pytest.mark.django_db
+def test_edit_moves_meeting_in_google_and_tells_client(api_client, google, lead, zapi_outbox):
+    event = api_client.post("/api/v1/agenda/events/", {
+        "type": "reuniao_online", "customer_id": str(lead.id), "notify_customer": False,
+        "start": "2026-10-20T14:00:00Z", "end": "2026-10-20T15:00:00Z"}, format="json").data
+    CalendarEvent.objects(id=event["id"]).update(set__reminders_sent=["24h_erica"])
+
+    resp = api_client.patch(f"/api/v1/agenda/events/{event['id']}/", {
+        "start": "2026-10-22T17:00:00Z", "end": "2026-10-22T18:00:00Z", "title": "Reunião remarcada",
+        "notes": "Levar catálogo"}, format="json")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["start"] == "2026-10-22T17:00:00" and resp.data["notes"] == "Levar catálogo"
+    google_id, changes = google.updated[0]
+    assert google_id == "g1" and changes["title"] == "Reunião remarcada"
+    assert changes["start"] == datetime(2026, 10, 22, 17, 0) and "Levar catálogo" in changes["description"]
+    assert CalendarEvent.objects.get(id=event["id"]).reminders_sent == []
+    assert "remarcada para 22/10/2026 às 14:00" in [m for m in zapi_outbox if m.get("phone") == lead.phone][-1]["message"]
+
+    # Só o título: não mexe no horário nem avisa o cliente de novo.
+    sent = len(zapi_outbox)
+    api_client.patch(f"/api/v1/agenda/events/{event['id']}/", {"title": "Reunião final"}, format="json")
+    assert google.updated[-1][1] == {"title": "Reunião final"} and len(zapi_outbox) == sent
+
+
+@pytest.mark.django_db
+def test_edit_respects_conflicts_and_google_events_are_read_only(api_client, google, lead):
+    event = api_client.post("/api/v1/agenda/events/", {
+        "type": "reuniao_online", "customer_id": str(lead.id), "notify_customer": False,
+        "start": "2026-10-20T14:00:00Z", "end": "2026-10-20T15:00:00Z"}, format="json").data
+    treino = {"start": "2026-10-21T15:00:00Z", "end": "2026-10-21T16:00:00Z"}
+    assert api_client.patch(f"/api/v1/agenda/events/{event['id']}/", treino, format="json").status_code == 409
+    assert google.updated == []
+
+    external = CalendarEvent(type="externo", source="google", google_event_id="x9", title="Dentista",
+                             start=datetime(2026, 10, 23, 13), end=datetime(2026, 10, 23, 14)).save()
+    resp = api_client.patch(f"/api/v1/agenda/events/{external.id}/", {"title": "Outro"}, format="json")
+    assert resp.status_code == 403 and google.updated == []
+    assert CalendarEvent.objects.get(id=external.id).title == "Dentista"

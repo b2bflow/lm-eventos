@@ -30,6 +30,12 @@ REM O backend libera CORS para o painel; o painel aponta para o backend.
 set CORS_ALLOWED_ORIGINS=http://127.0.0.1:%WEB_PORT%,http://localhost:%WEB_PORT%
 set VITE_API_URL=http://127.0.0.1:%API_PORT%
 
+REM Google Agenda: usa o client secret salvo em BackEnd\client_secret*.json (ignorado pelo git).
+REM O retorno do OAuth precisa estar cadastrado no client do Google Cloud exatamente assim.
+for %%F in ("%ROOT%BackEnd\client_secret*.json") do set GOOGLE_OAUTH_CLIENT_FILE=%%~fF
+set GOOGLE_OAUTH_REDIRECT_URI=http://localhost:%API_PORT%/api/v1/agenda/google/callback/
+set FRONTEND_URL=http://127.0.0.1:%WEB_PORT%
+
 start "LM Eventos Backend :%API_PORT%" cmd /k "cd /d "%ROOT%BackEnd" && "%PY%" manage.py rundemo 127.0.0.1:%API_PORT% --settings=nucleus.settings_demo"
 start "LM Eventos Frontend :%WEB_PORT%" cmd /k "cd /d "%ROOT%FrontEnd" && npm run dev -- --port %WEB_PORT% --host 127.0.0.1 --strictPort"
 timeout /t 8 /nobreak >nul

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { addDays, addMonths, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { CalendarPlus, ChevronLeft, ChevronRight, Link2, Loader2, MapPin, Plus, RefreshCw, SquareKanban, Video } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight, Link2, Loader2, MapPin, Pencil, Plus, RefreshCw, SquareKanban, Video } from "lucide-react";
 import { PageShell } from "@/components/shared/PageShell";
 import { FilterBar, Legend } from "@/components/shared/FilterBar";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -34,10 +34,18 @@ interface AgendaEvent {
   end: string;
   location?: string | null;
   meet_link?: string | null;
+  notes?: string | null;
   source: string;
   sync_status?: string;
   fixed?: boolean;
 }
+
+const SYNC_LABELS: Record<string, string> = {
+  sincronizado: "Sincronizado",
+  pendente: "Pendente",
+  erro: "Falhou (ficou só na plataforma)",
+  local: "Só na plataforma",
+};
 
 interface GoogleStatus {
   client_configured: boolean;
@@ -121,18 +129,24 @@ function titleFor(view: View, anchor: Date, from: Date, to: Date): string {
 
 // --- Agendar -------------------------------------------------------------------------------
 
-function ScheduleDialog({ open, onClose, leadId, initial }: {
+/** Agendar ou, com `editing`, editar um evento da plataforma (remontado por `key`: o estado inicial vem do evento). */
+function ScheduleDialog({ open, onClose, leadId, initial, editing = null }: {
   open: boolean; onClose: () => void; leadId: string | null; initial?: { day: string; time: string } | null;
+  editing?: AgendaEvent | null;
 }) {
   const queryClient = useQueryClient();
   const { data: lead } = useLead(leadId);
-  const [type, setType] = useState("reuniao_online");
-  const [day, setDay] = useState(format(addDays(new Date(), 1), "yyyy-MM-dd"));
-  const [time, setTime] = useState("10:00");
-  const [duration, setDuration] = useState(60);
-  const [location, setLocation] = useState("");
-  const [notes, setNotes] = useState("");
+  const editStart = editing ? toDate(editing.start) : null;
+  const [type, setType] = useState(editing?.type ?? "reuniao_online");
+  const [title, setTitle] = useState(editing?.title ?? "");
+  const [day, setDay] = useState(format(editStart ?? addDays(new Date(), 1), "yyyy-MM-dd"));
+  const [time, setTime] = useState(editStart ? format(editStart, "HH:mm") : "10:00");
+  const [duration, setDuration] = useState(editing && editStart
+    ? Math.max(15, Math.round((toDate(editing.end).getTime() - editStart.getTime()) / 60e3)) : 60);
+  const [location, setLocation] = useState(editing?.location ?? "");
+  const [notes, setNotes] = useState(editing?.notes ?? "");
   const [notify, setNotify] = useState(true);
+  const withClient = editing ? !!editing.customer_id : !!leadId;
 
   useEffect(() => {
     if (lead?.venue) setLocation(lead.venue);
@@ -150,14 +164,22 @@ function ScheduleDialog({ open, onClose, leadId, initial }: {
     mutationFn: async (force: boolean = false) => {
       const start = new Date(`${day}T${time}:00`);
       const end = type === "evento_confirmado" && duration < 60 ? new Date(start.getTime() + 6 * 3600e3) : new Date(start.getTime() + duration * 60e3);
+      if (editing) {
+        return (await api.patch(`/agenda/events/${editing.id}/`, {
+          start: start.toISOString(), end: end.toISOString(), title: title.trim() || undefined,
+          location: type !== "reuniao_online" ? location : undefined, notes, notify_customer: notify,
+          force: force || undefined,
+        })).data as AgendaEvent & { warnings: string[] };
+      }
       return (await api.post("/agenda/events/", {
         type, customer_id: leadId || undefined, start: start.toISOString(), end: end.toISOString(),
+        title: title.trim() || undefined,
         location: type !== "reuniao_online" && location ? location : undefined, notes: notes || undefined, notify_customer: notify,
         force: force || undefined,
       })).data as AgendaEvent & { warnings: string[] };
     },
     onSuccess: (event) => {
-      toast.success(event.meet_link ? "Agendado com link do Meet." : "Agendado.");
+      toast.success(editing ? "Evento atualizado." : event.meet_link ? "Agendado com link do Meet." : "Agendado.");
       event.warnings?.forEach((w) => toast.warning(w));
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
@@ -174,7 +196,7 @@ Agendar mesmo assim?`)) {
         mutation.mutate(true);
         return;
       }
-      toast.error(errorDetail(error, "Não foi possível agendar."));
+      toast.error(errorDetail(error, editing ? "Não foi possível salvar." : "Não foi possível agendar."));
     },
   });
 
@@ -182,17 +204,24 @@ Agendar mesmo assim?`)) {
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Agendar{lead ? `: ${lead.name || lead.phone}` : ""}</DialogTitle>
+          <DialogTitle>
+            {editing ? `Editar: ${editing.title}` : `Agendar${lead ? `: ${lead.name || lead.phone}` : ""}`}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
             <Label className="text-xs">Tipo</Label>
-            <Select value={type} onValueChange={setType}>
+            <Select value={type} onValueChange={setType} disabled={!!editing}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Object.entries(TYPE_OPTIONS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Título</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder={editing ? undefined : "Automático: tipo e nome do cliente"} />
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="space-y-1 col-span-3 sm:col-span-1">
@@ -218,16 +247,18 @@ Agendar mesmo assim?`)) {
             <Label className="text-xs">Observações</Label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
-          {leadId && (type === "reuniao_online" || type === "visita_tecnica") && (
+          {withClient && (type === "reuniao_online" || type === "visita_tecnica") && (
             <div className="flex items-center gap-2">
               <Switch id="notify" checked={notify} onCheckedChange={setNotify} />
-              <Label htmlFor="notify" className="text-sm">Enviar confirmação ao cliente por WhatsApp</Label>
+              <Label htmlFor="notify" className="text-sm">
+                {editing ? "Avisar o cliente por WhatsApp se mudar o horário" : "Enviar confirmação ao cliente por WhatsApp"}
+              </Label>
             </div>
           )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => mutation.mutate(false)} disabled={mutation.isPending}>Agendar</Button>
+          <Button onClick={() => mutation.mutate(false)} disabled={mutation.isPending}>{editing ? "Salvar" : "Agendar"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -236,8 +267,8 @@ Agendar mesmo assim?`)) {
 
 // --- Ficha do evento -----------------------------------------------------------------------
 
-function EventDetailsDialog({ event, onClose, onCancel }: {
-  event: AgendaEvent | null; onClose: () => void; onCancel: (event: AgendaEvent) => void;
+function EventDetailsDialog({ event, onClose, onCancel, onEdit }: {
+  event: AgendaEvent | null; onClose: () => void; onCancel: (event: AgendaEvent) => void; onEdit: (event: AgendaEvent) => void;
 }) {
   const navigate = useNavigate();
   if (!event) return null;
@@ -252,6 +283,10 @@ function EventDetailsDialog({ event, onClose, onCancel }: {
     ["Local", event.location || "—"],
     ["Origem", event.source === "lm" ? "Plataforma" : "Google Agenda"],
   ];
+  if (event.notes) rows.push(["Observações", event.notes]);
+  if (event.source === "lm" && !event.fixed && event.sync_status) {
+    rows.push(["No Google", SYNC_LABELS[event.sync_status] ?? event.sync_status]);
+  }
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
@@ -283,7 +318,12 @@ function EventDetailsDialog({ event, onClose, onCancel }: {
             </Button>
           )}
           {canCancel(event) && (
-            <Button variant="destructive" onClick={() => onCancel(event)}>Cancelar evento</Button>
+            <>
+              <Button variant="outline" onClick={() => onEdit(event)}>
+                <Pencil className="w-4 h-4 mr-2" /> Editar
+              </Button>
+              <Button variant="destructive" onClick={() => onCancel(event)}>Cancelar evento</Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>
@@ -502,6 +542,7 @@ export default function Agenda() {
   const [scheduleOpen, setScheduleOpen] = useState(!!leadId);
   const [slot, setSlot] = useState<{ day: string; time: string } | null>(null);
   const [selected, setSelected] = useState<AgendaEvent | null>(null);
+  const [editing, setEditing] = useState<AgendaEvent | null>(null);
   const { data: me } = useCurrentUser();
   const { from, to } = rangeFor(view, anchor);
 
@@ -633,8 +674,11 @@ export default function Agenda() {
         {view === "list" && <ListTable events={sorted} onOpen={setSelected} />}
       </div>
 
-      <ScheduleDialog open={scheduleOpen} onClose={closeSchedule} leadId={leadId} initial={slot} />
-      <EventDetailsDialog event={selected} onClose={() => setSelected(null)} onCancel={cancel} />
+      {editing
+        ? <ScheduleDialog key={editing.id} open onClose={() => setEditing(null)} leadId={null} editing={editing} />
+        : <ScheduleDialog open={scheduleOpen} onClose={closeSchedule} leadId={leadId} initial={slot} />}
+      <EventDetailsDialog event={selected} onClose={() => setSelected(null)} onCancel={cancel}
+        onEdit={(event) => { setSelected(null); setEditing(event); }} />
     </PageShell>
   );
 }

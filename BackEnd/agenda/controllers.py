@@ -67,7 +67,28 @@ class EventsController(APIView):
 
 
 class EventDetailController(APIView):
+    """PATCH: {start, end, title, location, notes, notify_customer, force} (só eventos da plataforma). DELETE cancela."""
     permission_classes = [IsAuthenticated]
+
+    def patch(self, request, event_id):
+        data = request.data
+        try:
+            event = service.update(
+                event_id,
+                start=_parse(data["start"], "o início") if data.get("start") else None,
+                end=_parse(data["end"], "o fim") if data.get("end") else None,
+                title=data.get("title"), location=data.get("location"), notes=data.get("notes"),
+                notify_customer=data.get("notify_customer", True) not in (False, "false"), user=request.user,
+                force=data.get("force") in (True, "true", "1"),
+            )
+        except ScheduleConflict as e:
+            return Response({"detail": str(e), "conflicts": e.conflicts, "can_force": has_role(request.user)},
+                            status=status.HTTP_409_CONFLICT)
+        except PermissionDeniedError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(event)
 
     def delete(self, request, event_id):
         try:

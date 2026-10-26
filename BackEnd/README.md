@@ -86,15 +86,39 @@ Mongo em memória, Redis falso, Z-API e IA desligadas (envios só no log). Login
    (`follow_up_days`, `auto_lost_days`, `reactivation_days`).
 8. Em Configurações (ou `PATCH /api/v1/crm/settings/`): telefone ou grupo de aprovação,
    telefones da Erica, da SDR e da Lúcia; papéis dos usuários (`role`: admin, sdr, porta, b2bflow).
-9. Google Agenda (decisão de 16/10: token pelo serviço OAuth da b2bflow):
-   - Gere o refresh token em `https://oauth.b2bflow.com.br` autorizando com a conta **Contato LM**
-     e o escopo `https://www.googleapis.com/auth/calendar` (ou `calendar.events`). O token só vale
-     com o mesmo client OAuth ("LM B2B Flow") que o emitiu.
-   - No servidor: `GOOGLE_OAUTH_CLIENT_FILE` apontando para o client secret desse mesmo client
-     (fora do repositório) e `GOOGLE_REFRESH_TOKEN=<token>`. `GOOGLE_CALENDAR_ID=primary`.
-   - Confira: `python manage.py check_google_calendar --create-test` (mostra a agenda conectada,
-     os próximos eventos e cria/apaga um evento de teste com Meet; nunca imprime o token).
-   - A página Agenda passa a mostrar "Sincronizar"; o beat lê o Google a cada 10 minutos.
+9. Google Agenda (client OAuth "LM B2B Flow", projeto `lm-b2b-511513`, conta **Contato LM**).
+   O client secret **nunca** vai para o git (`.gitignore` já bloqueia `*client_secret*`).
+   - Endereço de retorno: o client só aceita `https://oauth.b2bflow.com.br/auth/google/callback`
+     (já cadastrado; sem acesso ao Google Cloud não dá para incluir outro). Por isso o subdomínio
+     `oauth.b2bflow.com.br` aponta (DNS A) para o servidor do Easypanel e é um domínio do serviço
+     `lm_app` (host sem `https://`, destino `http://formulario_lm_app:8000/`), e o backend responde
+     nesse caminho (`nucleus/urls.py`). `ALLOWED_HOSTS` inclui `oauth.b2bflow.com.br`.
+     Com acesso ao Google Cloud, outro endereço pode ser cadastrado em Credenciais > client
+     `498838809583-...` > URIs de redirecionamento autorizados (o da plataforma é
+     `/api/v1/agenda/google/callback/`). A Google Calendar API precisa estar ativada e o app
+     "Em produção" na tela de consentimento (em "Teste" o refresh token expira em 7 dias).
+   - Easypanel, aba **Environment** do serviço do backend **e** dos serviços do Celery worker/beat,
+     se houver (a sincronização automática roda neles; sem eles, use o botão "Sincronizar"):
+     - `GOOGLE_OAUTH_CLIENT_JSON=<client secret em base64>`. Para gerar e copiar sem exibir na tela
+       (PowerShell, na pasta `BackEnd`):
+       `[Convert]::ToBase64String([IO.File]::ReadAllBytes((Resolve-Path .\client_secret_*.json))) | Set-Clipboard`
+     - `GOOGLE_OAUTH_REDIRECT_URI=https://oauth.b2bflow.com.br/auth/google/callback` (sem barra no fim)
+     - `FRONTEND_URL=https://<painel de produção>` (o serviço frontend) e `GOOGLE_CALENDAR_ID=primary`
+   - Sem domínio nem botão: `python manage.py google_authorize` mostra o link, você autoriza, cola o
+     endereço com `code=` (mesmo que a página não abra) e o token vai para o `lm_settings`.
+     - Alternativa ao base64: Easypanel > Mounts > **File mount** com o JSON em
+       `/app/secrets/google-client.json` e `GOOGLE_OAUTH_CLIENT_FILE=/app/secrets/google-client.json`.
+   - Depois do deploy: Agenda > **Conectar Google** (logado como Erica/admin) > entrar com a conta
+     Contato LM. O refresh token fica no Mongo (`lm_settings`); `GOOGLE_REFRESH_TOKEN` é opcional.
+   - Confira no console do Easypanel: `python manage.py check_google_calendar --roundtrip` (lê a
+     agenda e espelha; cria um bloqueio "TESTE integração LM (pode apagar)" daqui a 2 dias às 22h,
+     edita, confere no Google, cancela e apaga o registro local. Só mexe nesse evento; nunca imprime
+     o token). `--create-test` faz só criar/apagar com Meet.
+   - Local: `start-local.bat` usa sozinho o `BackEnd\client_secret*.json`. O demo guarda o token em
+     memória: reiniciou, clique em "Conectar Google" de novo.
+   - A página Agenda passa a mostrar "Sincronizar"; o beat lê o Google a cada 10 minutos. Eventos
+     criados pela plataforma podem ser editados (o Google recebe só os campos alterados) e
+     cancelados; compromissos vindos do Google são espelho e se editam no próprio Google.
 10. Segurança (revisão de 19/10):
    - **Socket.IO exige login**: o front manda o JWT no handshake (`auth.token`) e o servidor só
      aceita as origens de `CORS_ALLOWED_ORIGINS`. Front e backend desta versão sobem juntos; front

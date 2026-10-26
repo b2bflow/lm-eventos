@@ -34,6 +34,23 @@ def _operator(user):
     return str(user.id) if user is not None and getattr(user, "id", None) else None
 
 
+def _description(notes: str | None, customer: Customer | None) -> str:
+    lines = [notes or ""]
+    if customer:
+        lines.append(f"Contato: {customer.name or ''} {format_phone(customer.phone)}")
+    return "\n".join(line for line in lines if line).strip()
+
+
+def _get_event(event_id: str) -> CalendarEvent:
+    try:
+        event = CalendarEvent.objects(id=ObjectId(event_id)).first()
+    except Exception:
+        event = None
+    if not event:
+        raise ValueError("Evento não encontrado.")
+    return event
+
+
 def _when(dt_utc: datetime) -> str:
     local = to_local(dt_utc)
     return local.strftime("%d/%m/%Y às %H:%M")
@@ -108,13 +125,10 @@ class AgendaService:
 
         label = EVENT_TYPES[event_type]
         title = title or (f"{label}: {customer.name or format_phone(customer.phone)}" if customer else label)
-        description_lines = [notes or ""]
-        if customer:
-            description_lines.append(f"Contato: {customer.name or ''} {format_phone(customer.phone)}")
         event = CalendarEvent(
             type=event_type, title=title, customer=customer, start=start, end=end, location=location,
-            description="\n".join(line for line in description_lines if line).strip(), created_by=_operator(user),
-            sync_status="pendente",
+            description=_description(notes, customer), created_by=_operator(user), sync_status="pendente",
+            extra={"notes": notes or ""},
         ).save()
 
         warnings = []
@@ -160,15 +174,16 @@ class AgendaService:
         data["warnings"] = warnings
         return data
 
-    def _notify_customer(self, event: CalendarEvent, customer: Customer):
+    def _notify_customer(self, event: CalendarEvent, customer: Customer, rescheduled: bool = False):
         name = (customer.name or "").split(" ")[0]
         greeting = f"Olá, {name}." if name and not name.startswith("WhatsApp") else "Olá."
+        state = "foi remarcada para" if rescheduled else "está confirmada para"
         if event.type == "reuniao_online":
-            lines = [greeting, f"Sua reunião com a LM Eventos está confirmada para {_when(event.start)}."]
+            lines = [greeting, f"Sua reunião com a LM Eventos {state} {_when(event.start)}."]
             lines.append(f"Link da reunião: {event.meet_link}" if event.meet_link
                          else "O link da reunião será enviado em seguida.")
         else:
-            lines = [greeting, f"A visita técnica da LM Eventos está confirmada para {_when(event.start)}.",
+            lines = [greeting, f"A visita técnica da LM Eventos {state} {_when(event.start)}.",
                      f"Endereço: {event.location}"]
         lines.append("Qualquer necessidade, estamos à disposição.")
         try:
@@ -176,16 +191,82 @@ class AgendaService:
         except Exception as e:
             logger.error(f"[Agenda] Falha ao avisar o cliente {customer.phone}: {e}")
 
+    def update(self, event_id: str, start: datetime | None = None, end: datetime | None = None,
+               title: str | None = None, location: str | None = None, notes: str | None = None,
+               notify_customer: bool = True, user=None, force: bool = False, now: datetime | None = None) -> dict:
+        """Edita um compromisso criado pela plataforma e aplica no Google (PATCH: Meet e convidados ficam).
+        Compromissos vindos do Google são só espelho: editar é no próprio Google Agenda."""
+        from crm.services.pipeline_service import PermissionDeniedError
+        from users.permissions import has_role
+
+        event = _get_event(event_id)
+        if event.source == "google":
+            raise PermissionDeniedError("Compromisso criado no Google Agenda: edite direto no Google.")
+        if event.status == "cancelado":
+            raise ValueError("Evento cancelado não pode ser editado.")
+        new_start, new_end = start or event.start, end or event.end
+        moved = (new_start, new_end) != (event.start, event.end)
+        if new_end <= new_start:
+            raise ValueError("O fim deve ser depois do início.")
+        if new_end - new_start > timedelta(days=31):
+            raise ValueError("Período longo demais para um compromisso.")
+        if event.type == "visita_tecnica" and location is not None and not location.strip():
+            raise ValueError("Informe o endereço da visita técnica.")
+        if moved and event.type in NEEDS_FREE_SLOT:
+            if new_start < (now or datetime.utcnow()) - timedelta(minutes=5):
+                raise ValueError("Não é possível agendar no passado.")
+            clash = self.conflicts(new_start, new_end, ignore_id=str(event.id))
+            if clash and not (force and has_role(user)):
+                raise ScheduleConflict(clash)
+
+        changes = {}
+        if moved:
+            event.start, event.end = new_start, new_end
+            event.reminders_sent = []  # lembretes de 24 h e 2 h valem para o novo horário
+            changes.update(start=new_start, end=new_end)
+        if title is not None and title.strip() and title.strip() != event.title:
+            event.title = changes["title"] = title.strip()
+        if location is not None and (location.strip() or None) != event.location:
+            event.location = location.strip() or None
+            changes["location"] = event.location or ""
+        if notes is not None:
+            event.extra = {**(event.extra or {}), "notes": notes}
+            description = _description(notes, event.customer)
+            if description != (event.description or ""):
+                event.description = changes["description"] = description
+        event.updated_at = datetime.utcnow()
+
+        warnings = []
+        if changes and event.google_event_id and is_configured():
+            try:
+                self.google.update_event(event.google_event_id, **changes)
+                event.sync_status, event.sync_error = "sincronizado", None
+            except Exception as e:
+                logger.error(f"[Agenda] Falha ao alterar evento no Google: {e}")
+                event.sync_status, event.sync_error = "erro", str(e)[:300]
+                warnings.append("Não foi possível alterar no Google Agenda; a mudança ficou só na plataforma.")
+        elif changes and event.google_event_id:
+            warnings.append("Google Agenda não conectado: a mudança ficou só na plataforma.")
+        event.save()
+
+        if moved and event.customer:
+            ServiceLogRepository.create_log(
+                customer=event.customer, operator_id=_operator(user), action_type="MEETING_SCHEDULED",
+                description=f"{EVENT_TYPES[event.type]} remarcada para {_when(event.start)}.",
+                metadata={"event_id": str(event.id), "type": event.type, "rescheduled": True},
+            )
+            if notify_customer and event.type in ("reuniao_online", "visita_tecnica"):
+                self._notify_customer(event, event.customer, rescheduled=True)
+
+        data = event.to_dict()
+        data["warnings"] = warnings
+        return data
+
     def cancel(self, event_id: str, user=None) -> dict:
         from crm.services.pipeline_service import PermissionDeniedError
         from users.permissions import has_role
 
-        try:
-            event = CalendarEvent.objects(id=ObjectId(event_id)).first()
-        except Exception:
-            event = None
-        if not event:
-            raise ValueError("Evento não encontrado.")
+        event = _get_event(event_id)
         if event.source == "google" and not has_role(user):
             # Compromisso criado direto no Google (pessoal da Erica): cancelar apagaria lá também.
             raise PermissionDeniedError("Compromisso do Google Agenda da Erica: só ela cancela.")

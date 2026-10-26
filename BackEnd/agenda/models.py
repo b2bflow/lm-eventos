@@ -55,6 +55,7 @@ class CalendarEvent(Document):
             "location": self.location,
             "meet_link": self.meet_link,
             "description": self.description,
+            "notes": (self.extra or {}).get("notes"),
             "source": self.source,
             "status": self.status,
             "sync_status": self.sync_status,
