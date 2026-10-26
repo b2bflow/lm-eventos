@@ -8,8 +8,11 @@ def sync_google_calendar():
     """Lê a agenda principal da conta Contato LM (incremental) para a página Agenda."""
     from agenda.services.agenda_service import AgendaService
     from agenda.services.google_calendar_client import is_configured
+    from crm.models.lm_settings_model import LmSettings
     if not is_configured():
         return "google-nao-conectado"
+    if not LmSettings.get().google_auto_sync:
+        return "sincronizacao-automatica-desligada"
     result = AgendaService().sync_from_google()
     logger.info(f"[agenda.tasks] Sincronização Google: {result}")
     return result

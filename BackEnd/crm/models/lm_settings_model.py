@@ -98,6 +98,8 @@ class LmSettings(Document):
     google_refresh_token = StringField(default="")
     google_calendar_id = StringField(default="")
     google_sync_token = StringField(default="")
+    google_auto_sync = BooleanField(default=True)  # beat lê o Google a cada 10 min; desligado = só pelo botão
+    google_last_sync_at = DateTimeField(null=True)
 
     updated_at = DateTimeField(default=datetime.utcnow)
 
@@ -117,6 +119,7 @@ class LmSettings(Document):
         for field in self.SECRET_FIELDS:
             data.pop(field, None)
         data["google_connected"] = bool(self.google_refresh_token)
-        if isinstance(data.get("updated_at"), datetime):
-            data["updated_at"] = data["updated_at"].isoformat()
+        for field in ("updated_at", "google_last_sync_at"):
+            if isinstance(data.get(field), datetime):
+                data[field] = data[field].isoformat()
         return data

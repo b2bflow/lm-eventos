@@ -116,7 +116,34 @@ class GoogleStatusController(APIView):
             "connected": is_configured(),
             "redirect_uri": redirect_uri(),
             "calendar_id": cfg.google_calendar_id or os.getenv("GOOGLE_CALENDAR_ID", "primary"),
+            "auto_sync": cfg.google_auto_sync,
+            "last_sync_at": cfg.google_last_sync_at.isoformat() if cfg.google_last_sync_at else None,
+            # Token na variável do servidor: desconectar só removendo GOOGLE_REFRESH_TOKEN no Easypanel.
+            "token_from_env": not cfg.google_refresh_token and bool(refresh_token()),
         })
+
+    def patch(self, request):
+        """{auto_sync: bool}: liga ou desliga a leitura automática do Google (só admin)."""
+        if not has_role(request.user):
+            return Response({"detail": "Só a Erica (admin) altera a integração."}, status=status.HTTP_403_FORBIDDEN)
+        if "auto_sync" in request.data:
+            cfg = LmSettings.get()
+            cfg.google_auto_sync = request.data["auto_sync"] in (True, "true", "1")
+            cfg.save()
+        return self.get(request)
+
+
+class GoogleDisconnectController(APIView):
+    """POST: revoga o acesso, apaga o token e o espelho dos compromissos do Google (só admin)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not has_role(request.user):
+            return Response({"detail": "Só a Erica (admin) desconecta o Google Agenda."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            return Response(service.disconnect())
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class GoogleConnectController(APIView):

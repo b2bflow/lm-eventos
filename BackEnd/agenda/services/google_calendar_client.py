@@ -17,6 +17,7 @@ from crm.services.business_hours import to_utc_naive
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 TOKEN_URI = "https://oauth2.googleapis.com/token"
+REVOKE_URI = "https://oauth2.googleapis.com/revoke"
 # Marca nos eventos criados pela plataforma (extendedProperties.private), para separar dos da Erica no Google.
 ORIGIN_KEY, ORIGIN_VALUE = "origem", "lm-eventos"
 
@@ -55,6 +56,15 @@ def calendar_id() -> str:
 
 def refresh_token() -> str:
     return LmSettings.get().google_refresh_token or os.getenv("GOOGLE_REFRESH_TOKEN", "")
+
+
+def revoke_token(token: str) -> bool:
+    """Revoga o acesso no Google (some de "Apps com acesso à sua conta"). Falha de rede não impede desconectar."""
+    import requests
+    try:
+        return requests.post(REVOKE_URI, params={"token": token}, timeout=10).ok
+    except requests.RequestException:
+        return False
 
 
 def is_configured() -> bool:

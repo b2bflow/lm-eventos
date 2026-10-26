@@ -89,3 +89,15 @@ def test_document_is_saved_as_file(ai_task):
     post(base(document={"documentUrl": "https://cdn.z-api.io/rider.pdf", "fileName": "rider.pdf"}))
     msg = MessageModel.objects(direction="INCOMING").order_by("-created_at").first()
     assert (msg.message_type, msg.media_url) == ("file", "https://cdn.z-api.io/rider.pdf")
+
+
+@pytest.mark.django_db
+def test_global_ai_switch_off_saves_message_without_menu_or_ai(ai_task, zapi_outbox, api_client):
+    # Configurações > Integrações: "IA ativa globalmente" desligada.
+    assert api_client.post("/api/v1/chat/configuracoes/", {"ai_active": False}, format="json").data["ai_active"] is False
+    post(base(text={"message": "Olá"}))
+
+    conversation = ConversationModel.objects.get(customer=Customer.objects.get(phone=PHONE))
+    assert [m.direction for m in MessageModel.objects(conversation=conversation)] == ["INCOMING"]
+    assert zapi_outbox == []
+    ai_task.assert_not_called()

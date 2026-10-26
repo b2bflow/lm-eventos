@@ -5,7 +5,7 @@ from bson import ObjectId
 
 from agenda.models import EVENT_TYPES, CalendarEvent
 from agenda.services.google_calendar_client import (
-    GoogleCalendarClient, GoogleNotConfigured, is_configured, parse_google_datetime,
+    GoogleCalendarClient, GoogleNotConfigured, is_configured, parse_google_datetime, refresh_token, revoke_token,
 )
 from crm.container import CrmContainer
 from crm.models.custumer_model import Customer
@@ -330,8 +330,26 @@ class AgendaService:
                 created += 1
         if next_token:
             cfg.google_sync_token = next_token
-            cfg.save()
+        cfg.google_last_sync_at = datetime.utcnow()
+        cfg.save()
         return {"created": created, "updated": updated, "removed": removed}
+
+    def disconnect(self) -> dict:
+        """Desconecta a conta: revoga o acesso no Google, apaga o token e tira o espelho dos compromissos
+        vindos do Google. Eventos criados pela plataforma ficam (e continuam no Google)."""
+        cfg = LmSettings.get()
+        token = cfg.google_refresh_token
+        if not token:
+            if refresh_token():
+                raise ValueError("A conexão vem da variável GOOGLE_REFRESH_TOKEN do servidor: remova-a no Easypanel.")
+            raise ValueError("Google Agenda já está desconectado.")
+        revoke_token(token)
+        cfg.google_refresh_token = ""
+        cfg.google_sync_token = ""
+        cfg.google_last_sync_at = None
+        cfg.save()
+        removed = CalendarEvent.objects(source="google").delete()
+        return {"disconnected": True, "mirror_removed": removed}
 
     # --- Lembretes (24 h e 2 h antes) ----------------------------------------------------
 

@@ -219,3 +219,44 @@ def test_edit_respects_conflicts_and_google_events_are_read_only(api_client, goo
     resp = api_client.patch(f"/api/v1/agenda/events/{external.id}/", {"title": "Outro"}, format="json")
     assert resp.status_code == 403 and google.updated == []
     assert CalendarEvent.objects.get(id=external.id).title == "Dentista"
+
+
+@pytest.mark.django_db
+def test_disconnect_revokes_token_and_drops_google_mirror_only(api_client, google, monkeypatch):
+    revoked = []
+    monkeypatch.setattr("agenda.services.agenda_service.revoke_token", lambda token: revoked.append(token) or True)
+    cfg = LmSettings.get()
+    cfg.google_refresh_token, cfg.google_sync_token = "1//tok", "sync-9"
+    cfg.save()
+    CalendarEvent(type="externo", source="google", google_event_id="x1", title="Dentista",
+                  start=datetime(2026, 10, 23, 13), end=datetime(2026, 10, 23, 14)).save()
+    mine = CalendarEvent(type="bloqueio", title="Bloqueio", google_event_id="g7",
+                         start=datetime(2026, 10, 23, 15), end=datetime(2026, 10, 23, 16)).save()
+
+    resp = api_client.post("/api/v1/agenda/google/disconnect/")
+    assert resp.status_code == 200 and resp.data == {"disconnected": True, "mirror_removed": 1}
+    assert revoked == ["1//tok"]
+    cfg.reload()
+    assert (cfg.google_refresh_token, cfg.google_sync_token) == ("", "")
+    assert [e.id for e in CalendarEvent.objects] == [mine.id]
+    assert api_client.post("/api/v1/agenda/google/disconnect/").status_code == 400
+
+
+@pytest.mark.django_db
+def test_auto_sync_switch_is_admin_only_and_pauses_the_beat(api_client, google, monkeypatch):
+    from rest_framework.test import APIClient
+    from agenda.tasks import sync_google_calendar
+    from users.models.user_model import User
+    monkeypatch.setattr("agenda.services.google_calendar_client.is_configured", lambda: True)
+    sdr = APIClient()
+    sdr.force_authenticate(User.objects.create_user(username="sdr2", password="x"))
+    assert sdr.patch("/api/v1/agenda/google/status/", {"auto_sync": False}, format="json").status_code == 403
+    assert sdr.post("/api/v1/agenda/google/disconnect/").status_code == 403
+
+    resp = api_client.patch("/api/v1/agenda/google/status/", {"auto_sync": False}, format="json")
+    assert resp.status_code == 200 and resp.data["auto_sync"] is False
+    assert sync_google_calendar() == "sincronizacao-automatica-desligada"
+
+    # Sincronizar pelo botão continua valendo e registra a hora.
+    api_client.post("/api/v1/agenda/google/sync/")
+    assert api_client.get("/api/v1/agenda/google/status/").data["last_sync_at"] == "2026-10-19T12:00:00"

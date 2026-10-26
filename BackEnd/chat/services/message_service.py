@@ -9,6 +9,7 @@ from utils.logger import logger, print_error_details
 from utils.phone import is_employee_phone
 from chat.repositories.conversation_repository import ConversationRepository
 from chat.repositories.message_repository import MessageRepository
+from chat.repositories.system_config_repository import SystemConfigRepository
 from chat.interfaces.chat_service_interface import IMessageService
 from ai_agents.clients.openai_client import OpenIAClient
 from chat.gateways.adapters.socket_adapter import SocketAdapter
@@ -365,6 +366,11 @@ class MessageService(IMessageService):
                     phone,
                     silenced_until,
                 )
+                return message
+
+            # Chave "IA ativa globalmente" (Configurações > Integrações): desligada, ninguém recebe resposta automática.
+            if not SystemConfigRepository.get_config().ai_active:
+                logger.info("[MessageService] IA desligada globalmente. Mensagem de %s salva; IA não será acionada.", phone)
                 return message
 
             should_trigger_ai = (
