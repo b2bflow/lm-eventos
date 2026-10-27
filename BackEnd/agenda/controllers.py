@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from agenda.services.agenda_service import AgendaService, ScheduleConflict
+from agenda.services.agenda_service import KEEP, AgendaService, ScheduleConflict
 from crm.services.pipeline_service import PermissionDeniedError
 from agenda.services.google_calendar_client import (
     GoogleCalendarClient, GoogleNotConfigured, is_configured, redirect_uri, refresh_token,
@@ -19,6 +19,10 @@ from utils.logger import logger
 
 service = AgendaService()
 STATE_SALT = "lm-google-oauth"
+
+
+def _flag(value) -> bool:
+    return value in (True, "true", "1", 1)
 
 
 def _parse(value: str | None, label: str) -> datetime:
@@ -33,8 +37,8 @@ def _parse(value: str | None, label: str) -> datetime:
 class EventsController(APIView):
     """GET /agenda/events/?start=&end= (ISO; padrão: semana atual). POST agenda a partir do card.
 
-    POST: {type: reuniao_online|visita_tecnica|evento_confirmado|bloqueio, start, end, customer_id,
-           title, location, notes, notify_customer}
+    POST: {type: reuniao_online|visita_tecnica|evento_confirmado|bloqueio, start, end, all_day, customer_id,
+           title, location, notes, notify_customer, recurrence (regra, ver agenda.services.recurrence)}
     """
     permission_classes = [IsAuthenticated]
 
@@ -56,7 +60,8 @@ class EventsController(APIView):
                 customer_id=data.get("customer_id") or None, title=data.get("title") or None,
                 location=data.get("location") or None, notes=data.get("notes") or None,
                 notify_customer=data.get("notify_customer", True) not in (False, "false"), user=request.user,
-                force=data.get("force") in (True, "true", "1"),
+                force=_flag(data.get("force")), all_day=_flag(data.get("all_day")),
+                recurrence=data.get("recurrence") or None,
             )
         except ScheduleConflict as e:
             return Response({"detail": str(e), "conflicts": e.conflicts, "can_force": has_role(request.user)},
@@ -67,7 +72,8 @@ class EventsController(APIView):
 
 
 class EventDetailController(APIView):
-    """PATCH: {start, end, title, location, notes, notify_customer, force} (só eventos da plataforma). DELETE cancela."""
+    """PATCH: {start, end, all_day, title, location, notes, recurrence, scope, notify_customer, force} (só eventos
+    da plataforma). DELETE ?scope= cancela. Numa série, scope = this | following | all (como no Google)."""
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, event_id):
@@ -79,7 +85,9 @@ class EventDetailController(APIView):
                 end=_parse(data["end"], "o fim") if data.get("end") else None,
                 title=data.get("title"), location=data.get("location"), notes=data.get("notes"),
                 notify_customer=data.get("notify_customer", True) not in (False, "false"), user=request.user,
-                force=data.get("force") in (True, "true", "1"),
+                force=_flag(data.get("force")), all_day=_flag(data["all_day"]) if "all_day" in data else None,
+                recurrence=(data.get("recurrence") or None) if "recurrence" in data else KEEP,
+                scope=data.get("scope") or "this",
             )
         except ScheduleConflict as e:
             return Response({"detail": str(e), "conflicts": e.conflicts, "can_force": has_role(request.user)},
@@ -92,7 +100,7 @@ class EventDetailController(APIView):
 
     def delete(self, request, event_id):
         try:
-            return Response(service.cancel(event_id, user=request.user))
+            return Response(service.cancel(event_id, user=request.user, scope=request.query_params.get("scope") or "this"))
         except PermissionDeniedError as e:
             return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as e:

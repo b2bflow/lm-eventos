@@ -265,7 +265,9 @@ def test_sdr_cannot_book_over_training_or_another_meeting(sdr_api, no_google, za
     lead = Customer(name="Paula", phone="5562955554444").save()
     other = Customer(name="Rita", phone="5562966665555").save()
     url = "/api/v1/agenda/events/"
-    # Quarta 21/10, 12h em Brasília (15h UTC): treino da Erica
+    # Quarta 21/10, 12h em Brasília (15h UTC): treino da Erica, cadastrado como bloqueio semanal
+    assert sdr_api.post(url, {"type": "bloqueio", "title": "Treino", "start": "2026-10-21T15:00:00Z",
+                              "end": "2026-10-21T16:00:00Z", "recurrence": {"freq": "weekly"}}, format="json").status_code == 201
     training = {"type": "reuniao_online", "customer_id": str(lead.id),
                 "start": "2026-10-21T15:00:00Z", "end": "2026-10-21T16:00:00Z", "force": True}
     resp = sdr_api.post(url, training, format="json")

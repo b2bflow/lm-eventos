@@ -1,27 +1,35 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { addDays, addMonths, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
+import { addDays, addMinutes, addMonths, differenceInCalendarDays, format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { CalendarPlus, ChevronLeft, ChevronRight, Link2, Loader2, MapPin, Pencil, Plus, RefreshCw, SquareKanban, Video } from "lucide-react";
+import {
+  AlignLeft, CalendarPlus, ChevronLeft, ChevronRight, Clock, Link2, Loader2, MapPin, MessageCircle, Pencil, Plus,
+  RefreshCw, Repeat, SquareKanban, Trash2, UserRound, Video, X, type LucideIcon,
+} from "lucide-react";
 import { PageShell } from "@/components/shared/PageShell";
 import { FilterBar, Legend } from "@/components/shared/FilterBar";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import api from "@/services/api";
 import { cn } from "@/lib/utils";
-import { utcIso } from "@/lib/format";
+import { phoneDisplay, utcIso } from "@/lib/format";
 import { TONE_DOT_CLASSES, type Tone } from "@/lib/tones";
 import { isAdminUser, useCurrentUser, useLead } from "@/hooks/useFunnel";
+import { ContactPicker } from "@/components/domain/contacts/ContactPicker";
+import { DateField, RecurrenceSelect, ScopeDialog, TimeSelect, type Scope } from "@/components/domain/agenda/EventFormParts";
+import { dayToDate, describeRule, followStart, sameRule, type RecurrenceRule } from "@/components/domain/agenda/recurrence";
+
+type PickedContact = { id: string; name?: string | null; phone?: string };
 
 interface AgendaEvent {
   id: string;
@@ -32,12 +40,14 @@ interface AgendaEvent {
   customer_name?: string | null;
   start: string;
   end: string;
+  all_day?: boolean;
+  series_id?: string | null;
+  recurrence?: RecurrenceRule | null;
   location?: string | null;
   meet_link?: string | null;
   notes?: string | null;
   source: string;
   sync_status?: string;
-  fixed?: boolean;
 }
 
 const SYNC_LABELS: Record<string, string> = {
@@ -72,12 +82,13 @@ const TYPE_LEGEND: { type: string; label: string }[] = [
   { type: "externo", label: "Google (externo)" },
 ];
 
-const TYPE_OPTIONS: Record<string, string> = {
-  reuniao_online: "Reunião online (gera link do Meet)",
-  visita_tecnica: "Visita técnica",
-  evento_confirmado: "Evento confirmado (bloqueia a data)",
-  bloqueio: "Bloqueio",
-};
+// Tipos que dá para criar (as abas "Evento | Tarefa" do Google, aqui com os tipos da LM).
+const TYPE_CHIPS: [string, string][] = [
+  ["reuniao_online", "Reunião online"],
+  ["visita_tecnica", "Visita técnica"],
+  ["evento_confirmado", "Evento confirmado"],
+  ["bloqueio", "Bloqueio"],
+];
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 7); // 7h às 21h
@@ -96,7 +107,15 @@ const BLOCK_CLASSES: Record<Tone, string> = {
 
 const toDate = (iso: string) => new Date(utcIso(iso));
 const toneOf = (event: AgendaEvent): Tone => TYPE_TONES[event.type] ?? "neutral";
-const canCancel = (event: AgendaEvent) => !event.fixed && event.source === "lm";
+const canCancel = (event: AgendaEvent) => event.source === "lm";
+const isMidnight = (d: Date) => d.getHours() === 0 && d.getMinutes() === 0;
+/** Dia inteiro: marcado assim, ou (espelhos antigos do Google) de meia-noite a meia-noite. */
+const isAllDay = (event: AgendaEvent) => !!event.all_day
+  || (isMidnight(toDate(event.start)) && isMidnight(toDate(event.end)) && toDate(event.end) > toDate(event.start));
+/** O evento aparece no dia: os de dia inteiro em todos os dias que cobrem (o fim é exclusivo). */
+const coversDay = (event: AgendaEvent, day: Date) => (isAllDay(event)
+  ? toDate(event.start) <= startOfDay(day) && startOfDay(day) < toDate(event.end)
+  : isSameDay(toDate(event.start), day));
 
 function errorDetail(error: unknown, fallback: string) {
   return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || fallback;
@@ -127,140 +146,257 @@ function titleFor(view: View, anchor: Date, from: Date, to: Date): string {
   return format(anchor, "MMMM 'de' yyyy", { locale: ptBR });
 }
 
-// --- Agendar -------------------------------------------------------------------------------
+/** Quando o evento acontece, no formato da ficha do Google ("Quarta-feira, 28 de outubro · 12:00 – 13:00"). */
+function whenText(event: AgendaEvent) {
+  const start = toDate(event.start);
+  const end = toDate(event.end);
+  if (isAllDay(event)) {
+    const last = addDays(end, -1);
+    return isSameDay(start, last) ? format(start, "EEEE, d 'de' MMMM", { locale: ptBR })
+      : `${format(start, "d 'de' MMM", { locale: ptBR })} – ${format(last, "d 'de' MMM 'de' yyyy", { locale: ptBR })}`;
+  }
+  return isSameDay(start, end)
+    ? `${format(start, "EEEE, d 'de' MMMM", { locale: ptBR })} · ${format(start, "HH:mm")} – ${format(end, "HH:mm")}`
+    : `${format(start, "d 'de' MMM, HH:mm", { locale: ptBR })} – ${format(end, "d 'de' MMM, HH:mm", { locale: ptBR })}`;
+}
 
-/** Agendar ou, com `editing`, editar um evento da plataforma (remontado por `key`: o estado inicial vem do evento). */
-function ScheduleDialog({ open, onClose, leadId, initial, editing = null }: {
-  open: boolean; onClose: () => void; leadId: string | null; initial?: { day: string; time: string } | null;
+// --- Agendar / editar ------------------------------------------------------------------------
+
+/** Linha do formulário com ícone à esquerda, como no editor de eventos do Google Agenda. */
+function FieldRow({ icon: Icon, children, className }: { icon: LucideIcon; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex gap-4", className)}>
+      <Icon className="w-5 h-5 mt-2 shrink-0 text-muted-foreground" aria-hidden />
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+type Saved = AgendaEvent & { warnings: string[] };
+
+/**
+ * Criar ou, com `editing`, editar um evento da plataforma no estilo do Google Agenda: título, tipo, data e
+ * hora (ou dia inteiro), repetição, cliente, local e descrição. Montado a cada abertura (estado inicial vem
+ * do evento ou da faixa clicada). Numa série, o "Salvar" pergunta o alcance (este, este e os seguintes, todos).
+ */
+function ScheduleDialog({ onClose, leadId, initial, editing = null }: {
+  onClose: () => void; leadId: string | null; initial?: { day: string; time: string } | null;
   editing?: AgendaEvent | null;
 }) {
   const queryClient = useQueryClient();
-  const { data: lead } = useLead(leadId);
+  // Aberto pela própria Agenda (sem ?lead=): o cliente é escolhido aqui.
+  const [picked, setPicked] = useState<PickedContact | null>(null);
+  const customerId = leadId ?? picked?.id ?? null;
+  const { data: lead } = useLead(customerId);
+
   const editStart = editing ? toDate(editing.start) : null;
+  const editEnd = editing ? toDate(editing.end) : null;
+  const editAllDay = editing ? isAllDay(editing) : false;
+  const firstDay = initial?.day ?? format(editStart ?? addDays(new Date(), 1), "yyyy-MM-dd");
+  const firstTime = initial?.time ?? (editStart && !editAllDay ? format(editStart, "HH:mm") : "10:00");
   const [type, setType] = useState(editing?.type ?? "reuniao_online");
   const [title, setTitle] = useState(editing?.title ?? "");
-  const [day, setDay] = useState(format(editStart ?? addDays(new Date(), 1), "yyyy-MM-dd"));
-  const [time, setTime] = useState(editStart ? format(editStart, "HH:mm") : "10:00");
-  const [duration, setDuration] = useState(editing && editStart
-    ? Math.max(15, Math.round((toDate(editing.end).getTime() - editStart.getTime()) / 60e3)) : 60);
+  const [allDay, setAllDay] = useState(editAllDay);
+  const [day, setDay] = useState(firstDay);
+  const [time, setTime] = useState(firstTime);
+  const [endDay, setEndDay] = useState(editEnd ? format(editAllDay ? addDays(editEnd, -1) : editEnd, "yyyy-MM-dd") : firstDay);
+  const [endTime, setEndTime] = useState(editEnd && !editAllDay ? format(editEnd, "HH:mm")
+    : format(addMinutes(new Date(`${firstDay}T${firstTime}:00`), 60), "HH:mm"));
+  const [rule, setRule] = useState<RecurrenceRule | null>(editing?.recurrence ?? null);
   const [location, setLocation] = useState(editing?.location ?? "");
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [notify, setNotify] = useState(true);
-  const withClient = editing ? !!editing.customer_id : !!leadId;
+  const [askScope, setAskScope] = useState(false);
+  const withClient = editing ? !!editing.customer_id : !!customerId;
+  const needsClient = type === "reuniao_online" || type === "visita_tecnica";
+  const ruleChanged = !sameRule(rule, editing?.recurrence);
 
   useEffect(() => {
-    if (lead?.venue) setLocation(lead.venue);
-  }, [lead?.venue]);
+    if (lead?.venue && !editing) setLocation(lead.venue);
+  }, [lead?.venue, editing]);
 
-  // Clique numa faixa livre da grade: já abre no dia e na hora clicados.
-  useEffect(() => {
-    if (open && initial) {
-      setDay(initial.day);
-      setTime(initial.time);
-    }
-  }, [open, initial]);
+  const startAt = () => new Date(`${day}T${allDay ? "00:00" : time}:00`);
+  const endAt = () => (allDay ? addDays(new Date(`${endDay}T00:00:00`), 1) : new Date(`${endDay}T${endTime}:00`));
+
+  // Mudar o início leva o fim junto (mesma duração) e a repetição semanal acompanha o dia, como no Google.
+  const changeStartDay = (next: string) => {
+    const delta = differenceInCalendarDays(dayToDate(next), dayToDate(day));
+    setEndDay(format(addDays(dayToDate(endDay), delta), "yyyy-MM-dd"));
+    setRule((current) => followStart(current, dayToDate(day), dayToDate(next)));
+    setDay(next);
+  };
+  const changeStartTime = (next: string) => {
+    const duration = (endAt().getTime() - startAt().getTime()) / 60e3;
+    const end = addMinutes(new Date(`${day}T${next}:00`), duration > 0 ? duration : 60);
+    setTime(next);
+    setEndDay(format(end, "yyyy-MM-dd"));
+    setEndTime(format(end, "HH:mm"));
+  };
+  const changeType = (next: string) => {
+    setType(next);
+    if (next === "evento_confirmado") setAllDay(true); // a data do evento do cliente fica bloqueada o dia todo
+  };
 
   const mutation = useMutation({
-    mutationFn: async (force: boolean = false) => {
-      const start = new Date(`${day}T${time}:00`);
-      const end = type === "evento_confirmado" && duration < 60 ? new Date(start.getTime() + 6 * 3600e3) : new Date(start.getTime() + duration * 60e3);
+    mutationFn: async ({ force = false, scope }: { force?: boolean; scope?: Scope }) => {
+      const body = {
+        start: startAt().toISOString(), end: endAt().toISOString(), all_day: allDay,
+        title: title.trim() || undefined, notes, notify_customer: notify, force: force || undefined,
+        location: type !== "reuniao_online" ? location : undefined,
+      };
       if (editing) {
-        return (await api.patch(`/agenda/events/${editing.id}/`, {
-          start: start.toISOString(), end: end.toISOString(), title: title.trim() || undefined,
-          location: type !== "reuniao_online" ? location : undefined, notes, notify_customer: notify,
-          force: force || undefined,
-        })).data as AgendaEvent & { warnings: string[] };
+        // Evento único: a repetição vai junto (e passa a valer para "todos"). Série: só fora do "este evento".
+        const series = !!editing.series_id;
+        const effective = series ? scope ?? "this" : rule ? "all" : "this";
+        return (await api.patch<Saved>(`/agenda/events/${editing.id}/`, {
+          ...body, scope: effective, ...(effective !== "this" || !series ? { recurrence: rule } : {}),
+        })).data;
       }
-      return (await api.post("/agenda/events/", {
-        type, customer_id: leadId || undefined, start: start.toISOString(), end: end.toISOString(),
-        title: title.trim() || undefined,
-        location: type !== "reuniao_online" && location ? location : undefined, notes: notes || undefined, notify_customer: notify,
-        force: force || undefined,
-      })).data as AgendaEvent & { warnings: string[] };
+      return (await api.post<Saved>("/agenda/events/", {
+        ...body, type, customer_id: customerId || undefined, recurrence: rule || undefined,
+        location: type !== "reuniao_online" && location ? location : undefined, notes: notes || undefined,
+      })).data;
     },
     onSuccess: (event) => {
       toast.success(editing ? "Evento atualizado." : event.meet_link ? "Agendado com link do Meet." : "Agendado.");
       event.warnings?.forEach((w) => toast.warning(w));
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
-      queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["lead", customerId] });
       queryClient.invalidateQueries({ queryKey: ["funnel"] });
       onClose();
     },
-    onError: (error) => {
-      // 409: horário ocupado (treino, reunião, visita ou compromisso do Google). Só a Erica força.
+    onError: (error, variables) => {
+      // 409: horário ocupado (bloqueio, reunião, visita ou compromisso do Google). Só a Erica força.
       const data = (error as { response?: { status?: number; data?: { can_force?: boolean } } })?.response;
       if (data?.status === 409 && data.data?.can_force
           && window.confirm(`${errorDetail(error, "Horário ocupado.")}
 
 Agendar mesmo assim?`)) {
-        mutation.mutate(true);
+        mutation.mutate({ ...variables, force: true });
         return;
       }
       toast.error(errorDetail(error, editing ? "Não foi possível salvar." : "Não foi possível agendar."));
     },
   });
 
+  const save = () => {
+    if (endAt() <= startAt()) {
+      toast.error("O fim deve ser depois do início.");
+      return;
+    }
+    if (editing?.series_id) setAskScope(true);
+    else mutation.mutate({});
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
-            {editing ? `Editar: ${editing.title}` : `Agendar${lead ? `: ${lead.name || lead.phone}` : ""}`}
-          </DialogTitle>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-xl p-0 gap-0 max-h-[92vh] overflow-y-auto">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{editing ? "Editar evento" : "Novo agendamento"}</DialogTitle>
+          <DialogDescription>Título, data e hora, repetição e detalhes do evento.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label className="text-xs">Tipo</Label>
-            <Select value={type} onValueChange={setType} disabled={!!editing}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(TYPE_OPTIONS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-              </SelectContent>
-            </Select>
+        <div className="px-6 pt-7 pb-5 space-y-5">
+          <div className="pl-9 space-y-3">
+            <input value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Título" autoFocus={!editing}
+              placeholder={customerId || withClient ? "Adicionar título (automático: tipo e cliente)" : "Adicionar título"}
+              className="w-full bg-transparent text-xl sm:text-2xl text-foreground border-0 border-b border-border/70 pb-1.5 outline-none focus:border-primary transition-colors placeholder:text-muted-foreground/70" />
+            {editing ? (
+              <StatusBadge tone={toneOf(editing)}>{editing.type_label}</StatusBadge>
+            ) : (
+              <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Tipo">
+                {TYPE_CHIPS.map(([value, label]) => (
+                  <button key={value} type="button" role="radio" aria-checked={type === value} onClick={() => changeType(value)}
+                    className={cn("h-8 px-3 rounded-md text-sm font-medium transition-colors",
+                      type === value ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-secondary")}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Título</Label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)}
-              placeholder={editing ? undefined : "Automático: tipo e nome do cliente"} />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-1 col-span-3 sm:col-span-1">
-              <Label className="text-xs">Dia</Label>
-              <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+
+          <FieldRow icon={Clock}>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <DateField label="Data de início" value={day} onChange={changeStartDay} />
+              {!allDay && <TimeSelect label="Hora de início" value={time} onChange={changeStartTime} />}
+              <span className="px-1 text-sm text-muted-foreground">até</span>
+              {!allDay && <TimeSelect label="Hora de término" value={endTime} onChange={setEndTime} after={endDay === day ? time : undefined} />}
+              <DateField label="Data de término" value={endDay} onChange={setEndDay} />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Início</Label>
-              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={allDay} onCheckedChange={(v) => setAllDay(v === true)} /> Dia inteiro
+              </label>
+              <RecurrenceSelect rule={rule} start={dayToDate(day)} onChange={setRule} />
             </div>
-            <div className="space-y-1 col-span-2 sm:col-span-1">
-              <Label className="text-xs">Duração (min)</Label>
-              <Input type="number" min={15} step={15} value={duration} onChange={(e) => setDuration(Number(e.target.value) || 60)} />
-            </div>
-          </div>
-          {type !== "reuniao_online" && (
-            <div className="space-y-1">
-              <Label className="text-xs">{type === "visita_tecnica" ? "Endereço do local" : "Local"}</Label>
-              <Input value={location} onChange={(e) => setLocation(e.target.value)} />
-            </div>
+          </FieldRow>
+
+          <FieldRow icon={UserRound}>
+            {editing || leadId ? (
+              <p className="py-2 text-sm text-foreground">{editing?.customer_name || lead?.name || (withClient ? "Cliente" : "Sem cliente")}</p>
+            ) : picked ? (
+              <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground truncate">{picked.name || lead?.name || "Contato selecionado"}</span>
+                  {(picked.phone || lead?.phone) && (
+                    <span className="block text-xs text-muted-foreground">{phoneDisplay(picked.phone || lead?.phone)}</span>
+                  )}
+                </span>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Trocar cliente" onClick={() => setPicked(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <ContactPicker className="sm:w-full" onPick={setPicked}
+                placeholder={needsClient ? "Adicionar cliente (nome ou telefone)" : "Adicionar cliente (opcional)"} />
+            )}
+          </FieldRow>
+
+          {type === "reuniao_online" ? (
+            <FieldRow icon={Video}>
+              {editing?.meet_link ? (
+                <a href={editing.meet_link} target="_blank" rel="noreferrer" className="inline-block py-2 text-sm text-sky-600 dark:text-sky-400 hover:underline">
+                  Entrar com o Google Meet
+                </a>
+              ) : (
+                <p className="py-2 text-sm text-muted-foreground">Videoconferência do Google Meet criada ao salvar</p>
+              )}
+            </FieldRow>
+          ) : (
+            <FieldRow icon={MapPin}>
+              <Input value={location} onChange={(e) => setLocation(e.target.value)} aria-label="Local"
+                placeholder={type === "visita_tecnica" ? "Adicionar endereço do local (obrigatório)" : "Adicionar local"}
+                className="border-0 bg-secondary/50" />
+            </FieldRow>
           )}
-          <div className="space-y-1">
-            <Label className="text-xs">Observações</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-          {withClient && (type === "reuniao_online" || type === "visita_tecnica") && (
-            <div className="flex items-center gap-2">
-              <Switch id="notify" checked={notify} onCheckedChange={setNotify} />
-              <Label htmlFor="notify" className="text-sm">
-                {editing ? "Avisar o cliente por WhatsApp se mudar o horário" : "Enviar confirmação ao cliente por WhatsApp"}
-              </Label>
-            </div>
+
+          <FieldRow icon={AlignLeft}>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} aria-label="Descrição" placeholder="Adicionar descrição"
+              className="min-h-[88px] border-0 bg-secondary/50" />
+          </FieldRow>
+
+          {withClient && needsClient && (
+            <FieldRow icon={MessageCircle}>
+              <div className="flex items-center gap-2 py-1.5">
+                <Switch id="notify" checked={notify} onCheckedChange={setNotify} />
+                <Label htmlFor="notify" className="text-sm font-normal">
+                  {editing ? "Avisar o cliente por WhatsApp se mudar o horário" : "Enviar confirmação ao cliente por WhatsApp"}
+                </Label>
+              </div>
+            </FieldRow>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => mutation.mutate(false)} disabled={mutation.isPending}>{editing ? "Salvar" : "Agendar"}</Button>
-        </DialogFooter>
+        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border/50 bg-background/95 px-6 py-3">
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button onClick={save} disabled={mutation.isPending}>
+            {mutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Salvar
+          </Button>
+        </div>
       </DialogContent>
+      {askScope && (
+        <ScopeDialog action="edit" allowThis={!ruleChanged} onClose={() => setAskScope(false)}
+          onConfirm={(scope) => { setAskScope(false); mutation.mutate({ scope }); }} />
+      )}
     </Dialog>
   );
 }
@@ -273,59 +409,62 @@ function EventDetailsDialog({ event, onClose, onCancel, onEdit }: {
   const navigate = useNavigate();
   if (!event) return null;
   const start = toDate(event.start);
-  const end = toDate(event.end);
-  const sameDay = isSameDay(start, end);
-  const rows: [string, React.ReactNode][] = [
-    ["Quando", sameDay
-      ? `${format(start, "EEEE, dd/MM/yyyy", { locale: ptBR })} · ${format(start, "HH:mm")}–${format(end, "HH:mm")}`
-      : `${format(start, "dd/MM HH:mm")} até ${format(end, "dd/MM HH:mm")}`],
-    ["Cliente", event.customer_name || "—"],
-    ["Local", event.location || "—"],
-    ["Origem", event.source === "lm" ? "Plataforma" : "Google Agenda"],
-  ];
-  if (event.notes) rows.push(["Observações", event.notes]);
-  if (event.source === "lm" && !event.fixed && event.sync_status) {
-    rows.push(["No Google", SYNC_LABELS[event.sync_status] ?? event.sync_status]);
-  }
+  const rows: [LucideIcon, React.ReactNode][] = [];
+  if (event.customer_name) rows.push([UserRound, event.customer_name]);
+  if (event.location) rows.push([MapPin, event.location]);
+  if (event.notes) rows.push([AlignLeft, <span className="whitespace-pre-line">{event.notes}</span>]);
+  rows.push([CalendarPlus, event.source === "lm"
+    ? `Plataforma${event.sync_status ? ` · No Google: ${SYNC_LABELS[event.sync_status] ?? event.sync_status}` : ""}`
+    : "Google Agenda"]);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex flex-wrap items-center gap-x-3 gap-y-1 pr-6">
-            {event.title}
-            <StatusBadge tone={toneOf(event)}>{event.type_label}</StatusBadge>
+        {canCancel(event) && (
+          <div className="absolute right-12 top-3 flex gap-1">
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Editar evento" onClick={() => onEdit(event)}>
+              <Pencil className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Excluir evento" onClick={() => onCancel(event)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+        <DialogHeader className="pt-6">
+          <DialogTitle className="flex items-start gap-3 text-xl font-normal">
+            <span className={cn("mt-2 w-3.5 h-3.5 rounded shrink-0", TONE_DOT_CLASSES[toneOf(event)])} />
+            <span className="min-w-0 break-words">{event.title}</span>
           </DialogTitle>
-          <DialogDescription className="first-letter:uppercase">{format(start, "EEEE", { locale: ptBR })}</DialogDescription>
+          <DialogDescription className="pl-[26px] text-sm text-foreground/80 first-letter:uppercase">
+            {whenText(event)}
+          </DialogDescription>
+          {event.recurrence && (
+            <p className="pl-[26px] flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Repeat className="w-3.5 h-3.5" /> {describeRule(event.recurrence, start)}
+            </p>
+          )}
         </DialogHeader>
-        <dl className="grid grid-cols-[90px_1fr] gap-y-2 text-sm">
-          {rows.map(([label, value]) => (
-            <div key={label} className="contents">
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="text-foreground min-w-0 break-words first-letter:uppercase">{value}</dd>
+        <div className="space-y-3 text-sm">
+          <div className="pl-[26px]"><StatusBadge tone={toneOf(event)}>{event.type_label}</StatusBadge></div>
+          {event.meet_link && (
+            <a href={event.meet_link} target="_blank" rel="noreferrer"
+              className="ml-[26px] inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700">
+              <Video className="w-4 h-4" /> Participar com o Google Meet
+            </a>
+          )}
+          {rows.map(([Icon, value], i) => (
+            <div key={i} className="flex gap-3">
+              <Icon className="w-4 h-4 mt-0.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 break-words text-foreground">{value}</span>
             </div>
           ))}
-        </dl>
-        {event.meet_link && (
-          <a href={event.meet_link} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-700 dark:text-sky-300 hover:bg-sky-500/15">
-            <Video className="w-4 h-4" /> Entrar no Google Meet
-          </a>
-        )}
-        <DialogFooter className="gap-2 sm:gap-2">
-          {event.customer_id && (
+        </div>
+        {event.customer_id && (
+          <div className="flex justify-end">
             <Button variant="outline" onClick={() => navigate(`/funil?lead=${event.customer_id}`)}>
               <SquareKanban className="w-4 h-4 mr-2" /> Abrir lead
             </Button>
-          )}
-          {canCancel(event) && (
-            <>
-              <Button variant="outline" onClick={() => onEdit(event)}>
-                <Pencil className="w-4 h-4 mr-2" /> Editar
-              </Button>
-              <Button variant="destructive" onClick={() => onCancel(event)}>Cancelar evento</Button>
-            </>
-          )}
-        </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -337,16 +476,18 @@ function EventBlock({ event, onOpen, compact = false }: { event: AgendaEvent; on
   const start = toDate(event.start);
   const end = toDate(event.end);
   const tone = toneOf(event);
+  const allDay = isAllDay(event);
   return (
     <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(event); }}
-      title={`${format(start, "HH:mm")} ${event.title}`}
+      title={allDay ? event.title : `${format(start, "HH:mm")} ${event.title}`}
       className={cn("w-full h-full rounded-md border border-border/60 border-l-4 px-2 py-1 text-left text-[11px] leading-tight overflow-hidden text-foreground",
         "transition-all hover:shadow-md hover:z-10", BLOCK_CLASSES[tone])}>
       <span className={cn("block font-semibold truncate", tone === "neutral" ? "text-muted-foreground" : "")}>
         <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle", TONE_DOT_CLASSES[tone])} />
-        {format(start, "HH:mm")} {event.title}
+        {!allDay && `${format(start, "HH:mm")} `}{event.title}
+        {event.series_id && <Repeat className="inline w-3 h-3 ml-1 align-[-2px] opacity-60" aria-label="Repete" />}
       </span>
-      {!compact && <span className="block truncate text-muted-foreground">até {format(end, "HH:mm")}{event.meet_link ? " · Meet" : event.location ? ` · ${event.location}` : ""}</span>}
+      {!compact && !allDay && <span className="block truncate text-muted-foreground">até {format(end, "HH:mm")}{event.meet_link ? " · Meet" : event.location ? ` · ${event.location}` : ""}</span>}
     </button>
   );
 }
@@ -361,22 +502,36 @@ function TimeGrid({ days, eventsOf, onOpen, onSlot }: {
   }, []);
   const nowTop = (now.getHours() + now.getMinutes() / 60 - HOURS[0]) * HOUR_PX;
   const single = days.length === 1;
+  const allDayOf = (day: Date) => eventsOf(day).filter(isAllDay);
+  const hasAllDay = days.some((day) => allDayOf(day).length > 0);
 
   return (
     <div className="overflow-x-auto">
       <div className={cn(!single && "min-w-[760px]")}>
-        <div className="flex border-b border-border/50 sticky top-0 bg-card z-20">
-          <div className="w-14 shrink-0" />
-          {days.map((day) => {
-            const today = isSameDay(day, now);
-            return (
-              <div key={day.toISOString()} className="flex-1 border-l border-border/50 py-2 text-center">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE", { locale: ptBR })}</div>
-                <div className={cn("mx-auto mt-0.5 w-8 h-8 grid place-items-center rounded-full text-sm font-semibold",
-                  today ? "bg-primary text-primary-foreground" : "text-foreground")}>{format(day, "d")}</div>
-              </div>
-            );
-          })}
+        <div className="sticky top-0 bg-card z-20 border-b border-border/50">
+          <div className="flex">
+            <div className="w-14 shrink-0" />
+            {days.map((day) => {
+              const today = isSameDay(day, now);
+              return (
+                <div key={day.toISOString()} className="flex-1 border-l border-border/50 py-2 text-center">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE", { locale: ptBR })}</div>
+                  <div className={cn("mx-auto mt-0.5 w-8 h-8 grid place-items-center rounded-full text-sm font-semibold",
+                    today ? "bg-primary text-primary-foreground" : "text-foreground")}>{format(day, "d")}</div>
+                </div>
+              );
+            })}
+          </div>
+          {hasAllDay && (
+            <div className="flex border-t border-border/30">
+              <div className="w-14 shrink-0 pr-2 pt-1.5 text-right text-[10px] text-muted-foreground">dia todo</div>
+              {days.map((day) => (
+                <div key={day.toISOString()} className="flex-1 min-w-0 border-l border-border/50 p-1 space-y-1">
+                  {allDayOf(day).map((event) => <div key={event.id} className="h-6"><EventBlock event={event} onOpen={onOpen} compact /></div>)}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex">
           <div className="w-14 shrink-0 sticky left-0 z-[15] bg-card">
@@ -404,7 +559,7 @@ function TimeGrid({ days, eventsOf, onOpen, onSlot }: {
                     <div className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-red-500" />
                   </div>
                 )}
-                {eventsOf(day).map((event) => {
+                {eventsOf(day).filter((event) => !isAllDay(event)).map((event) => {
                   const start = toDate(event.start);
                   const end = toDate(event.end);
                   const sameDayEnd = isSameDay(start, end) ? end : new Date(start.getFullYear(), start.getMonth(), start.getDate(), 22);
@@ -439,7 +594,7 @@ function DayList({ days, eventsOf, onOpen }: { days: Date[]; eventsOf: (day: Dat
             {items.length === 0 ? (
               <p className="text-xs text-muted-foreground">Livre</p>
             ) : (
-              <div className="space-y-1.5">{items.map((e) => <div key={e.id} className="h-12"><EventBlock event={e} onOpen={onOpen} /></div>)}</div>
+              <div className="space-y-1.5">{items.map((e) => <div key={e.id} className={isAllDay(e) ? "h-7" : "h-12"}><EventBlock event={e} onOpen={onOpen} /></div>)}</div>
             )}
           </li>
         );
@@ -474,9 +629,10 @@ function MonthGrid({ from, anchor, eventsOf, onDay, onOpen }: {
               <div className="hidden sm:block mt-1 space-y-0.5">
                 {items.slice(0, 3).map((e) => (
                   <button key={e.id} type="button" onClick={(ev) => { ev.stopPropagation(); onOpen(e); }}
-                    className="w-full flex items-center gap-1 text-[11px] text-left truncate rounded px-1 hover:bg-muted">
+                    className={cn("w-full flex items-center gap-1 text-[11px] text-left truncate rounded px-1 hover:bg-muted",
+                      isAllDay(e) && BLOCK_CLASSES[toneOf(e)])}>
                     <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", TONE_DOT_CLASSES[toneOf(e)])} />
-                    <span className="tabular-nums text-muted-foreground">{format(toDate(e.start), "HH:mm")}</span>
+                    {!isAllDay(e) && <span className="tabular-nums text-muted-foreground">{format(toDate(e.start), "HH:mm")}</span>}
                     <span className="truncate text-foreground">{e.title}</span>
                   </button>
                 ))}
@@ -511,8 +667,13 @@ function ListTable({ events, onOpen }: { events: AgendaEvent[]; onOpen: (e: Agen
             return (
               <TableRow key={event.id} className="cursor-pointer" onClick={() => onOpen(event)}>
                 <TableCell className="whitespace-nowrap first-letter:uppercase">{format(start, "EEE dd/MM", { locale: ptBR })}</TableCell>
-                <TableCell className="tabular-nums">{format(start, "HH:mm")}–{format(toDate(event.end), "HH:mm")}</TableCell>
-                <TableCell className="font-medium text-foreground">{event.title}</TableCell>
+                <TableCell className="tabular-nums whitespace-nowrap">
+                  {isAllDay(event) ? "Dia inteiro" : `${format(start, "HH:mm")}–${format(toDate(event.end), "HH:mm")}`}
+                </TableCell>
+                <TableCell className="font-medium text-foreground">
+                  {event.title}
+                  {event.series_id && <Repeat className="inline w-3.5 h-3.5 ml-1.5 align-[-2px] text-muted-foreground" aria-label="Repete" />}
+                </TableCell>
                 <TableCell className="hidden md:table-cell">{event.customer_name || "—"}</TableCell>
                 <TableCell><StatusBadge tone={toneOf(event)}>{event.type_label}</StatusBadge></TableCell>
                 <TableCell className="hidden lg:table-cell">
@@ -543,6 +704,7 @@ export default function Agenda() {
   const [slot, setSlot] = useState<{ day: string; time: string } | null>(null);
   const [selected, setSelected] = useState<AgendaEvent | null>(null);
   const [editing, setEditing] = useState<AgendaEvent | null>(null);
+  const [deleting, setDeleting] = useState<AgendaEvent | null>(null);
   const { data: me } = useCurrentUser();
   const { from, to } = rangeFor(view, anchor);
 
@@ -583,20 +745,26 @@ export default function Agenda() {
     }
   };
 
-  const cancel = async (event: AgendaEvent) => {
-    if (!window.confirm(`Cancelar "${event.title}"? O horário fica livre de novo.`)) return;
+  const remove = async (event: AgendaEvent, scope: Scope = "this") => {
     try {
-      await api.delete(`/agenda/events/${event.id}/`);
-      toast.success("Evento cancelado.");
+      await api.delete(`/agenda/events/${event.id}/`, { params: { scope } });
+      toast.success(scope === "this" ? "Evento excluído." : "Eventos excluídos.");
       setSelected(null);
+      setDeleting(null);
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
     } catch (error) {
-      toast.error(errorDetail(error, "Não foi possível cancelar."));
+      toast.error(errorDetail(error, "Não foi possível excluir."));
     }
   };
+  // Evento que se repete: pergunta o alcance, como o Google. Evento único: confirma e exclui.
+  const cancel = (event: AgendaEvent) => {
+    if (event.series_id) setDeleting(event);
+    else if (window.confirm(`Excluir "${event.title}"? O horário fica livre de novo.`)) remove(event);
+  };
 
-  const sorted = useMemo(() => [...events].sort((a, b) => toDate(a.start).getTime() - toDate(b.start).getTime()), [events]);
-  const eventsOf = (day: Date) => sorted.filter((e) => isSameDay(toDate(e.start), day));
+  const sorted = useMemo(() => [...events].sort((a, b) =>
+    Number(isAllDay(b)) - Number(isAllDay(a)) || toDate(a.start).getTime() - toDate(b.start).getTime()), [events]);
+  const eventsOf = (day: Date) => sorted.filter((e) => coversDay(e, day));
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(from, i)), [from]);
 
   const openSchedule = (initial?: { day: string; time: string }) => {
@@ -674,11 +842,13 @@ export default function Agenda() {
         {view === "list" && <ListTable events={sorted} onOpen={setSelected} />}
       </div>
 
-      {editing
-        ? <ScheduleDialog key={editing.id} open onClose={() => setEditing(null)} leadId={null} editing={editing} />
-        : <ScheduleDialog open={scheduleOpen} onClose={closeSchedule} leadId={leadId} initial={slot} />}
+      {editing && <ScheduleDialog key={editing.id} onClose={() => setEditing(null)} leadId={null} editing={editing} />}
+      {!editing && scheduleOpen && (
+        <ScheduleDialog key={slot ? `${slot.day}-${slot.time}` : "novo"} onClose={closeSchedule} leadId={leadId} initial={slot} />
+      )}
       <EventDetailsDialog event={selected} onClose={() => setSelected(null)} onCancel={cancel}
         onEdit={(event) => { setSelected(null); setEditing(event); }} />
+      {deleting && <ScopeDialog action="delete" onClose={() => setDeleting(null)} onConfirm={(scope) => remove(deleting, scope)} />}
     </PageShell>
   );
 }

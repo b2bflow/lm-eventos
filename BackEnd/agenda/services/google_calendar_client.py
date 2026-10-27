@@ -79,6 +79,14 @@ def _rfc3339(dt: datetime) -> str:
     return dt.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _when(dt: datetime, all_day: bool) -> dict:
+    """Início/fim no formato do Google. Dia inteiro usa a data de Brasília (o fim é exclusivo, como no Google)."""
+    if all_day:
+        from crm.services.business_hours import to_local
+        return {"date": to_local(dt).date().isoformat()}
+    return {"dateTime": _rfc3339(dt), "timeZone": "America/Sao_Paulo"}
+
+
 def parse_google_datetime(value: dict) -> datetime:
     """{dateTime|date} do Google -> datetime UTC sem fuso. Dia inteiro começa à meia-noite de Brasília."""
     if value.get("dateTime"):
@@ -139,15 +147,18 @@ class GoogleCalendarClient:
         return self._service
 
     def create_event(self, title: str, start: datetime, end: datetime, description: str = "", location: str = "",
-                     with_meet: bool = False, attendees: list[str] | None = None) -> dict:
+                     with_meet: bool = False, attendees: list[str] | None = None, all_day: bool = False,
+                     recurrence: list[str] | None = None) -> dict:
         body = {
             "summary": title,
             "description": description,
             "location": location,
-            "start": {"dateTime": _rfc3339(start), "timeZone": "America/Sao_Paulo"},
-            "end": {"dateTime": _rfc3339(end), "timeZone": "America/Sao_Paulo"},
+            "start": _when(start, all_day),
+            "end": _when(end, all_day),
             "extendedProperties": {"private": {ORIGIN_KEY: ORIGIN_VALUE}},
         }
+        if recurrence:
+            body["recurrence"] = recurrence
         if attendees:
             body["attendees"] = [{"email": email} for email in attendees]
         if with_meet:
@@ -159,8 +170,10 @@ class GoogleCalendarClient:
         ).execute()
 
     def update_event(self, google_event_id: str, title: str | None = None, start: datetime | None = None,
-                     end: datetime | None = None, description: str | None = None, location: str | None = None) -> dict:
-        """Altera só os campos informados (PATCH): convidados, Meet e o resto do evento ficam como estão."""
+                     end: datetime | None = None, description: str | None = None, location: str | None = None,
+                     all_day: bool = False, recurrence: list[str] | None = None) -> dict:
+        """Altera só os campos informados (PATCH): convidados, Meet e o resto do evento ficam como estão.
+        `recurrence=[]` tira a repetição (o evento repetido vira um evento só)."""
         body = {}
         if title is not None:
             body["summary"] = title
@@ -168,10 +181,13 @@ class GoogleCalendarClient:
             body["description"] = description
         if location is not None:
             body["location"] = location
+        # Trocar entre horário e dia inteiro: o campo que não vale mais vai como null.
         if start is not None:
-            body["start"] = {"dateTime": _rfc3339(start), "timeZone": "America/Sao_Paulo"}
+            body["start"] = {**_when(start, all_day), **({"dateTime": None} if all_day else {"date": None})}
         if end is not None:
-            body["end"] = {"dateTime": _rfc3339(end), "timeZone": "America/Sao_Paulo"}
+            body["end"] = {**_when(end, all_day), **({"dateTime": None} if all_day else {"date": None})}
+        if recurrence is not None:
+            body["recurrence"] = recurrence
         return self.service.events().patch(calendarId=calendar_id(), eventId=google_event_id, body=body).execute()
 
     def get_event(self, google_event_id: str) -> dict:

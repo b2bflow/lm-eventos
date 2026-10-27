@@ -8,12 +8,6 @@ DEFAULT_BUSINESS_HOURS = {
     "3": ["08:00", "18:00"], "4": ["08:00", "18:00"], "5": ["08:00", "12:00"], "6": None,
 }
 
-# Bloqueios fixos da agenda da Erica (treino quarta e sexta 12h).
-DEFAULT_FIXED_BLOCKS = [
-    {"weekday": 2, "start": "12:00", "end": "13:00", "title": "Treino (bloqueio fixo)"},
-    {"weekday": 4, "start": "12:00", "end": "13:00", "title": "Treino (bloqueio fixo)"},
-]
-
 # Respostas rápidas da aba WhatsApp por produto ("geral" vale para todos). Escrita formal e sem
 # emoji (regra 5). {nome} = primeiro nome do cliente; {sdr} = nome da SDR (sdr_name).
 DEFAULT_QUICK_REPLIES = [
@@ -56,7 +50,6 @@ class LmSettings(Document):
     key = StringField(default='default', unique=True)
 
     business_hours = DictField(default=lambda: dict(DEFAULT_BUSINESS_HOURS))
-    fixed_blocks = ListField(DictField(), default=lambda: list(DEFAULT_FIXED_BLOCKS))
     first_call_hour = StringField(default="09:00")  # fora do horário: ligar às 9h do próximo dia útil
 
     approval_ceiling = FloatField(default=15000.0)
