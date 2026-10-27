@@ -1,5 +1,6 @@
 from utils.logger import logger
 import os
+from bson import ObjectId
 from django.conf import settings
 from django.core.files.uploadhandler import MemoryFileUploadHandler
 from rest_framework import status
@@ -198,6 +199,8 @@ class MessageViewSet(ModelViewSet):
             conversation_id = params.get('conversation')
             if not customer_id and not conversation_id:
                 return Response({"results": [], "next_cursor": None, "has_more": False})
+            if not ObjectId.is_valid(customer_id or conversation_id):
+                return Response({"detail": "Conversa ou cliente inválido."}, status=status.HTTP_400_BAD_REQUEST)
             page_size = parse_page_size(params.get('page_size'), default=30, maximum=100)
             queryset = MessageRepository.queryset_for(conversation_id=conversation_id, customer_id=customer_id)
             items, next_cursor = paginate_desc(queryset, 'created_at', params.get('cursor'), page_size)
@@ -209,6 +212,14 @@ class MessageViewSet(ModelViewSet):
             logger.error(f"[ChatController] Erro ao listar mensagens: {e}")
             return Response({"detail": "Erro interno."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def retrieve(self, request, pk=None, *args, **kwargs) -> Response:
+        # O get_object padrão procura o kwarg 'id' (a rota usa <pk>) e o get_queryset só filtra por query
+        # string: o GET por id sempre dava 500.
+        message = MessageModel.objects(id=pk).first() if ObjectId.is_valid(pk or "") else None
+        if not message:
+            return Response({"detail": "Mensagem não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.get_serializer(message).data)
+
     def create(self, request, *args, **kwargs) -> Response:
         try:
             conversation_id = request.data.get('conversation_id')
@@ -219,6 +230,8 @@ class MessageViewSet(ModelViewSet):
                     {"detail": "Dados incompletos."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            if not ObjectId.is_valid(str(conversation_id)):
+                return Response({"detail": "Conversa não encontrada."}, status=status.HTTP_404_NOT_FOUND)
 
             message_service = ChatContainer.get_message_service()
 

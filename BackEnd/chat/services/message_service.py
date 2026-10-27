@@ -104,7 +104,6 @@ class MessageService(IMessageService):
         
     def processar_mensagem(self, message) -> list[bool, str | None]:
         # Procura o conteúdo entre <kwargs> e </kwargs>
-        print("Mensagem recebida para processamento:")
         match = re.search(r"<kwargs>(.*?)</kwargs>", message, re.DOTALL)
 
         if match:
@@ -120,7 +119,7 @@ class MessageService(IMessageService):
                 return [kwargs.get("buttonsResponseMessage"), button_id]
 
             except (ValueError, SyntaxError) as e:
-                print(f"Erro ao converter a string para dicionário: {e}")
+                logger.warning(f"[MessageService] Erro ao converter a string para dicionário: {e}")
         return [False, None]
     
     def _determine_agent_flow(self, vals, phone, customer, conversation=None):
@@ -239,10 +238,6 @@ class MessageService(IMessageService):
 
     def process_incoming_message(self, phone: str, content: str, external_id: str = None, raw_metadata: dict = None) -> Any:
         try:
-
-            print("Aqui >>>>>>>>>>>> RAW METADATA", raw_metadata)
-            print("Aqui >>>>>>>>>>>> Content", content)
-
             # Verifica se o numero e conteudo sao validos
             if not phone or not content:
                 logger.warning("[MessageService] Dados de mensagem recebida incompletos.")

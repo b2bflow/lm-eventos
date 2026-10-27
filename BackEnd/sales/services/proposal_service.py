@@ -599,6 +599,8 @@ class ProposalService:
         return count
 
     def list_for_customer(self, customer_id: str) -> list[dict]:
+        if not ObjectId.is_valid(customer_id):
+            raise ValueError("Lead não encontrado.")
         return [p.to_dict() for p in Proposal.objects(customer=customer_id, opportunity_id=None).order_by("-version")]
 
     def pending_approvals(self) -> list[dict]:

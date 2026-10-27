@@ -6,6 +6,7 @@ from rest_framework.viewsets import ViewSet
 from rest_framework.decorators import action
 import hmac
 import os
+from bson import ObjectId
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from crm.container import CrmContainer
 from crm.serializers import CustomerDTO
@@ -22,6 +23,8 @@ def _duplicate(dup: DuplicateContactError) -> Response:
 def _card_action(fn):
     """Trata erros comuns das ações do card: 400 (regra), 403 (papel), 500 (inesperado)."""
     def wrapper(self, request, pk=None):
+        if not ObjectId.is_valid(pk or ""):  # id malformado derrubava a consulta no Mongo com 500
+            return Response({"detail": "Lead não encontrado."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             return fn(self, request, pk)
         except PermissionDeniedError as pe:
