@@ -68,8 +68,6 @@ class ConversationService(IConversationService):
                     final_status = data.get('final_customer_status') or getattr(conversation.customer, 'customer_state_now', 'ANALYSIS')
                     conversation.final_customer_status = final_status 
 
-                    print('>>>>',self.db)
-
                     self.customer_repo.update(
                         id=str(conversation.customer.id),
                         attributes={

@@ -20,9 +20,13 @@ import { useCurrentUser } from "@/hooks/useFunnel";
 import { formatDateTime } from "@/lib/format";
 import {
   appendMessageToCache,
+  discardPendingConversationRefreshes,
   messagesKey,
   patchConversationInCache,
+  refreshFirstConversationPages,
+  removeConversationFromCache,
   useConversations,
+  type ConversationsData,
   useMessages,
   type Conversa,
   type ConversationFilters,
@@ -280,16 +284,30 @@ export default function WhatsApp() {
         notes: notes || undefined,
       });
     },
+    // Otimista: tira a conversa da lista na hora e descarta recargas em voo (react-query e polling)
+    // que a trariam de volta. Listas ainda sem dados seguem carregando.
+    onMutate: async ({ id }) => {
+      discardPendingConversationRefreshes();
+      await queryClient.cancelQueries({ queryKey: ["conversations"], predicate: (q) => q.state.data !== undefined });
+      const previous = queryClient.getQueriesData<ConversationsData>({ queryKey: ["conversations"] });
+      removeConversationFromCache(queryClient, id);
+      return { previous };
+    },
+    onError: (error, _vars, context) => {
+      context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      apiError(error, "Não foi possível finalizar a conversa.");
+    },
     onSuccess: () => {
       toast.success("Conversa finalizada!");
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
       queryClient.invalidateQueries({ queryKey: ["leads"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       setIsCloseDialogOpen(false);
+      setCloseStatus("WON");
       setCloseContractValue("");
       setCloseNotes("");
       setSelectedConversationId(null);
     },
+    onSettled: () => refreshFirstConversationPages(queryClient),
   });
 
   const openConversationMutation = useMutation({
@@ -299,10 +317,13 @@ export default function WhatsApp() {
     },
     onSuccess: (id) => {
       toast.success("Conversa reaberta!");
-      patchConversationInCache(queryClient, id, { status: "OPEN" });
+      // Sai da lista de fechadas na hora; a conversa aberta segue pelo snapshot.
       setSelectedSnapshot((prev) => (prev && prev.id === id ? { ...prev, status: "OPEN" } : prev));
-      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      discardPendingConversationRefreshes();
+      removeConversationFromCache(queryClient, id);
+      refreshFirstConversationPages(queryClient);
     },
+    onError: (error) => apiError(error, "Não foi possível reabrir a conversa."),
   });
 
   const handleSendMessage = (message: string) => {
@@ -322,7 +343,8 @@ export default function WhatsApp() {
     closeConversationMutation.mutate({
       id: selectedConversationId,
       finalStatus: closeStatus,
-      contractValue: closeContractValue,
+      // Valor só vale para venda: não manda o que ficou digitado antes de trocar para "Perdido".
+      contractValue: closeStatus === "WON" ? closeContractValue : undefined,
       notes: closeNotes,
     });
   };

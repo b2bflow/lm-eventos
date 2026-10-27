@@ -153,17 +153,40 @@ export function patchConversationInCache(queryClient: QueryClient, id: string, p
   });
 }
 
+/** Tira uma conversa de todas as listas em cache (ex.: ao finalizar). */
+export function removeConversationFromCache(queryClient: QueryClient, id: string) {
+  queryClient.setQueriesData<ConversationsData>({ queryKey: ["conversations"] }, (old) => {
+    if (!old?.pages) return old;
+    return {
+      ...old,
+      pages: old.pages.map((page) => ({ ...page, results: page.results.filter((c) => c.id !== id) })),
+    };
+  });
+}
+
+// Cada recarga ganha um número; a resposta de uma recarga mais antiga que a última é descartada
+// (ex.: polling que saiu antes de finalizar uma conversa traria ela de volta para a lista).
+let refreshGeneration = 0;
+
+/** Descarta as recargas em andamento: chamar antes de alterar a lista de forma otimista. */
+export function discardPendingConversationRefreshes() {
+  refreshGeneration++;
+}
+
 /**
- * Recarrega só a primeira página de cada lista em cache e tira das páginas seguintes as conversas
- * que voltaram nela (subiram para o topo). Evita refazer todas as páginas já roladas.
+ * Recarrega só a primeira página de cada lista em uso na tela e tira das páginas seguintes as
+ * conversas que voltaram nela (subiram para o topo). Evita refazer todas as páginas já roladas.
+ * Listas inativas (outra aba, buscas antigas) são refeitas pelo react-query quando voltam à tela.
  */
 export async function refreshFirstConversationPages(queryClient: QueryClient) {
-  const queries = queryClient.getQueriesData<ConversationsData>({ queryKey: ["conversations"] });
+  const generation = ++refreshGeneration;
+  const queries = queryClient.getQueriesData<ConversationsData>({ queryKey: ["conversations"], type: "active" });
   await Promise.all(
     queries.map(async ([key, data]) => {
       if (!data?.pages?.length) return;
       const { tab, search, ...filters } = (key[1] ?? {}) as { tab?: ConversationTab; search?: string } & ConversationFilters;
       const fresh = await fetchConversations(tab ?? "OPEN", search ?? "", null, filters);
+      if (generation !== refreshGeneration) return;
       const freshIds = new Set(fresh.results.map((c) => c.id));
       queryClient.setQueryData<ConversationsData>(key, (old) => {
         if (!old) return old;
