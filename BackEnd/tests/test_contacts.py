@@ -208,3 +208,41 @@ def test_partner_message_goes_to_operator_without_menu_or_ai(zapi_outbox):
     assert conversation.tag == "OPERADOR" and conversation.needs_attention
     assert MessageModel.objects(conversation=conversation).count() == 1
     assert zapi_outbox == [] and not ai_task.called
+
+
+@pytest.mark.django_db
+def test_delete_contact_cascades_conversations(api_client, lost_lead):
+    from agenda.models import CalendarEvent
+    from inventory.models import InventoryItem, InventoryReservation
+
+    conversation = ConversationModel.objects.get(customer=lost_lead)
+    MessageModel(conversation=conversation, customer=lost_lead, role="user", direction="INCOMING", content="Oi").save()
+    proposal = Proposal.objects.get(customer=lost_lead)
+    item = InventoryItem(code="ilum_par", line="Iluminação", name="Refletor PAR LED", qty_total=4).save()
+    start = datetime(2026, 11, 10)
+    reservation = InventoryReservation(item=item, proposal_id=str(proposal.id), customer=lost_lead, qty=2,
+                                       start=start, end=start + timedelta(days=1)).save()
+    event = CalendarEvent(type="evento_confirmado", title="Show", customer=lost_lead, start=start,
+                          end=start + timedelta(hours=5)).save()
+    other = Customer(name="Outro", phone="5562900000000").save()
+    ConversationModel(customer=other).save()
+
+    resp = api_client.delete(f"{CONTACTS}{lost_lead.id}/")
+
+    assert resp.status_code == 200 and resp.json()["conversations"] == 1
+    assert Customer.objects(id=lost_lead.id).count() == 0
+    assert ConversationModel.objects(customer=lost_lead.id).count() == 0
+    assert MessageModel.objects(conversation=conversation.id).count() == 0
+    assert Proposal.objects(customer=lost_lead.id).count() == 0
+    assert ServiceLog.objects(customer=lost_lead.id).count() == 0
+    assert ConversationModel.objects(customer=other).count() == 1  # os outros contatos ficam
+    reservation.reload()
+    assert reservation.status == "cancelado" and reservation.customer is None and reservation.client_name == "Rafael"
+    event.reload()
+    assert event.customer is None
+    assert api_client.delete(f"{CONTACTS}{lost_lead.id}/").status_code == 404
+
+
+def test_delete_contact_is_admin_only(sdr_client, lost_lead):
+    assert sdr_client.delete(f"{CONTACTS}{lost_lead.id}/").status_code == 403
+    assert ConversationModel.objects(customer=lost_lead).count() == 1

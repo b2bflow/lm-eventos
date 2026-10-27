@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from mongoengine import BooleanField, DateTimeField, DictField, Document, ListField, ReferenceField, StringField
+from mongoengine import NULLIFY, BooleanField, DateTimeField, DictField, Document, ListField, ReferenceField, StringField
 
 from crm.models.custumer_model import Customer
 
@@ -25,7 +25,7 @@ class CalendarEvent(Document):
     google_event_id = StringField(null=True)  # numa série: id da ocorrência no Google (instance id)
     type = StringField(choices=tuple(EVENT_TYPES), required=True)
     title = StringField(required=True)
-    customer = ReferenceField(Customer, null=True)
+    customer = ReferenceField(Customer, null=True, reverse_delete_rule=NULLIFY)
     start = DateTimeField(required=True)  # UTC
     end = DateTimeField(required=True)  # UTC
     all_day = BooleanField(default=False)  # início e fim à meia-noite de Brasília
@@ -77,7 +77,7 @@ class EventSeries(Document):
 
     type = StringField(choices=tuple(EVENT_TYPES), required=True)
     title = StringField(required=True)
-    customer = ReferenceField(Customer, null=True)
+    customer = ReferenceField(Customer, null=True, reverse_delete_rule=NULLIFY)
     start = DateTimeField(required=True)  # UTC, primeira ocorrência
     end = DateTimeField(required=True)  # UTC, fim da primeira ocorrência
     all_day = BooleanField(default=False)

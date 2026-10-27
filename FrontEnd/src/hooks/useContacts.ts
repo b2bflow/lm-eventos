@@ -155,7 +155,21 @@ export function useContactActions(id: string | null) {
     onError: (error) => toast.error(errorDetail(error, "Não foi possível abrir o lead.")),
   });
 
-  return { update, newLead };
+  // Excluir o contato apaga junto conversas, mensagens, propostas e histórico (backend em cascata).
+  const remove = useMutation({
+    mutationFn: async () => (await api.delete(`/crm/contacts/${id}/`)).data,
+    onSuccess: () => {
+      toast.success("Contato excluído, com as conversas dele.");
+      queryClient.removeQueries({ queryKey: ["contact", id] });
+      queryClient.removeQueries({ queryKey: ["lead", id] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["funnel"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+    onError: (error) => toast.error(errorDetail(error, "Não foi possível excluir o contato.")),
+  });
+
+  return { update, newLead, remove };
 }
 
 export function useCreateContact() {

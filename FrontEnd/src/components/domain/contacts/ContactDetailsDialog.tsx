@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { History, Loader2, MessageSquare, Phone, Plus, SquareKanban } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { History, Loader2, MessageSquare, Phone, Plus, SquareKanban, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
   useContact, useContactActions, useContactLeadTimeline, type ContactDetail, type ContactLead,
 } from "@/hooks/useContacts";
 import { AttachmentView } from "@/components/domain/funnel/AttachmentView";
+import { isAdminUser, useCurrentUser } from "@/hooks/useFunnel";
 
 const NONE = "__none__";
 
@@ -101,9 +102,11 @@ function LeadHistoryItem({ contactId, lead, inFunnel }: { contactId: string; lea
 export function ContactDetailsDialog({ contactId, onClose }: { contactId: string | null; onClose: () => void }) {
   const navigate = useNavigate();
   const { data: contact, isLoading } = useContact(contactId);
-  const { update, newLead } = useContactActions(contactId);
+  const { update, newLead, remove } = useContactActions(contactId);
+  const { data: me } = useCurrentUser();
   const [form, setForm] = useState<ContactForm | null>(null);
   const [product, setProduct] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (contact) setForm(toForm(contact));
@@ -247,9 +250,38 @@ export function ContactDetailsDialog({ contactId, onClose }: { contactId: string
                 </div>
               </Section>
             )}
+
+            {isAdminUser(me) && (
+              <div className="border-t pt-4 flex justify-end">
+                <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10"
+                  onClick={() => setConfirmDelete(true)}>
+                  <Trash2 className="w-4 h-4 mr-1" /> Excluir contato
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>
+
+      <Dialog open={confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir contato</DialogTitle>
+            <DialogDescription>
+              {contact?.name || "O contato"} sai do sistema junto com as conversas e mensagens do WhatsApp, os leads,
+              as propostas e a linha do tempo. Não dá para desfazer. Eventos da agenda e reservas manuais de estoque
+              continuam, sem o vínculo com o contato.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+            <Button variant="destructive" disabled={remove.isPending}
+              onClick={() => remove.mutate(undefined, { onSuccess: () => { setConfirmDelete(false); onClose(); } })}>
+              <Trash2 className="w-4 h-4 mr-1.5" /> Excluir contato
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

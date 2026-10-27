@@ -1,4 +1,4 @@
-from mongoengine import NULLIFY, Document, ReferenceField, StringField, BooleanField, DateTimeField, IntField
+from mongoengine import CASCADE, NULLIFY, Document, ReferenceField, StringField, BooleanField, DateTimeField, IntField
 from datetime import datetime
 from crm.models.custumer_model import Customer
 from crm.models.quote_model import Quote
@@ -9,7 +9,7 @@ class ConversationModel(Document):
         'strict': False
     }
 
-    customer = ReferenceField(Customer, required=True)
+    customer = ReferenceField(Customer, required=True, reverse_delete_rule=CASCADE)  # excluir o contato apaga as conversas
     quote = ReferenceField(Quote, null=True, reverse_delete_rule=NULLIFY)
     status = StringField(choices=('OPEN', 'CLOSED', 'ARCHIVED'), default='OPEN')
     tag = StringField(default='OPERADOR')

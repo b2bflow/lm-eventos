@@ -2,7 +2,7 @@ from datetime import datetime
 
 from bson import ObjectId
 from mongoengine import (
-    BooleanField, DateTimeField, Document, EmbeddedDocument, EmbeddedDocumentListField, FloatField, IntField,
+    NULLIFY, BooleanField, DateTimeField, Document, EmbeddedDocument, EmbeddedDocumentListField, FloatField, IntField,
     ObjectIdField, ReferenceField, StringField,
 )
 
@@ -74,7 +74,7 @@ class InventoryReservation(Document):
 
     item = ReferenceField(InventoryItem, required=True)
     proposal_id = StringField(null=True)  # None = reserva manual, feita na tela de estoque
-    customer = ReferenceField(Customer, null=True)
+    customer = ReferenceField(Customer, null=True, reverse_delete_rule=NULLIFY)
     client_name = StringField(null=True)  # reserva manual para quem ainda não é lead
     qty = FloatField(required=True)
     start = DateTimeField(required=True)
@@ -100,7 +100,7 @@ class InventoryMovement(Document):
     meta = {'collection': 'inventory_movements', 'strict': False, 'indexes': ['item', 'customer', '-date']}
 
     item = ReferenceField(InventoryItem, required=True)
-    customer = ReferenceField(Customer, null=True)
+    customer = ReferenceField(Customer, null=True, reverse_delete_rule=NULLIFY)
     proposal_id = StringField(null=True)
     qty = FloatField(required=True)
     type = StringField(choices=('saida', 'retorno'), required=True)

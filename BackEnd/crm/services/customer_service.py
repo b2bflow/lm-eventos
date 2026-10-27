@@ -292,16 +292,10 @@ class CustomerService(ICustomerService):
         
     def delete_customer(self, customer_id: str, user: Any = None) -> bool:
         try:
-            customer = self.customer_repo.get_by_id(customer_id)
-            if customer:
-                operator_id = str(user.id) if user and hasattr(user, 'id') else None
-                ServiceLogRepository.create_log(
-                    customer=customer,
-                    operator_id=operator_id,
-                    action_type='LEAD_DELETED', 
-                    description="Lead excluído do sistema."
-                )
-            return self.customer_repo.delete_customer(customer_id)
+            # Mesma exclusão da página Contatos: conversas, propostas e histórico vão junto.
+            from crm.container import CrmContainer
+            CrmContainer.get_contact_service().delete(customer_id, user=user)
+            return True
         except Exception as e:
             logger.error(f"[CustomerService] Erro ao deletar lead: {str(e)}")
             raise e

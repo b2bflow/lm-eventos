@@ -18,6 +18,7 @@ from crm.models.opportunity_model import LEAD_FIELDS, Opportunity
 from crm.models.sdr_task_model import SdrTask
 from crm.phones import normalize_phone, phone_variants
 from crm.repositories.log_service_repository import ServiceLogRepository
+from utils.logger import logger
 
 CLOSED_STAGES = (domain.CONTRACT_SIGNED, domain.LOST)
 
@@ -278,6 +279,34 @@ class ContactService:
                 metadata={"fields": sorted(set(changed))},
             )
         return self.detail(customer_id)
+
+    def delete(self, customer_id: str, user=None) -> dict:
+        """Exclui o contato e, em cadeia, conversas e mensagens, leads arquivados, propostas, orçamentos,
+        tarefas e linha do tempo (regras reverse_delete_rule dos modelos). Agenda e reservas de estoque
+        ficam, sem o vínculo; reservas das propostas apagadas são liberadas."""
+        # Os modelos com a regra precisam estar carregados para o mongoengine aplicar a cascata.
+        from agenda.models import CalendarEvent, EventSeries  # noqa: F401
+        from chat.models.conversation_model import ConversationModel
+        from chat.models.message_model import MessageModel
+        from inventory.models import InventoryMovement, InventoryReservation  # noqa: F401
+        from sales.models import Proposal
+
+        customer = _get(customer_id)
+        conversations = ConversationModel.objects(customer=customer)
+        counts = {
+            "conversations": conversations.count(),
+            "messages": MessageModel.objects(Q(customer=customer) | Q(conversation__in=list(conversations))).count(),
+            "proposals": Proposal.objects(customer=customer).count(),
+        }
+        proposal_ids = [str(pid) for pid in Proposal.objects(customer=customer).scalar("id")]
+        if proposal_ids:
+            InventoryReservation.objects(proposal_id__in=proposal_ids, status="reservado").update(set__status="cancelado")
+        # Reserva manual continua no estoque com o nome de quem era.
+        InventoryReservation.objects(customer=customer, client_name=None).update(set__client_name=customer.name or customer.phone)
+
+        customer.delete()
+        logger.info(f"[ContactService] Contato {customer_id} ({customer.phone}) excluído por {_operator(user)}: {counts}")
+        return counts
 
     def _apply_partner(self, customer: Customer, user=None, description: str = "", keep_type: bool = False) -> None:
         """Parceiro ou cliente antigo: fica com a Erica, sai da fila da SDR e a IA não responde.

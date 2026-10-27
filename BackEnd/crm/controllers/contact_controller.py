@@ -69,6 +69,16 @@ class ContactDetailController(APIView):
     def patch(self, request, contact_id):
         return Response(CrmContainer.get_contact_service().update(contact_id, request.data, user=request.user))
 
+    @_handle
+    def delete(self, request, contact_id):
+        # Apaga conversas, propostas e histórico junto: só a Erica (admin).
+        if not has_role(request.user):
+            raise PermissionDeniedError("Só a Erica (admin) exclui contatos.")
+        try:
+            return Response(CrmContainer.get_contact_service().delete(contact_id, user=request.user))
+        except ValueError as ve:
+            return Response({"detail": str(ve)}, status=status.HTTP_404_NOT_FOUND)
+
 
 class ContactNewLeadController(APIView):
     """POST /crm/contacts/<id>/new-lead/ {product}: abre um lead novo (o encerrado vai para o histórico)."""
