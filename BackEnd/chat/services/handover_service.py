@@ -38,12 +38,12 @@ def _get(conversation_id: str) -> ConversationModel:
 
 class ConversationHandoverService:
 
-    def _internal(self, conversation: ConversationModel, text: str, kind: str, user=None) -> None:
+    def _internal(self, conversation: ConversationModel, text: str, kind: str, user=None, extra: dict | None = None) -> None:
         from chat.container import ChatContainer
         ChatContainer.get_message_service()._save_and_notify(
             conversation_id=str(conversation.id), content=text, direction='INTERNAL',
             sender_role='note' if kind == 'note' else 'system', message_type=kind, hidden_from_ai=True,
-            raw_metadata={"operator_id": _operator_id(user), "operator_name": user_display_name(user)},
+            raw_metadata={"operator_id": _operator_id(user), "operator_name": user_display_name(user), **(extra or {})},
             status='RECEIVED',
         )
 
@@ -61,6 +61,18 @@ class ConversationHandoverService:
             return conversation
 
         name = user_display_name(user)
+        text = (f"IA retomada por {name}. A assistente responde a partir da próxima mensagem do cliente."
+                if mode == 'AGENTE' else f"Atendimento assumido por {name}. IA pausada nesta conversa.")
+        return self._switch(conversation, mode, text, user)
+
+    def take_over(self, conversation: ConversationModel, text: str) -> ConversationModel:
+        """Passa para OPERADOR sem um usuário do painel (ex.: a equipe respondeu pelo próprio WhatsApp)."""
+        if conversation.tag == 'OPERADOR' and not conversation.ai_active:
+            return conversation
+        return self._switch(conversation, 'OPERADOR', text)
+
+    def _switch(self, conversation: ConversationModel, mode: str, text: str, user=None) -> ConversationModel:
+        customer = conversation.customer
         now = datetime.utcnow()
         conversation.tag = mode
         conversation.ai_active = mode == 'AGENTE'
@@ -71,9 +83,8 @@ class ConversationHandoverService:
         conversation.updated_at = now
         conversation.save()
 
-        text = (f"IA retomada por {name}. A assistente responde a partir da próxima mensagem do cliente."
-                if mode == 'AGENTE' else f"Atendimento assumido por {name}. IA pausada nesta conversa.")
-        self._internal(conversation, text, 'event', user)
+        # `mode` no evento: o painel troca a etiqueta IA/Operador da conversa na hora.
+        self._internal(conversation, text, 'event', user, extra={"mode": mode})
         if customer:
             ServiceLogRepository.create_log(
                 customer=customer, operator_id=_operator_id(user), action_type='HANDOVER',

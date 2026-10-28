@@ -21,6 +21,8 @@ export interface ChatMessage {
   buttons?: ChatMenuButton[];
   /** Autor da nota interna ou da ação da equipe (direction INTERNAL). */
   author_name?: string | null;
+  /** Enviada pela equipe direto no WhatsApp (celular/Web), fora da plataforma. */
+  sent_from_phone?: boolean;
 }
 
 export function normalizeChatMessageContent(content: unknown): string {
@@ -88,5 +90,6 @@ export function toChatMessage(raw: any): ChatMessage {
     media_url: parsed.url,
     buttons: Array.isArray(raw.buttons) ? raw.buttons : undefined,
     author_name: raw.author_name ?? null,
+    sent_from_phone: !!raw.raw_metadata?.sent_from_phone,
   };
 }

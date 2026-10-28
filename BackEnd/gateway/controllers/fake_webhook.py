@@ -7,6 +7,7 @@ from events.bus import EventBus
 from gateway.adapters.zapi_adapter import ZAPIClient
 from gateway.service.webhook_guard_service import WebhookGuardService
 from chat.services.message_service import MessageService
+from chat.services.phone_sent_message_service import PhoneSentMessageService
 
 
 class FakeWebhookController(ViewSet):
@@ -22,6 +23,7 @@ class FakeWebhookController(ViewSet):
         super().__init__(**kwargs)
         self.client = ZAPIClient()
         self.message_service = MessageService()
+        self.phone_sent = PhoneSentMessageService(self.client)
 
     def receive_message(self, request) -> Response:
         if not self.guard.is_authorized(request):
@@ -38,6 +40,11 @@ class FakeWebhookController(ViewSet):
             if self.guard.is_duplicate(data):
                 logger.info(f"[ZApiWebhook] Mensagem repetida de {phone} ignorada.")
                 return Response({"status": "duplicate"}, status=status.HTTP_200_OK)
+
+            # Enviada pela equipe direto no WhatsApp (celular/Web): registra e tira a IA da conversa.
+            if self.phone_sent.matches(data):
+                self.phone_sent.process(data)
+                return Response({"status": "received"}, status=status.HTTP_200_OK)
 
             payload: dict = self.message_service.handle(**data)
             if not payload:

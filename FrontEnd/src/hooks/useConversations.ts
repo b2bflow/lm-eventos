@@ -49,6 +49,7 @@ export interface NewMessageEvent {
   media_url?: string | null;
   buttons?: { id: string; label: string }[] | null;
   author_name?: string | null;
+  raw_metadata?: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -106,8 +107,14 @@ function previewFromEvent(event: NewMessageEvent): string {
  */
 export function applyNewMessageToConversations(queryClient: QueryClient, event: NewMessageEvent) {
   const conversationId = event.conversation_id || event.conversation;
-  // Nota interna e eventos da equipe não mudam a prévia nem a ordem da lista.
-  if (!conversationId || event.direction === "INTERNAL") return;
+  if (!conversationId) return;
+  // Nota interna e eventos da equipe não mudam a prévia nem a ordem da lista; o evento de troca
+  // IA/operador (inclusive a resposta pelo próprio WhatsApp) só atualiza a etiqueta.
+  if (event.direction === "INTERNAL") {
+    const mode = event.raw_metadata?.mode;
+    if (mode === "AGENTE" || mode === "OPERADOR") patchConversationInCache(queryClient, conversationId, { tag: mode });
+    return;
+  }
   let missing = false;
 
   queryClient.setQueriesData<ConversationsData>({ queryKey: ["conversations"] }, (old) => {

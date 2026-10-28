@@ -16,7 +16,8 @@ class WebhookGuardService:
     é usado aqui, para um valor antigo não derrubar o webhook.
 
     Repetição: mesmo número + mesmo texto em até WEBHOOK_DEDUP_SECONDS (padrão 120 s) é ignorado
-    (clique repetido em anúncio). Reentrega da Z-API com o mesmo messageId também é ignorada.
+    (clique repetido em anúncio); não vale para fromMe. Reentrega da Z-API com o mesmo messageId
+    também é ignorada.
     Se o Redis estiver fora, a mensagem passa (nunca perder mensagem por falha de infraestrutura).
     """
 
@@ -52,6 +53,11 @@ class WebhookGuardService:
             message_id = data.get("messageId")
             if message_id and not self.redis.set(f"wh:msgid:{message_id}", 1, nx=True, ex=self.MESSAGE_ID_TTL):
                 return True
+
+            # Texto repetido só vale para o que o cliente manda: a resposta da equipe pelo WhatsApp
+            # ("ok", "obrigada") não pode sumir nem fazer sumir a do cliente.
+            if data.get("fromMe"):
+                return False
 
             text = (data.get("text") or {}).get("message") if isinstance(data.get("text"), dict) else None
             if not text:

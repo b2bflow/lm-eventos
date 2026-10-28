@@ -1,4 +1,4 @@
-import { Send, Loader2, Paperclip, MoreVertical, Sparkles, CheckCircle, ArrowLeft, History, Phone, StickyNote, Zap } from "lucide-react";
+import { Send, Loader2, Paperclip, MoreVertical, Sparkles, CheckCircle, ArrowLeft, History, Phone, StickyNote, Zap, Smartphone } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -338,6 +338,12 @@ export function ChatArea({
                                         <div className="flex items-center gap-1 mb-1 opacity-70">
                                             <Sparkles className="w-3 h-3" />
                                             <span className="text-[10px] uppercase font-bold">Agente IA</span>
+                                        </div>
+                                    )}
+                                    {!isIncoming && msg.sent_from_phone && (
+                                        <div className="flex items-center gap-1 mb-1 opacity-70">
+                                            <Smartphone className="w-3 h-3" />
+                                            <span className="text-[10px] uppercase font-bold">Pelo WhatsApp</span>
                                         </div>
                                     )}
                                     <MessageBody message={msg} isIncoming={isIncoming} />
