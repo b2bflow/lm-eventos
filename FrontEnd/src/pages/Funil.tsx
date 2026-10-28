@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { FLAG_LABELS, LEAD_STATUS_OPTIONS, OWNER_LABELS, PRODUCT_LABELS, type LeadStage } from "@/constants/mappings";
+import { FLAG_LABELS, FUNNEL_STAGES, OWNER_LABELS, PRODUCT_LABELS, type LeadStage } from "@/constants/mappings";
 import { formatDateTime, isOverdue, phoneDisplay, utcIso } from "@/lib/format";
 import {
   useFunnelBoard, useLeadActions, useSdrQueue, type ArchiveResult, type FunnelFilters, type FunnelLead, type SdrTask,
@@ -200,7 +200,7 @@ export default function Funil() {
     else if (over !== lead.customer_state_now) handleMove(lead.id, over as LeadStage);
   };
 
-  const stages: readonly LeadStage[] = archived ? ARCHIVED_STAGES : LEAD_STATUS_OPTIONS;
+  const stages: readonly LeadStage[] = archived ? ARCHIVED_STAGES : FUNNEL_STAGES;
   const totalLeads = board ? stages.reduce((sum, stage) => sum + (board[stage]?.count ?? 0), 0) : 0;
   const filtered = !!(filters.search || filters.product || filters.owner || filters.flag || filters.include_human
     || filters.ai_qualified);

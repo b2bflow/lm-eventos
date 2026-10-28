@@ -134,7 +134,7 @@ class LeadQualificationService:
     # ------------------------------------------------------------------------------------
 
     def start_lead(self, customer_id: str, product: str, user=None) -> dict:
-        """Define o produto e coloca o lead em NEW_LEAD.
+        """Define o produto e coloca o lead no funil como "Lead qualificado" (primeira coluna do quadro).
 
         Se o lead atual do contato já foi encerrado (contrato assinado ou perdido), ele vai para o
         histórico do contato (`opportunities`) e um lead novo começa do zero.
@@ -150,9 +150,9 @@ class LeadQualificationService:
         customer.contact_type = customer.contact_type or "lead"
         customer.updated_at = datetime.utcnow()
         customer.save()
-        if customer.stage != domain.NEW_LEAD:
+        if customer.stage != domain.QUALIFIED:
             from crm.container import CrmContainer
-            CrmContainer.get_pipeline_service().change_stage(customer_id, domain.NEW_LEAD, user=user, system=True,
+            CrmContainer.get_pipeline_service().change_stage(customer_id, domain.QUALIFIED, user=user, system=True,
                                                              note="Novo atendimento iniciado.")
             customer.reload()
         ServiceLogRepository.create_log(

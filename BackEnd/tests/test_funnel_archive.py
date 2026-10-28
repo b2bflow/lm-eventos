@@ -46,7 +46,7 @@ def test_archive_as_lost_moves_card_to_archived_tab(sdr_api):
     assert ServiceLog.objects(customer=lead, action_type="FUNNEL_ARCHIVED").count() == 1
 
     active = sdr_api.get(FUNNEL).data
-    assert set(active) == set(domain.STAGES) and active[domain.LOST]["count"] == 0
+    assert set(active) == set(domain.BOARD_STAGES) and active[domain.LOST]["count"] == 0
     archived = sdr_api.get(FUNNEL, {"archived": "true"}).data
     assert set(archived) == {domain.CONTRACT_SIGNED, domain.LOST}
     assert _card_ids(archived, domain.LOST) == [str(lead.id)]
@@ -60,16 +60,17 @@ def test_archive_as_lost_moves_card_to_archived_tab(sdr_api):
 
 @pytest.mark.django_db
 def test_archive_as_won_follows_stage_rules(api_client, sdr_api):
-    early = _lead(domain.NEW_LEAD)
+    # Card anda livre: dá para registrar ganho em qualquer etapa (com o papel certo)
+    early = _lead(domain.QUALIFIED)
     resp = api_client.post(f"/api/v1/crm/customers/{early.id}/archive/", {"result": "ganho"}, format="json")
-    assert resp.status_code == 400  # ganho só depois da proposta aceita
+    assert resp.status_code == 200, resp.data
     early.reload()
-    assert early.funnel_archived_at is None
+    assert early.funnel_archived_at is not None and early.stage == domain.CONTRACT_SIGNED
 
     signed = _lead(domain.CONTRACT_SIGNED, phone="5562900000102")
     resp = sdr_api.post(f"/api/v1/crm/customers/{signed.id}/archive/", {"result": "ganho"}, format="json")
     assert resp.status_code == 200, resp.data
-    assert _card_ids(sdr_api.get(FUNNEL, {"archived": "1"}).data, domain.CONTRACT_SIGNED) == [str(signed.id)]
+    assert str(signed.id) in _card_ids(sdr_api.get(FUNNEL, {"archived": "1"}).data, domain.CONTRACT_SIGNED)
 
     accepted = _lead(domain.PROPOSAL_ACCEPTED, phone="5562900000103", product="corporativo")
     denied = sdr_api.post(f"/api/v1/crm/customers/{accepted.id}/archive/", {"result": "ganho"}, format="json")
@@ -101,7 +102,7 @@ def test_new_lead_for_archived_contact_starts_active():
     lead = _lead(domain.LOST, lost_reason="preco", funnel_archived_at=datetime.utcnow())
     ContactService().start_new_lead(str(lead.id), "corporativo")
     lead.reload()
-    assert lead.stage == domain.NEW_LEAD and lead.funnel_archived_at is None and lead.funnel_entered_at
+    assert lead.stage == domain.QUALIFIED and lead.funnel_archived_at is None and lead.funnel_entered_at
 
 
 # --- Excluir proposta ---------------------------------------------------------------------------

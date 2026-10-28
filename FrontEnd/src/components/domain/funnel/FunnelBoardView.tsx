@@ -18,7 +18,7 @@ interface ColumnProps {
   loadingMore: boolean;
   onLoadMore: () => void;
   onOpen: (id: string) => void;
-  /** Só na coluna "Novo lead", onde entram os cards criados à mão. */
+  /** Só na coluna "Lead qualificado", onde entram os cards criados à mão. */
   onAdd?: () => void;
   onArchive?: (lead: FunnelLead) => void;
   onUnarchive?: (lead: FunnelLead) => void;
@@ -121,7 +121,7 @@ export function FunnelBoardView({ board, stages, labels, filters, onOpen, onAdd,
             loadingMore={loadingStage === stage}
             onLoadMore={() => loadMore(stage)}
             onOpen={onOpen}
-            onAdd={stage === "NEW_LEAD" ? onAdd : undefined}
+            onAdd={stage === "QUALIFIED" ? onAdd : undefined}
             onArchive={archivableStages.includes(stage) ? onArchive : undefined}
             onUnarchive={onUnarchive}
           />

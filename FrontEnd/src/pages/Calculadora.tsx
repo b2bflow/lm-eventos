@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, CalendarHeart, DoorOpen, Loader2, Minus, Package, Plus, Save, SlidersHorizontal, UserRound, X } from "lucide-react";
+import { Building2, CalendarHeart, DoorOpen, Loader2, Minus, Package, Plus, Save, Send, SlidersHorizontal, UserRound, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PriceSettings } from "@/components/features/settings/PriceSettings";
 import { PageShell } from "@/components/shared/PageShell";
@@ -226,19 +226,47 @@ export default function Calculadora() {
   });
   const previewError = (preview.error as { response?: { data?: { detail?: string } } } | null)?.response?.data?.detail;
 
+  const errorDetail = (error: unknown) => (error as { response?: { data?: { detail?: string } } }).response?.data?.detail;
+  const afterSave = () => {
+    queryClient.invalidateQueries({ queryKey: ["proposals", leadId] });
+    queryClient.invalidateQueries({ queryKey: ["funnel"] });
+    navigate(`/funil?lead=${leadId}`);
+  };
+  const createProposal = async () =>
+    (await api.post<{ id: string; status: string; version: number }>("/sales/proposals/", {
+      customer_id: leadId, mode, inputs, replaces: proposalId || undefined,
+    })).data;
+
   const save = useMutation({
-    mutationFn: async () =>
-      (await api.post("/sales/proposals/", { customer_id: leadId, mode, inputs, replaces: proposalId || undefined })).data,
-    onSuccess: (proposal: { status: string; version: number }) => {
+    mutationFn: createProposal,
+    onSuccess: (proposal) => {
       toast.success(proposal.status === "aguardando_aprovacao"
         ? `Proposta v${proposal.version} salva e enviada para aprovação da Erica.`
         : `Proposta v${proposal.version} salva.`);
-      queryClient.invalidateQueries({ queryKey: ["proposals", leadId] });
-      queryClient.invalidateQueries({ queryKey: ["funnel"] });
-      navigate(`/funil?lead=${leadId}`);
+      afterSave();
     },
-    onError: (error) => toast.error((error as { response?: { data?: { detail?: string } } }).response?.data?.detail || "Não foi possível salvar."),
+    onError: (error) => toast.error(errorDetail(error) || "Não foi possível salvar."),
   });
+
+  // Salva e já manda o PDF no WhatsApp do cliente: a proposta entra no card como enviada.
+  const saveAndSend = useMutation({
+    mutationFn: async () => {
+      const proposal = await createProposal();
+      try {
+        await api.post(`/sales/proposals/${proposal.id}/send-whatsapp/`, {});
+        return { proposal, sendError: null as string | null };
+      } catch (error) {
+        return { proposal, sendError: errorDetail(error) || "Não foi possível enviar no WhatsApp." };
+      }
+    },
+    onSuccess: ({ proposal, sendError }) => {
+      if (sendError) toast.error(`Proposta v${proposal.version} salva, mas não foi enviada: ${sendError}`);
+      else toast.success(`Proposta v${proposal.version} enviada no WhatsApp do cliente.`);
+      afterSave();
+    },
+    onError: (error) => toast.error(errorDetail(error) || "Não foi possível salvar."),
+  });
+  const busy = save.isPending || saveAndSend.isPending;
 
   const allPortaItems = (catalog?.items || []).filter((i) => PORTA_LINES.includes(i.line));
   const portaItems = allPortaItems.filter((i) => i.line === itemFilter);
@@ -394,10 +422,20 @@ export default function Calculadora() {
             </Label>
             <Switch id="show-item-prices" checked={showItemPrices} onCheckedChange={setShowItemPrices} />
           </div>
-          <Button className="w-full" size="lg" disabled={!leadId || !ready || !preview.data || save.isPending} onClick={() => save.mutate()}>
-            {save.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            {preview.data?.requires_meeting ? "Salvar e chamar a Erica" : preview.data?.locked ? "Salvar e pedir aprovação" : "Salvar proposta"}
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button className="flex-1" size="lg" variant={preview.data?.locked ? "default" : "outline"}
+              disabled={!leadId || !ready || !preview.data || busy} onClick={() => save.mutate()}>
+              {save.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+              {preview.data?.requires_meeting ? "Salvar e chamar a Erica" : preview.data?.locked ? "Salvar e pedir aprovação" : "Salvar proposta"}
+            </Button>
+            {!preview.data?.locked && (
+              <Button className="flex-1" size="lg" disabled={!leadId || !ready || !preview.data || busy}
+                onClick={() => saveAndSend.mutate()}>
+                {saveAndSend.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                Enviar ao cliente
+              </Button>
+            )}
+          </div>
           {!leadId && <p className="text-xs text-muted-foreground text-center">Escolha o cliente acima para salvar.</p>}
         </div>
       </div>

@@ -63,12 +63,12 @@ def test_convert_old_contact_archives_stale_lead_and_opens_new_one(api_client):
     resp = api_client.post(f"/api/v1/crm/contacts/{old.id}/new-lead/", {"product": "social"}, format="json")
     assert resp.status_code in (200, 201), resp.data
     old.reload()
-    assert old.funnel_entered_at is not None and old.product == "social" and old.stage == domain.NEW_LEAD
+    assert old.funnel_entered_at is not None and old.product == "social" and old.stage == domain.QUALIFIED
     assert old.quoted_amount == 0
     assert Opportunity.objects.get(customer=old).stage == domain.QUALIFIED
 
     board = api_client.get("/api/v1/crm/funnel/").data
-    assert [c["id"] for c in board[domain.NEW_LEAD]["results"]] == [str(old.id)]
+    assert [c["id"] for c in board[domain.QUALIFIED]["results"]] == [str(old.id)]
 
 
 @pytest.mark.django_db
@@ -140,7 +140,8 @@ def test_funnel_card_carries_the_current_proposal_pdf(api_client):
     assert current["file_name"] == "Proposta_LM_Ana_Card_v2.pdf" and current["status"] == second["status"]
     listed = api_client.get("/api/v1/crm/funnel/list/").data["results"]
     assert next(c for c in listed if c["id"] == str(customer.id))["current_proposal"]["id"] == second["id"]
-    other = Customer(name="Sem proposta", phone="5562900000062", funnel_entered_at=datetime.utcnow()).save()
+    other = Customer(name="Sem proposta", phone="5562900000062", funnel_entered_at=datetime.utcnow(),
+                     customer_state_now=domain.QUALIFIED).save()
     assert next(c for c in api_client.get("/api/v1/crm/funnel/list/").data["results"]
                 if c["id"] == str(other.id))["current_proposal"] is None
 
@@ -152,7 +153,10 @@ def test_funnel_list_view_uses_board_rules_and_paginates(api_client):
         Customer(name=f"Lead {i}", phone=f"556291000000{i}", funnel_entered_at=now, product="social",
                  customer_state_now=domain.QUALIFIED).save()
     Customer(name="Antigo", phone="5562910000009").save()  # fora do funil zerado
-    Customer(name="Parceiro", phone="5562910000008", funnel_entered_at=now, human_operator=True).save()
+    Customer(name="Parceiro", phone="5562910000008", funnel_entered_at=now, human_operator=True,
+             customer_state_now=domain.QUALIFIED).save()
+    # Etapa "Novo lead" não tem coluna: não aparece no quadro nem na lista
+    Customer(name="Novo", phone="5562910000007", funnel_entered_at=now).save()
 
     data = api_client.get("/api/v1/crm/funnel/list/", {"limit": 2}).data
     assert data["count"] == 3 and len(data["results"]) == 2 and data["has_more"]
@@ -208,7 +212,7 @@ def test_remove_from_funnel_keeps_contact_and_cancels_tasks(sdr_api):
     assert SdrTask.objects(customer=lead, status="pending").count() == 0
     assert ServiceLog.objects(customer=lead, action_type="FUNNEL_REMOVED").count() == 1
     board = sdr_api.get("/api/v1/crm/funnel/").data
-    assert board[domain.NEW_LEAD]["count"] == 0
+    assert sum(column["count"] for column in board.values()) == 0
     # O contato continua na página Contatos
     assert sdr_api.get(f"/api/v1/crm/contacts/{lead.id}/").status_code == 200
 

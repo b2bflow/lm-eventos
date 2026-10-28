@@ -97,12 +97,12 @@ def test_stage_endpoint_validates_transitions_and_logs(api_client):
     customer = make_customer()
     url = f"/api/v1/crm/customers/{customer.id}/stage/"
 
-    resp = api_client.post(url, {"stage": "CONTRACT_SIGNED"}, format="json")
+    # Card anda livre: "Proposta enviada" não exige proposta enviada pela calculadora
+    assert api_client.post(url, {"stage": "PROPOSAL_SENT"}, format="json").status_code == 200
+
+    # "Novo lead" não é coluna do quadro
+    resp = api_client.post(url, {"stage": "NEW_LEAD"}, format="json")
     assert resp.status_code == 400
-
-    resp = api_client.post(url, {"stage": "PROPOSAL_SENT"}, format="json")
-    assert resp.status_code == 400 and "calculadora" in resp.data["detail"]
-
     assert api_client.post(url, {"stage": "QUALIFIED"}, format="json").status_code == 200
 
     resp = api_client.post(url, {"stage": "LOST"}, format="json")
@@ -113,7 +113,7 @@ def test_stage_endpoint_validates_transitions_and_logs(api_client):
     assert resp.data["customer_state_now"] == "LOST" and resp.data["lost_reason"] == "preco"
 
     logs = list(ServiceLog.objects(customer=customer, action_type="STAGE_CHANGED").order_by("created_at"))
-    assert [log.metadata["to"] for log in logs] == ["QUALIFIED", "LOST"]
+    assert [log.metadata["to"] for log in logs] == ["PROPOSAL_SENT", "QUALIFIED", "LOST"]
 
 
 @pytest.mark.django_db
@@ -172,7 +172,7 @@ def test_flags_next_action_note_call_and_timeline(api_client):
 def test_board_groups_by_stage_with_filters_and_db_pagination(api_client):
     entered = datetime.utcnow()
     for i in range(35):
-        make_customer(customer_state_now=domain.NEW_LEAD, product="estrutura_porta" if i % 2 else "corporativo",
+        make_customer(customer_state_now=domain.MEETING_SCHEDULED, product="estrutura_porta" if i % 2 else "corporativo",
                       funnel_entered_at=entered)
     make_customer(customer_state_now=domain.QUALIFIED, product="corporativo", flags=["aguardando_erica"],
                   funnel_entered_at=entered, ai_qualified_at=entered)
@@ -181,19 +181,19 @@ def test_board_groups_by_stage_with_filters_and_db_pagination(api_client):
     make_customer(customer_state_now=domain.QUALIFIED, product="social")  # lead antigo: fora do funil zerado
 
     board = api_client.get("/api/v1/crm/funnel/").data
-    assert board[domain.NEW_LEAD]["count"] == 35 and len(board[domain.NEW_LEAD]["results"]) == 30
-    assert board[domain.NEW_LEAD]["has_more"] is True
+    assert board[domain.MEETING_SCHEDULED]["count"] == 35 and len(board[domain.MEETING_SCHEDULED]["results"]) == 30
+    assert board[domain.MEETING_SCHEDULED]["has_more"] is True
     assert board[domain.QUALIFIED]["count"] == 1  # operador humano e lead antigo ficam fora
     assert board[domain.CONTRACT_SIGNED]["count"] == 1  # legado aparece na coluna nova
 
     only_ai = api_client.get("/api/v1/crm/funnel/", {"ai_qualified": "true"}).data
-    assert only_ai[domain.QUALIFIED]["count"] == 1 and only_ai[domain.NEW_LEAD]["count"] == 0
+    assert only_ai[domain.QUALIFIED]["count"] == 1 and only_ai[domain.MEETING_SCHEDULED]["count"] == 0
 
-    more = api_client.get("/api/v1/crm/funnel/", {"stage": "NEW_LEAD", "offset": 30}).data
-    assert len(more[domain.NEW_LEAD]["results"]) == 5
+    more = api_client.get("/api/v1/crm/funnel/", {"stage": "MEETING_SCHEDULED", "offset": 30}).data
+    assert len(more[domain.MEETING_SCHEDULED]["results"]) == 5
 
     filtered = api_client.get("/api/v1/crm/funnel/", {"product": "corporativo", "flag": "aguardando_erica"}).data
-    assert filtered[domain.QUALIFIED]["count"] == 1 and filtered[domain.NEW_LEAD]["count"] == 0
+    assert filtered[domain.QUALIFIED]["count"] == 1 and filtered[domain.MEETING_SCHEDULED]["count"] == 0
     with_human = api_client.get("/api/v1/crm/funnel/", {"include_human": "true"}).data
     assert with_human[domain.QUALIFIED]["count"] == 2
 

@@ -63,13 +63,15 @@ def stage(client, lead, target, **extra):
 # --- Aceite pelo card e estoque ------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_dragging_to_accepted_without_a_sent_proposal_is_refused(sdr_api):
+def test_dragging_to_accepted_without_a_sent_proposal_just_moves_the_card(sdr_api):
+    """Card anda livre (reunião com o Marcelo, 28/10): sem proposta enviada, só muda a etapa."""
     lead = Customer(name="Ana", phone="5562911112222", customer_state_now=domain.PROPOSAL_SENT,
                     proposal_sent_at=datetime(2026, 10, 18), product="corporativo").save()
     resp = stage(sdr_api, lead, domain.PROPOSAL_ACCEPTED)
-    assert resp.status_code == 400 and "proposta enviada" in resp.data["detail"]
+    assert resp.status_code == 200, resp.data
     lead.reload()
-    assert lead.customer_state_now == domain.PROPOSAL_SENT
+    assert lead.customer_state_now == domain.PROPOSAL_ACCEPTED
+    assert not Proposal.objects(customer=lead, status="aceita").count()
 
 
 @pytest.mark.django_db
@@ -156,7 +158,7 @@ def test_proposals_of_an_archived_lead_cannot_be_sent_or_accepted(sdr_api, stock
     resp = sdr_api.post(f"/api/v1/sales/proposals/{draft['id']}/send/")
     assert resp.status_code == 400 and "lead anterior" in resp.data["detail"]
     lead.reload()
-    assert lead.customer_state_now == domain.NEW_LEAD and lead.quoted_amount == 0
+    assert lead.customer_state_now == domain.QUALIFIED and lead.quoted_amount == 0
 
 
 # --- Calculadora: valores digitados ------------------------------------------------------------

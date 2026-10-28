@@ -12,6 +12,9 @@ export const LEAD_STATUS_OPTIONS = [
 
 export type LeadStage = (typeof LEAD_STATUS_OPTIONS)[number];
 
+/** Colunas do quadro (backend: domain.BOARD_STAGES). "Novo lead" saiu: o funil começa em "Lead qualificado". */
+export const FUNNEL_STAGES: readonly LeadStage[] = LEAD_STATUS_OPTIONS.filter((s) => s !== "NEW_LEAD");
+
 export const LEAD_STATUS_LABELS: Record<string, string> = {
   NEW_LEAD: "Novo lead",
   QUALIFIED: "Lead qualificado",

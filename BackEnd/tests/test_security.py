@@ -323,9 +323,11 @@ def test_lead_form_cannot_write_internal_fields(sdr_api):
     assert lead.proposal_sent_at is None and lead.flags == [] and lead.human_operator is False
     assert lead.attachments == [] and lead.qualification == {} and lead.needs_erica is False
     assert lead.agent is None and lead.qualified_at is None and lead.first_contact_at is None
-    # Sem proposta enviada não dá para pular para "Proposta enviada" pelo formulário
+    # A etapa anda livre, mas a data de envio continua sendo só da proposta enviada
     jump = sdr_api.patch(f"/api/v1/crm/customers/{lead.id}/", {"customer_state_now": "PROPOSAL_SENT"}, format="json")
-    assert jump.status_code == 400
+    assert jump.status_code == 200
+    lead.reload()
+    assert lead.customer_state_now == "PROPOSAL_SENT" and lead.proposal_sent_at is None
 
 
 @pytest.mark.django_db

@@ -93,7 +93,7 @@ def test_new_lead_archives_closed_lead_with_history(api_client, lost_lead):
 
     current, previous = detail["leads"]
     assert current["current"] and current["number"] == 2
-    assert current["stage"] == "NEW_LEAD" and current["product"] == "corporativo"
+    assert current["stage"] == "QUALIFIED" and current["product"] == "corporativo"
     assert current["proposals"] == [] and current["attachments"] == []
     assert previous["number"] == 1 and previous["stage"] == "LOST" and previous["lost_reason"] == "preco"
     assert previous["quoted_amount"] == 4200 and previous["qualification"]["data_retirada"] == "24/10/2026"

@@ -48,23 +48,17 @@ class PipelineService:
     def validate_transition(self, customer: dict | Customer, target: str, user=None, lost_reason: str | None = None) -> None:
         current = customer['customer_state_now'] if isinstance(customer, dict) else customer.stage
         product = customer.get('product') if isinstance(customer, dict) else customer.product
-        proposal_sent_at = customer.get('proposal_sent_at') if isinstance(customer, dict) else customer.proposal_sent_at
 
         if target not in domain.STAGES:
             raise ValueError(f"Etapa inválida: {target}.")
         if target == current:
             return
-        if target not in domain.TRANSITIONS.get(current, set()):
-            raise ValueError(
-                f"Não é possível mover de '{domain.STAGE_LABELS[current]}' para '{domain.STAGE_LABELS[target]}'."
-            )
+        # O card anda livre entre as colunas do quadro (reunião com o Marcelo, 28/10): "Proposta enviada"
+        # e "Proposta aceita" não exigem mais proposta enviada pela calculadora.
+        if target not in domain.BOARD_STAGES:
+            raise ValueError(f"'{domain.STAGE_LABELS[target]}' não é uma coluna do funil.")
         if target == domain.LOST and lost_reason not in domain.LOST_REASONS:
             raise ValueError("Informe o motivo da perda.")
-        if target == domain.PROPOSAL_SENT and not proposal_sent_at:
-            raise ValueError("Envie a proposta pela calculadora para mover o lead para 'Proposta enviada'.")
-        if target == domain.PROPOSAL_ACCEPTED and not self.latest_sent_proposal(customer):
-            raise ValueError("Não há proposta enviada válida para aceitar. Envie a proposta (ou uma nova versão, "
-                             "se a anterior venceu) antes de mover para 'Proposta aceita'.")
         if user is not None:
             if target == domain.CONTRACT_SIGNED:
                 # Lúcia fecha a locação de porta; eventos ficam com a Erica (admin).
@@ -95,9 +89,11 @@ class PipelineService:
             raise ValueError(f"Etapa inválida: {target}.")
         if previous == target and customer.customer_state_now == target:
             return customer.to_dict()
-        if not system and target == domain.PROPOSAL_ACCEPTED:
+        sent = self.latest_sent_proposal(customer) if not system and target == domain.PROPOSAL_ACCEPTED else None
+        if sent:
+            # Com proposta enviada, mover para "Proposta aceita" aceita a proposta (reserva o estoque)
             from sales.services.proposal_service import ProposalService
-            ProposalService().accept(str(self.latest_sent_proposal(customer).id), user=user, note=note)
+            ProposalService().accept(str(sent.id), user=user, note=note)
             return _get_document(customer_id).to_dict()
 
         now = datetime.utcnow()
@@ -115,11 +111,12 @@ class PipelineService:
             customer.funnel_archived_at = None
         customer.save()
 
-        undo_acceptance = (previous == domain.PROPOSAL_ACCEPTED and target in (domain.PROPOSAL_SENT, domain.LOST)) or (
-            previous == domain.CONTRACT_SIGNED and target == domain.LOST)
+        # Voltar de aceita (ou de contrato assinado para antes do aceite) ou perder desfaz o aceite
+        undo_acceptance = (previous == domain.PROPOSAL_ACCEPTED and target != domain.CONTRACT_SIGNED) or (
+            previous == domain.CONTRACT_SIGNED and target != domain.PROPOSAL_ACCEPTED)
         if undo_acceptance:
             from sales.services.proposal_service import ProposalService
-            ProposalService().undo_acceptance(customer, back_to_sent=target == domain.PROPOSAL_SENT, user=user)
+            ProposalService().undo_acceptance(customer, back_to_sent=target != domain.LOST, user=user)
             customer.reload()  # o valor do card pode ter voltado para o da última proposta enviada
 
         if target == domain.LOST:
@@ -243,8 +240,8 @@ class PipelineService:
 
     def archive(self, customer_id: str, result: str, lost_reason: str | None = None, user=None) -> dict:
         """Arquiva o card (aba "Arquivados" do funil) como ganho ou perdido. Se o lead ainda não está
-        nessa etapa, muda antes com as regras de sempre: ganho exige proposta aceita (e o papel de
-        quem registra contrato), perdido exige o motivo. Nada é apagado; desarquivar devolve o card."""
+        nessa etapa, muda antes com as regras de sempre: ganho exige o papel de quem registra contrato,
+        perdido exige o motivo. Nada é apagado; desarquivar devolve o card."""
         target = ARCHIVE_STAGES.get(result)
         if not target:
             raise ValueError("Informe se o lead foi ganho ou perdido.")
@@ -294,7 +291,8 @@ class PipelineService:
     def _board_queryset(self, product=None, owner=None, flag=None, search=None, include_human=False,
                         ai_qualified=False, archived=False):
         # Só quem entrou no funil depois de zerado (crm.services.funnel_entry)
-        queryset = Customer.objects(contact_type__nin=['parceiro', 'fornecedor', 'candidato'], funnel_entered_at__ne=None)
+        queryset = Customer.objects(contact_type__nin=['parceiro', 'fornecedor', 'candidato'], funnel_entered_at__ne=None,
+                                    customer_state_now__nin=[domain.NEW_LEAD, 'ANALYSIS'])
         # Abas do funil: "Ativos" (padrão) ou "Arquivados" (ganhos e perdidos arquivados)
         queryset = queryset.filter(funnel_archived_at__ne=None) if archived else queryset.filter(funnel_archived_at=None)
         if not include_human:
@@ -374,7 +372,7 @@ class PipelineService:
         offsets = offsets or {}
         columns = {}
         base = self._board_queryset(**filters)
-        for stage in stages or (ARCHIVE_STAGES.values() if filters.get('archived') else domain.STAGES):
+        for stage in stages or (ARCHIVE_STAGES.values() if filters.get('archived') else domain.BOARD_STAGES):
             queryset = self._stage_queryset(base, stage)
             offset = int(offsets.get(stage, 0) or 0)
             total = queryset.count()

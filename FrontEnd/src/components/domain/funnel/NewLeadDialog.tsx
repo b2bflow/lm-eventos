@@ -57,7 +57,7 @@ export function NewLeadDialog({ open, onClose, contact }: {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{contact ? "Converter em lead" : "Novo lead"}</DialogTitle>
-          <DialogDescription>O lead entra no funil como Novo lead. Um lead antigo em aberto vai para o histórico do contato.</DialogDescription>
+          <DialogDescription>O lead entra no funil como Lead qualificado. Um lead antigo em aberto vai para o histórico do contato.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1">

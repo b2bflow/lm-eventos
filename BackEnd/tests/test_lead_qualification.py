@@ -74,17 +74,18 @@ def test_acceptance_porta_lead_flows_to_qualified_with_attachment_pending_and_ca
 
 
 @pytest.mark.django_db
-def test_acceptance_partial_lead_shows_in_new_lead_with_saved_data(api_client, lead):
+def test_acceptance_partial_lead_shows_as_qualified_with_saved_data(api_client, lead):
     url = base(lead)
     api_client.post(f"{url}/qualification/start/", {"product": "corporativo"}, format="json")
     api_client.post(f"{url}/qualification/field/", {"field": "publico", "value": "300 pessoas"}, format="json")
     api_client.post(f"{url}/qualification/field/", {"field": "empresa", "value": "Acme Ltda"}, format="json")
 
     board = api_client.get("/api/v1/crm/funnel/").data
-    card = board["NEW_LEAD"]["results"][0]
+    # Sem coluna "Novo lead": lead aberto à mão já entra como qualificado
+    assert "NEW_LEAD" not in board
+    card = board["QUALIFIED"]["results"][0]
     assert card["guest_count"] == 300 and card["company"] == "Acme Ltda"
     assert card["qualification"] == {"publico": "300 pessoas", "empresa": "Acme Ltda"}
-    assert board["QUALIFIED"]["count"] == 0
 
 
 @pytest.mark.django_db

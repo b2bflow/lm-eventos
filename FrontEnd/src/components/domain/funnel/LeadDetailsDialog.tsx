@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import api from "@/services/api";
 import {
-  FLAG_LABELS, LEAD_STATUS_LABELS, LEAD_STATUS_OPTIONS, LEAD_STATUS_STYLES, LOST_REASON_LABELS, ORIGIN_LABELS,
+  FLAG_LABELS, FUNNEL_STAGES, LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, LOST_REASON_LABELS, ORIGIN_LABELS,
   OWNER_LABELS, PRODUCT_LABELS, PROPOSAL_MODE_LABELS, type LeadStage,
 } from "@/constants/mappings";
 import { openProposalPdf } from "@/hooks/useSales";
@@ -39,7 +39,7 @@ import {
 
 // Campos da qualificação já exibidos pelos campos do CRM (espelhados no backend)
 const MIRRORED_FIELDS = new Set(["nome", "email", "empresa", "cargo", "local", "data_evento", "publico"]);
-const STEPS: LeadStage[] = LEAD_STATUS_OPTIONS.filter((s) => s !== "LOST");
+const STEPS: LeadStage[] = FUNNEL_STAGES.filter((s) => s !== "LOST");
 const NONE = "__none__";
 
 function toLocalInput(value?: string | null): string {

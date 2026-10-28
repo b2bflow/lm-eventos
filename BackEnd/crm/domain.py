@@ -15,6 +15,11 @@ LOST = 'LOST'
 
 STAGES = (NEW_LEAD, QUALIFIED, MEETING_SCHEDULED, PROPOSAL_SENT, PROPOSAL_ACCEPTED, CONTRACT_SIGNED, LOST)
 
+# Colunas do quadro. "Novo lead" saiu (reunião com o Marcelo, 28/10): o funil começa em "Lead
+# qualificado" (IA qualificou ou alguém abriu o lead à mão). NEW_LEAD segue como etapa do contato
+# que ainda não é lead do funil.
+BOARD_STAGES = tuple(s for s in STAGES if s != NEW_LEAD)
+
 STAGE_LABELS = {
     NEW_LEAD: 'Novo lead',
     QUALIFIED: 'Lead qualificado',
@@ -45,16 +50,8 @@ def resolve_legacy_stage(stage: str | None, proposal_sent_at=None) -> str:
     return NEW_LEAD
 
 
-# Transições permitidas no card / Kanban. PROPOSAL_SENT por arraste exige proposta enviada.
-TRANSITIONS = {
-    NEW_LEAD: {QUALIFIED, MEETING_SCHEDULED, PROPOSAL_SENT, LOST},
-    QUALIFIED: {NEW_LEAD, MEETING_SCHEDULED, PROPOSAL_SENT, LOST},
-    MEETING_SCHEDULED: {QUALIFIED, PROPOSAL_SENT, LOST},
-    PROPOSAL_SENT: {QUALIFIED, MEETING_SCHEDULED, PROPOSAL_ACCEPTED, LOST},
-    PROPOSAL_ACCEPTED: {PROPOSAL_SENT, CONTRACT_SIGNED, LOST},
-    CONTRACT_SIGNED: {PROPOSAL_ACCEPTED, LOST},
-    LOST: {NEW_LEAD, QUALIFIED, MEETING_SCHEDULED},
-}
+# Transições do card / Kanban: livres entre as colunas do quadro (reunião com o Marcelo, 28/10).
+TRANSITIONS = {stage: set(BOARD_STAGES) - {stage} for stage in STAGES}
 
 # --- Listas do card -------------------------------------------------------------------
 PRODUCTS = {
