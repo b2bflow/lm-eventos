@@ -142,8 +142,10 @@ export interface ProposalLine {
   /** Preço da tabela quando o preço da linha foi editado na proposta. */
   catalog_unit_price?: number | null;
   price_overridden?: boolean;
-  /** Conjunto de som: as peças que aparecem no PDF no lugar do nome do conjunto. */
+  /** Kit / conjunto de som: as peças (quantidade por kit) que aparecem no PDF no lugar do nome do kit. */
   components?: { code: string; name: string; qty: number; unit: string }[];
+  /** Kit marcado para sair no PDF pelo nome, não pelas peças. */
+  show_name?: boolean;
 }
 
 export interface Proposal {

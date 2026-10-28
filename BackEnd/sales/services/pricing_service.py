@@ -1,21 +1,35 @@
 from crm.models.lm_settings_model import LmSettings
 from sales.catalog import (
     CATALOG_BY_CODE, COMPONENT_NAMES, METRO_PRICE, OPERATIONAL_COSTS, SOUND_SET_CODES, catalog_item_from_inventory,
-    default_price_table, merge_price_table,
+    catalog_item_from_kit, default_price_table, merge_price_table,
 )
 from sales.services.quote_calculator import CalcConfig
 
 
 def effective_price_table() -> dict:
     """Catálogo padrão + edições da Erica em LmSettings.price_table. `extra_items` traz os itens
-    alugáveis criados pela tela de Estoque (fora do CATALOG), para a calculadora conhecê-los."""
-    from inventory.models import InventoryItem
+    alugáveis criados pela tela de Estoque (fora do CATALOG), para a calculadora conhecê-los.
+
+    Kits da tela de Estoque: as peças entram em `sound_sets` (o mesmo caminho dos conjuntos de som) e
+    os kits novos em `extra_items`. `kits_show_name` = kits que saem no PDF pelo nome, não pelas peças."""
+    from inventory.models import InventoryItem, InventoryKit
 
     table = merge_price_table(LmSettings.get().price_table)
     table["extra_items"] = {
         doc.code: catalog_item_from_inventory(doc)
         for doc in InventoryItem.objects(active=True, rentable=True, code__nin=list(CATALOG_BY_CODE))
     }
+    table["kits_show_name"] = set()
+    for kit in InventoryKit.objects():
+        pieces = [{"code": p.code, "qty": p.qty} for p in kit.pieces]
+        if pieces:
+            table["sound_sets"][kit.code] = pieces
+        else:
+            table["sound_sets"].pop(kit.code, None)  # faixa de som sem peças: sai pelo nome
+        if not kit.show_pieces:
+            table["kits_show_name"].add(kit.code)
+        if not kit.builtin:
+            table["extra_items"][kit.code] = catalog_item_from_kit(kit)
     return table
 
 

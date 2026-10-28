@@ -142,6 +142,13 @@ def catalog_item_from_inventory(doc) -> dict:
     return _item(doc.code, doc.line, doc.name, doc.billing_unit or "unidade", None, doc.qty_total, doc.size,
                  owned=doc.owned, block=LINE_BLOCKS.get(doc.line, "outros"), note=doc.note, rentable=doc.rentable)
 
+
+def catalog_item_from_kit(kit) -> dict:
+    """Kit criado na tela de Estoque: vendido por kit, com as peças em `sound_sets`. Kit removido continua
+    conhecido (propostas antigas recalculam), mas sai da calculadora (`rentable=False`)."""
+    return {**_item(kit.code, kit.line, kit.name, "kit", None, block=LINE_BLOCKS.get(kit.line, "outros"),
+                    note=kit.description, rentable=kit.active), "is_kit": True}
+
 # Custos operacionais (seção 5.3)
 OPERATIONAL_COSTS = {
     "carga": {"label": "Carga (2 x R$ 150)", "price": 300.0},
@@ -171,7 +178,8 @@ SOUND_TIERS = [
 
 # Conjuntos de som (reunião com o Marcelo, 28/10): o preço é do conjunto (tabela de valores), mas o
 # estoque conta e o PDF mostra as peças, nunca o nome do conjunto ("4 caixas de som", não "Som até 150
-# pessoas"). Editável em LmSettings.price_table["sound_sets"]. Faixas sem composição aparecem pelo nome.
+# pessoas"). Editável em LmSettings.price_table["sound_sets"] e, por cima, nos kits da tela de Estoque
+# (inventory.InventoryKit), que também entram aqui. Faixas sem composição aparecem pelo nome.
 SOUND_SETS = {
     "som_ate_150": [{"code": "som_caixa_ativa", "qty": 4}, {"code": "som_mic_sem_fio", "qty": 1}],
     "som_cerimonia": [

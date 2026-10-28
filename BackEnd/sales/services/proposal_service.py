@@ -135,7 +135,8 @@ class ProposalService:
     @staticmethod
     def _requested_codes(mode: str, inputs: dict, table: dict) -> set[str]:
         if mode in ("porta", "produto_unico"):
-            return {i["code"] for i in inputs.get("items") or []}
+            codes = {i["code"] for i in inputs.get("items") or []}
+            return codes | {p["code"] for code in codes for p in (table.get("sound_sets") or {}).get(code, [])}
         codes = {sound_system_for(int(inputs.get("guests") or 0) or 1, table), "som_sub_duplo", "som_backline",
                  "som_mic_sem_fio", "som_mesa_digital", "som_cerimonia", "palco_forrado", "palco_sem_forracao",
                  "palco_praticavel_2x1", "palco_backdrop", "palco_passa_cabo", "video_led_corporativo",

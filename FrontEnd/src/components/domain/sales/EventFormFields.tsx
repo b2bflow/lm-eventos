@@ -38,6 +38,7 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
   const pieces = (code?: string) =>
     (code && catalog?.sound_sets?.[code]?.map((p) => `${p.qty} ${pieceName(p.code)}`).join(" + ")) || "";
   const ceremonyDefault = catalog?.sound_sets?.som_cerimonia ?? [];
+  const kits = (catalog?.items || []).filter((i) => i.is_kit);
   const ceremonyQty = (code: string) =>
     form.ceremony_items?.[code] ?? ceremonyDefault.find((p) => p.code === code)?.qty ?? 0;
   const setCeremonyQty = (code: string, value: number) => set("ceremony_items",
@@ -168,6 +169,19 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
           ))}
         </div>
       </ToggleSection>
+
+      {kits.length > 0 && (
+        <Section title="Kits do estoque">
+          <p className="text-xs text-muted-foreground mb-2">Preço do kit; o estoque confere as peças e o PDF lista as peças.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {kits.map((kit) => (
+              <NumberField key={kit.code} label={kit.name}
+                suffix={`${kit.sale_price === null ? "sem preço" : formatBRL(kit.sale_price)} · ${pieces(kit.code)}`}
+                value={form.kits?.[kit.code] || 0} onChange={(v) => set("kits", { ...form.kits, [kit.code]: v })} />
+            ))}
+          </div>
+        </Section>
+      )}
 
       <Section title="Custos operacionais">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

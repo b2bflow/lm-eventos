@@ -159,9 +159,14 @@ FRACTIONAL_UNITS = {"m²", "metro"}
 
 
 def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: dict | None, multiplier: int = 1,
-              note: str | None = None, block: str | None = None, name: str | None = None):
+              note: str | None = None, block: str | None = None, name: str | None = None, expand: bool = True):
     """Uma linha da proposta. `name` troca o nome do catálogo quando a origem da linha precisa aparecer
-    para o cliente (ex.: microfone que a banda voz e violão soma, separado dos extras)."""
+    para o cliente (ex.: microfone que a banda voz e violão soma, separado dos extras). Kit ou conjunto
+    de som (`sound_sets`) vira a linha do kit com as peças, venha de onde vier (porta, produto único,
+    itens avulsos)."""
+    if expand and (table.get("sound_sets") or {}).get(code):
+        return _add_set(result, code, table, availability, note=note, qty=qty, multiplier=multiplier, block=block,
+                        name=name)
     item = catalog_item(code, table)
     qty = non_negative(qty, f"Quantidade de {item['name']}")
     if qty == 0:
@@ -202,14 +207,14 @@ def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: di
 
 
 def _requested(result: QuoteResult, code: str) -> Decimal:
-    """Quanto do item as linhas já pedem, somando as peças dos conjuntos de som."""
+    """Quanto do item as linhas já pedem, somando as peças dos kits (peças por kit x kits pedidos)."""
     total = Decimal("0")
     for line in result.lines:
-        if line["code"] == code:
+        if line["code"] == code and not line.get("components"):
             total += line["qty"]
         for component in line.get("components") or []:
             if component["code"] == code:
-                total += component["qty"]
+                total += component["qty"] * line["qty"]
     return total
 
 
@@ -247,28 +252,35 @@ def set_components(code: str, table: dict, custom: dict | None = None) -> list[d
 
 
 def _add_set(result: QuoteResult, code: str, table: dict, availability: dict | None, note: str | None = None,
-             custom: dict | None = None):
-    """Conjunto de som: uma linha com o preço do conjunto e as peças em `components`. O estoque é
-    conferido peça por peça (o conjunto em si não é item de estoque)."""
+             custom: dict | None = None, qty=1, multiplier: int = 1, block: str | None = None,
+             name: str | None = None):
+    """Kit ou conjunto de som: uma linha com o preço do kit e as peças em `components` (quantidade por
+    kit). O estoque é conferido peça por peça (o kit em si não é item de estoque)."""
     pieces = set_components(code, table, custom)
     if pieces is None:
-        return _add_line(result, code, 1, table, availability, note=note)
+        return _add_line(result, code, qty, table, availability, multiplier=multiplier, note=note, block=block,
+                         name=name)
     if custom is not None and not pieces:
         return None
-    _add_line(result, code, 1, table, None, note=note)
-    line = result.lines[-1]
-    components = []
+    kits = non_negative(qty, f"Quantidade de {catalog_item(code, table)['name']}")
+    if kits == 0:
+        return None
+    # As peças são conferidas antes de a linha do kit entrar, para não contar o próprio kit duas vezes
+    components, short = [], False
     for piece in pieces:
         item = catalog_item(piece["code"], table)
-        qty = non_negative(piece["qty"], f"Quantidade de {item['name']}")
-        component = {"code": piece["code"], "name": COMPONENT_NAMES.get(piece["code"], item["name"]), "qty": qty,
-                     "unit": item["billing_unit"]}
+        per_kit = non_negative(piece["qty"], f"Quantidade de {item['name']}")
+        components.append({"code": piece["code"], "name": COMPONENT_NAMES.get(piece["code"], item["name"]),
+                           "qty": per_kit, "unit": item["billing_unit"]})
         if availability is not None and piece["code"] in availability:
-            requested = qty + _requested(result, piece["code"])
-            if _stock_check(result, item, requested, availability[piece["code"]]):
-                line["shortage"] = True
-        components.append(component)
+            requested = per_kit * kits + _requested(result, piece["code"])
+            short = _stock_check(result, item, requested, availability[piece["code"]]) or short
+    _add_line(result, code, kits, table, None, multiplier=multiplier, note=note, block=block, name=name, expand=False)
+    line = result.lines[-1]
     line["components"] = components
+    line["shortage"] = short
+    if code in (table.get("kits_show_name") or ()):
+        line["show_name"] = True  # o PDF mostra o nome do kit, não as peças
     return line
 
 

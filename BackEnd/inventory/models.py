@@ -68,9 +68,46 @@ class InventoryItem(Document):
         return data
 
 
+class KitPiece(EmbeddedDocument):
+    code = StringField(required=True)  # código do InventoryItem
+    qty = FloatField(required=True)  # quantidade por kit
+
+
+class InventoryKit(Document):
+    """Kit montado com peças do estoque (ex.: "Som até 150 pessoas" = 4 caixas + 1 microfone).
+
+    O preço é do kit (tabela de preços, pelo `code`), mas o estoque confere e reserva as peças e o
+    PDF mostra as peças (a não ser que `show_pieces` seja False). Kits `builtin` são as faixas de som
+    e o som de cerimônia que a calculadora escolhe sozinha: dá para mudar as peças, não remover."""
+
+    meta = {'collection': 'inventory_kits', 'strict': False, 'indexes': ['code', 'active']}
+
+    code = StringField(required=True, unique=True)
+    name = StringField(required=True)
+    line = StringField(choices=LINES, required=True)
+    description = StringField(null=True)
+    pieces = EmbeddedDocumentListField(KitPiece, default=list)
+    show_pieces = BooleanField(default=True)  # False = o PDF mostra o nome do kit
+    builtin = BooleanField(default=False)
+    active = BooleanField(default=True)
+    created_by = StringField(null=True)
+    created_by_name = StringField(null=True)
+    created_at = DateTimeField(default=datetime.utcnow)
+    updated_at = DateTimeField(default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": str(self.id), "code": self.code, "name": self.name, "line": self.line,
+            "description": self.description, "pieces": [{"code": p.code, "qty": p.qty} for p in self.pieces],
+            "show_pieces": self.show_pieces, "builtin": self.builtin, "active": self.active,
+            "created_by_name": self.created_by_name,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class InventoryReservation(Document):
     meta = {'collection': 'inventory_reservations', 'strict': False,
-            'indexes': ['item', 'proposal_id', 'status', ('item', 'status', 'start', 'end')]}
+            'indexes': ['item', 'proposal_id', 'status', 'group_id', ('item', 'status', 'start', 'end')]}
 
     item = ReferenceField(InventoryItem, required=True)
     proposal_id = StringField(null=True)  # None = reserva manual, feita na tela de estoque
@@ -81,6 +118,9 @@ class InventoryReservation(Document):
     end = DateTimeField(required=True)
     status = StringField(choices=RESERVATION_STATUSES, default='reservado')
     note = StringField(null=True)
+    group_id = StringField(null=True)  # reserva manual de um kit: uma reserva por peça, mesmo grupo
+    kit_code = StringField(null=True)
+    kit_name = StringField(null=True)
     created_by = StringField(null=True)
     created_by_name = StringField(null=True)
     created_at = DateTimeField(default=datetime.utcnow)
@@ -88,6 +128,7 @@ class InventoryReservation(Document):
     def to_dict(self) -> dict:
         return {
             "id": str(self.id), "item_id": str(self.item.id), "item_code": self.item.code,
+            "group_id": self.group_id, "kit_code": self.kit_code, "kit_name": self.kit_name,
             "item_name": self.item.name, "proposal_id": self.proposal_id, "manual": self.proposal_id is None,
             "customer_id": str(self.customer.id) if self.customer else None,
             "customer_name": getattr(self.customer, 'name', None) or self.client_name, "qty": self.qty,

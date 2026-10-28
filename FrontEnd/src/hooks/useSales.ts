@@ -12,6 +12,8 @@ export interface CatalogItem {
   owned: boolean;
   block: string | null;
   note: string | null;
+  /** Kit criado no Estoque: vendido por kit, peças em `sound_sets`. */
+  is_kit?: boolean;
 }
 
 export interface Catalog {
@@ -24,7 +26,7 @@ export interface Catalog {
   proposal_validity_days: number;
   kits: { code: string; label: string; pieces: { code: string; qty: number }[] }[];
   sound_tiers?: [number | null, string][];
-  /** Peças de cada conjunto de som ({conjunto: [{code, qty}]}); o PDF mostra as peças. */
+  /** Peças de cada kit / conjunto de som ({kit: [{code, qty}]}); o PDF mostra as peças. */
   sound_sets?: Record<string, { code: string; qty: number }[]>;
   social_basic_package: {
     structure: string;
@@ -113,6 +115,9 @@ export interface InventoryReservation {
   note: string | null;
   created_by: string | null;
   created_by_name: string | null;
+  /** Reserva manual de um kit: uma reserva por peça, no mesmo grupo. */
+  group_id?: string | null;
+  kit_name?: string | null;
 }
 
 export interface InventoryMovement {
@@ -129,6 +134,65 @@ export interface InventoryItemDetail extends Omit<InventoryRow, "reserved" | "av
   reservations: InventoryReservation[];
   movements: InventoryMovement[];
   reservations_enabled: boolean;
+  /** Kits que usam este item como peça. */
+  kits: { id: string; name: string; qty: number }[];
+}
+
+export interface KitPieceRow {
+  code: string;
+  qty: number;
+  item_id: string | null;
+  name: string;
+  unit: string | null;
+  active: boolean;
+  owned: boolean;
+  qty_total: number | null;
+  /** Disponível no período; null = não contado ou terceirizado. */
+  available: number | null;
+}
+
+export interface InventoryKit {
+  id: string;
+  code: string;
+  name: string;
+  line: string;
+  description: string | null;
+  pieces: KitPieceRow[];
+  show_pieces: boolean;
+  /** Faixa de som / som de cerimônia: a calculadora escolhe sozinha; não sai do sistema. */
+  builtin: boolean;
+  active: boolean;
+  sale_price: number | null;
+  /** Quantos kits dá para montar no período (null = nenhuma peça contada). */
+  buildable: number | null;
+  limiting_piece: string | null;
+  problems: string[];
+  created_by_name: string | null;
+  updated_at: string | null;
+}
+
+export interface InventoryKitDetail extends InventoryKit {
+  reservations: (InventoryReservation & { kits: number | null })[];
+}
+
+export function useKits(start: string, end: string, includeInactive = false) {
+  return useQuery({
+    queryKey: ["inventory-kits", start, end, includeInactive],
+    queryFn: async () => {
+      const params: Record<string, string> = { start, end };
+      if (includeInactive) params.include_inactive = "1";
+      return (await api.get<InventoryKit[]>("/inventory/kits/", { params })).data;
+    },
+    enabled: !!start,
+  });
+}
+
+export function useKit(id: string | null, start: string, end: string) {
+  return useQuery({
+    queryKey: ["inventory-kit", id, start, end],
+    queryFn: async () => (await api.get<InventoryKitDetail>(`/inventory/kits/${id}/`, { params: { start, end } })).data,
+    enabled: !!id,
+  });
 }
 
 /** Abre o PDF da proposta numa nova aba (a rota exige login, então baixa com o token). */

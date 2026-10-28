@@ -47,3 +47,6 @@ class Command(BaseCommand):
             item.save()
             updated += 1
         self.stdout.write(f"Estoque: {created} itens criados, {updated} atualizados.")
+        # Kits das faixas de som / som de cerimônia, editáveis na tela de Estoque
+        from inventory.services.inventory_service import InventoryService
+        InventoryService.ensure_builtin_kits()

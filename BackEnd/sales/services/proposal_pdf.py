@@ -204,11 +204,13 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
                                                                   "subtotal": 0.0, "unit_price": None})
             kit["subtotal"] += subtotal
             continue
-        # Conjunto de som: o cliente vê as peças ("04 Caixa de som ativa"), nunca o nome do conjunto. Com
-        # preço por item, as peças saem numa linha só com o preço do conjunto.
-        if line.get("components"):
+        # Kit / conjunto de som: o cliente vê as peças ("04 Caixa de som ativa"), não o nome do kit (a não ser
+        # que o kit esteja marcado para sair pelo nome). Com preço por item, as peças saem numa linha só com o
+        # preço do kit.
+        if line.get("components") and not line.get("show_name"):
+            kits = float(line.get("qty") or 1)
             if show_prices:
-                pieces = ", ".join(f"{_qty(c.get('qty'), c.get('unit') or 'unidade')} {c.get('name')}"
+                pieces = ", ".join(f"{_qty(float(c.get('qty') or 0) * kits, c.get('unit') or 'unidade')} {c.get('name')}"
                                    for c in line["components"])
                 blocks[block][f"set:{len(blocks[block])}"] = {"text": pieces, "qty": 1, "unit": "unidade",
                                                               "subtotal": subtotal, "unit_price": None}
@@ -217,7 +219,7 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
                 entry = blocks[block].setdefault((c.get("code"), c.get("name"), None), {
                     "qty": 0, "unit": c.get("unit") or "unidade", "name": c.get("name"), "subtotal": 0.0,
                     "unit_price": None})
-                entry["qty"] += float(c.get("qty") or 0) * float(line.get("qty") or 1)
+                entry["qty"] += float(c.get("qty") or 0) * kits
             continue
         # Só soma linhas do mesmo item, com o mesmo nome e preço: o microfone da banda não some dentro dos
         # extras e "cada x quantidade" sempre bate com o subtotal

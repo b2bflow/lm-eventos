@@ -21,6 +21,7 @@ export function SingleProductFields({ form, onChange, catalog, isAdmin }: Props)
   const [line, setLine] = useState("Palco e praticáveis");
   const costOf = (code: string) => catalog?.operational_costs.find((c) => c.code === code)?.price ?? 0;
   const items = (catalog?.items || []).filter((i) => i.line === line);
+  const pieceName = (code: string) => catalog?.items.find((i) => i.code === code)?.name || code;
   const set = <K extends keyof SingleProductForm>(key: K, value: SingleProductForm[K]) =>
     onChange({ [key]: value } as Partial<SingleProductForm>);
 
@@ -53,6 +54,11 @@ export function SingleProductFields({ form, onChange, catalog, isAdmin }: Props)
                 <p className="text-xs text-muted-foreground">
                   {item.sale_price === null ? "sem preço (vai para aprovação)" : `${formatBRL(item.sale_price)} / ${item.billing_unit === "metro" ? "peça" : item.billing_unit}`}
                 </p>
+                {catalog?.sound_sets?.[item.code] && (
+                  <p className="text-xs text-muted-foreground">
+                    Kit: {catalog.sound_sets[item.code].map((p) => `${p.qty} ${pieceName(p.code)}`).join(" + ")}
+                  </p>
+                )}
               </div>
               <Input type="number" min={0} className="w-20 h-9 shrink-0" value={form.items[item.code] || ""} placeholder="0"
                 onChange={(e) => set("items", { ...form.items, [item.code]: Number(e.target.value) || 0 })} />

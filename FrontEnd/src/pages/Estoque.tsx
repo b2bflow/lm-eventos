@@ -2,8 +2,8 @@ import { Fragment, useDeferredValue, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  AlertCircle, ChevronRight, CircleDashed, Info, Loader2, MessageSquareText, Package, PackageX, Plus, Search,
-  SlidersHorizontal, Tag, X,
+  AlertCircle, AlertTriangle, Boxes, ChevronRight, CircleDashed, Info, Loader2, MessageSquareText, Package, PackageX,
+  Plus, Search, SlidersHorizontal, Tag, X,
 } from "lucide-react";
 import { PageShell } from "@/components/shared/PageShell";
 import { FilterBar } from "@/components/shared/FilterBar";
@@ -20,10 +20,11 @@ import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { isAdminUser, useCurrentUser } from "@/hooks/useFunnel";
 import { useLmSettings } from "@/hooks/useLmSettings";
-import { useInventory, type InventoryRow } from "@/hooks/useSales";
+import { useInventory, useKits, type InventoryKit, type InventoryRow } from "@/hooks/useSales";
 import { InventoryItemDialog } from "@/components/domain/inventory/InventoryItemDialog";
 import { INVENTORY_LINES } from "@/components/domain/inventory/constants";
 import { NewInventoryItemDialog } from "@/components/domain/inventory/NewInventoryItemDialog";
+import { KitDialog } from "@/components/domain/inventory/KitDialog";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -115,6 +116,105 @@ function ItemName({ row, wrap = false }: { row: InventoryRow; wrap?: boolean }) 
   );
 }
 
+const kitPieces = (kit: InventoryKit) => kit.pieces.map((p) => `${p.qty} ${p.name}`).join(" + ");
+
+function KitBuildable({ kit, compact = false }: { kit: InventoryKit; compact?: boolean }) {
+  if (kit.buildable === null) return <span className="text-xs text-muted-foreground">sem contagem</span>;
+  return (
+    <div className="flex flex-col items-end">
+      <span className={cn("font-semibold tabular-nums", kit.buildable === 0 && "text-rose-600 dark:text-rose-400")}>
+        {kit.buildable}{compact && <span className="text-xs font-normal text-muted-foreground"> kits</span>}
+      </span>
+      {!compact && kit.limiting_piece && (
+        <span className="text-[11px] text-muted-foreground truncate max-w-[180px]" title={`A peça que acaba primeiro: ${kit.limiting_piece}`}>
+          limitado por {kit.limiting_piece}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function KitName({ kit }: { kit: InventoryKit }) {
+  const flags: { label: string; tone: "red" | "amber" | "muted" }[] = [];
+  if (!kit.active) flags.push({ label: "removido", tone: "red" });
+  if (kit.builtin) flags.push({ label: "faixa de som", tone: "muted" });
+  if (kit.sale_price === null) flags.push({ label: "sem preço", tone: "red" });
+  if (!kit.show_pieces) flags.push({ label: "PDF pelo nome", tone: "muted" });
+  if (kit.problems.length && kit.pieces.length) flags.push({ label: "peça removida", tone: "amber" });
+  return (
+    <div className="min-w-0">
+      <div className="font-medium flex items-center gap-1.5">
+        <Boxes className="w-4 h-4 text-primary shrink-0" />
+        <span className="truncate">{kit.name}</span>
+      </div>
+      <div className="text-xs text-muted-foreground truncate mt-0.5">{kitPieces(kit) || "sem peças (sai pelo nome)"}</div>
+      {flags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {flags.map((f) => (
+            <span key={f.label} className={cn("rounded px-1.5 py-px text-[10px] font-medium leading-4",
+              f.tone === "red" && "bg-rose-500/10 text-rose-700 dark:text-rose-300",
+              f.tone === "amber" && "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+              f.tone === "muted" && "bg-muted text-muted-foreground")}>
+              {f.label}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KitsList({ kits, isAdmin, onOpen }: { kits: InventoryKit[]; isAdmin: boolean; onOpen: (id: string) => void }) {
+  return (
+    <>
+      <div className="hidden md:block glass rounded-2xl border border-border/50 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="text-xs text-muted-foreground bg-muted/40">
+            <tr>
+              <th className="text-left font-medium px-4 py-2.5">Kit e peças</th>
+              <th className="text-right font-medium px-4 py-2.5">Preço do kit</th>
+              <th className="text-right font-medium px-4 py-2.5">Dá para montar</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {kits.map((kit) => (
+              <tr key={kit.id} onClick={() => onOpen(kit.id)}
+                className={cn("group border-t cursor-pointer hover:bg-muted/40 transition-colors", !kit.active && "opacity-60")}>
+                <td className="px-4 py-2.5 max-w-0 w-3/5"><KitName kit={kit} /></td>
+                <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                  {kit.sale_price === null ? (
+                    isAdmin
+                      ? <span className="text-xs font-medium text-primary group-hover:underline">+ Adicionar preço</span>
+                      : <span className="text-muted-foreground">—</span>
+                  ) : <span className="tabular-nums">{formatBRL(kit.sale_price)}</span>}
+                </td>
+                <td className="px-4 py-2.5"><div className="flex justify-end"><KitBuildable kit={kit} /></div></td>
+                <td className="pr-3 text-muted-foreground/40 group-hover:text-muted-foreground"><ChevronRight className="w-4 h-4" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="md:hidden glass rounded-2xl border border-border/50 divide-y divide-border/50 overflow-hidden">
+        {kits.map((kit) => (
+          <li key={kit.id}>
+            <button onClick={() => onOpen(kit.id)}
+              className={cn("w-full flex items-center gap-3 px-3 py-3 text-left active:bg-muted/50", !kit.active && "opacity-60")}>
+              <div className="flex-1 min-w-0">
+                <KitName kit={kit} />
+                {kit.sale_price !== null && <div className="text-xs text-muted-foreground mt-0.5">{formatBRL(kit.sale_price)} por kit</div>}
+              </div>
+              <div className="text-right shrink-0"><KitBuildable kit={kit} compact /></div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 export default function Estoque() {
   const queryClient = useQueryClient();
   const [line, setLine] = useState<string | null>(null);
@@ -125,6 +225,9 @@ export default function Estoque() {
   const [showRemoved, setShowRemoved] = useState(false);
   const [openItem, setOpenItem] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [view, setView] = useState<"itens" | "kits">("itens");
+  const [openKit, setOpenKit] = useState<string | null>(null);
+  const [creatingKit, setCreatingKit] = useState(false);
   const deferredSearch = useDeferredValue(search);
   const terms = useMemo(() => normalize(deferredSearch).split(/\s+/).filter(Boolean), [deferredSearch]);
   const searching = terms.length > 0;
@@ -136,6 +239,12 @@ export default function Estoque() {
   const canEdit = isAdmin || me?.role === "porta";
   // Busca sempre todas as linhas: os contadores das abas e dos alertas saem da mesma lista.
   const { data: rows = [], isLoading } = useInventory(undefined, start, end || start, canEdit && showRemoved);
+  const { data: allKits = [], isLoading: kitsLoading } = useKits(start, end || start, canEdit && showRemoved);
+  const kits = useMemo(
+    () => allKits.filter((k) => !searching || terms.every((t) => normalize(`${k.name} ${k.code} ${kitPieces(k)}`).includes(t))),
+    [allKits, searching, terms],
+  );
+  const kitsShort = kits.filter((k) => k.active && k.buildable === 0).length;
 
   const base = useMemo(
     () => rows.filter((r) => (r.rentable || canEdit) && (!searching || matches(r, terms))),
@@ -184,9 +293,14 @@ export default function Estoque() {
       title="Estoque"
       maxWidthClassName="max-w-7xl"
       actions={canEdit ? (
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Novo item</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => { setOpenKit(null); setCreatingKit(true); }} title="Montar um kit com peças do estoque">
+            <Boxes className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Novo kit</span>
+          </Button>
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Novo item</span>
+          </Button>
+        </div>
       ) : undefined}
     >
             {/* Busca, período e opções */}
@@ -258,11 +372,20 @@ export default function Estoque() {
 
             {/* Abas por linha */}
             <div className="flex items-center gap-1 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <button onClick={() => setView("kits")}
+                className={cn("whitespace-nowrap px-3 py-2 text-sm transition-colors -mb-px border-b-2 inline-flex items-center gap-1.5",
+                  view === "kits" ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground")}>
+                <Boxes className="w-3.5 h-3.5" /> Kits
+                <span className={cn("rounded-full px-1.5 text-[11px] tabular-nums",
+                  view === "kits" ? "bg-primary/10 text-primary" : "bg-muted")}>{kits.length}</span>
+                {kitsShort > 0 && <span className="w-1.5 h-1.5 rounded-full bg-rose-500" title={`${kitsShort} kit(s) sem peça suficiente no período`} />}
+              </button>
+              <span className="mx-1 h-5 w-px bg-border shrink-0" aria-hidden />
               {[null, ...INVENTORY_LINES].map((l) => {
                 const count = l ? lineCounts[l] || 0 : byStatus.length;
-                const selected = line === l;
+                const selected = view === "itens" && line === l;
                 return (
-                  <button key={l ?? "all"} onClick={() => setLine(l)} disabled={!count && !selected}
+                  <button key={l ?? "all"} onClick={() => { setView("itens"); setLine(l); }} disabled={!count && !selected}
                     className={cn("whitespace-nowrap px-3 py-2 text-sm transition-colors -mb-px border-b-2",
                       selected ? "border-primary text-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground",
                       !count && !selected && "opacity-40")}>
@@ -274,7 +397,32 @@ export default function Estoque() {
               })}
             </div>
 
-            {isLoading ? (
+            {view === "kits" ? (
+              kitsLoading ? (
+                <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+              ) : kits.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border p-10 text-center space-y-2">
+                  <Boxes className="w-6 h-6 mx-auto text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {searching ? `Nenhum kit encontrado para "${search}".` : "Nenhum kit ainda. Monte um com as peças do estoque."}
+                  </p>
+                  {canEdit && !searching && <Button size="sm" onClick={() => setCreatingKit(true)}><Plus className="w-4 h-4" /> Novo kit</Button>}
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground flex flex-wrap items-start gap-x-1.5">
+                    <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
+                    <span>O cliente paga o preço do kit; o estoque confere e reserva as peças, e o PDF lista as peças.</span>
+                    {kitsShort > 0 && (
+                      <span className="text-rose-600 dark:text-rose-400 inline-flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5" />{kitsShort} sem peça suficiente no período.
+                      </span>
+                    )}
+                  </p>
+                  <KitsList kits={kits} isAdmin={isAdmin} onOpen={setOpenKit} />
+                </>
+              )
+            ) : isLoading ? (
               <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
             ) : visible.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border p-10 text-center space-y-2">
@@ -380,6 +528,10 @@ export default function Estoque() {
             )}
 
       <InventoryItemDialog itemId={openItem} onClose={() => setOpenItem(null)} canEdit={canEdit} canEditPrice={isAdmin} myId={me?.id} />
+      <KitDialog kitId={openKit} creating={creatingKit} start={start} end={end || start}
+        onClose={() => { setOpenKit(null); setCreatingKit(false); }}
+        onCreated={(id) => { setCreatingKit(false); setOpenKit(id); setView("kits"); }}
+        canEdit={canEdit} canEditPrice={isAdmin} reservationsOn={reservationsOn} myId={me?.id} />
       <NewInventoryItemDialog open={creating} onOpenChange={setCreating} defaultLine={line ?? undefined} onCreated={setOpenItem}
         canEditPrice={isAdmin} />
     </PageShell>

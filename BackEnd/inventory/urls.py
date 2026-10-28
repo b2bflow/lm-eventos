@@ -2,7 +2,8 @@ from django.urls import path
 
 from inventory.controllers import (
     AvailabilityController, InventoryItemAdjustController, InventoryItemDetailController, InventoryItemsController,
-    InventoryObservationsController, MovementsController, ReservationDetailController, ReservationsController,
+    InventoryObservationsController, KitDetailController, KitReserveController, KitsController, MovementsController,
+    ReservationDetailController, ReservationsController,
 )
 
 urlpatterns = [
@@ -13,6 +14,9 @@ urlpatterns = [
          name='inventory-item-observations'),
     path('items/<str:item_id>/observations/<str:observation_id>/', InventoryObservationsController.as_view(),
          name='inventory-item-observation'),
+    path('kits/', KitsController.as_view(), name='inventory-kits'),
+    path('kits/<str:kit_id>/', KitDetailController.as_view(), name='inventory-kit'),
+    path('kits/<str:kit_id>/reserve/', KitReserveController.as_view(), name='inventory-kit-reserve'),
     path('availability/', AvailabilityController.as_view(), name='inventory-availability'),
     path('reservations/', ReservationsController.as_view(), name='inventory-reservations'),
     path('reservations/<str:reservation_id>/', ReservationDetailController.as_view(), name='inventory-reservation'),

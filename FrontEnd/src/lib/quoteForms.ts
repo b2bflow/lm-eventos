@@ -41,6 +41,8 @@ export interface EventForm {
   dj: boolean;
   has_project: boolean;
   competitor_quote: boolean;
+  /** Kits criados no Estoque ({código: quantidade}); vão para o backend como extra_items. */
+  kits: Record<string, number>;
 }
 
 export interface SingleProductForm {
@@ -68,6 +70,7 @@ export const emptyEvent = (variant: EventVariant): EventForm => ({
   sound_enabled: false, stage_video_enabled: false, lighting_enabled: false, operational: ["carga", "descarga", "frete", "alimentacao"],
   manual_freight: 0, project_cost: 0, margin: 0, with_invoice: true, discount: 0, manual_adjustment: 0,
   structure: "nenhuma", ceremony_sound: false, ceremony_items: null, dj: variant === "social", has_project: false, competitor_quote: false,
+  kits: {},
 });
 
 export const emptySingleProduct = (): SingleProductForm => ({
@@ -92,6 +95,7 @@ export function eventInputs(variant: EventVariant, form: EventForm, isAdmin: boo
   const keys = [...COMMON_EVENT_KEYS, ...VARIANT_KEYS[variant]];
   const inputs: Record<string, unknown> = Object.fromEntries(keys.map((k) => [k, form[k]]));
   inputs.lights = positive(form.lights);
+  inputs.extra_items = Object.entries(positive(form.kits || {})).map(([code, qty]) => ({ code, qty }));
   // Sem margem: a tabela já tem a margem da Erica (vale também ao reabrir proposta antiga com margem)
   inputs.margin = 0;
   if (!isAdmin) inputs.manual_adjustment = 0;
@@ -99,9 +103,13 @@ export function eventInputs(variant: EventVariant, form: EventForm, isAdmin: boo
 }
 
 /** Proposta salva antes das chaves de serviço: as três seções contavam, então abrem ligadas. */
-export function withServiceDefaults(inputs: Partial<EventForm>): Partial<EventForm> {
+export function withServiceDefaults(
+  inputs: Partial<EventForm> & { extra_items?: { code: string; qty: number }[] },
+): Partial<EventForm> {
+  const { extra_items, ...rest } = inputs;
   return {
-    ...inputs,
+    ...rest,
+    kits: Object.fromEntries((extra_items || []).map((e) => [e.code, e.qty])),
     sound_enabled: inputs.sound_enabled ?? true,
     stage_video_enabled: inputs.stage_video_enabled ?? true,
     lighting_enabled: inputs.lighting_enabled ?? true,

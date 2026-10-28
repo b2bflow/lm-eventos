@@ -96,7 +96,7 @@ export function QuoteSummary({ result, loading, error, editing }: {
                       {line.note && <span className="text-xs text-muted-foreground"> ({line.note})</span>}
                       {line.components && (
                         <span className="block text-xs text-muted-foreground">
-                          No PDF: {line.components.map((c) => `${qty(c.qty)} ${c.name}`).join(", ")}
+                          No PDF: {line.show_name ? line.name : line.components.map((c) => `${qty(c.qty * line.qty)} ${c.name}`).join(", ")}
                         </span>
                       )}
                       {line.shortage && (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArchiveRestore, CalendarClock, ClipboardCheck, Loader2, Minus, Plus, Trash2 } from "lucide-react";
+import { ArchiveRestore, Boxes, CalendarClock, ClipboardCheck, Loader2, Minus, Plus, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -285,7 +285,10 @@ function ReservationRow({ r, canCancel, onCancel }: { r: InventoryReservation; c
   return (
     <li className="rounded-lg border p-3 text-sm flex items-start justify-between gap-2">
       <div className="space-y-0.5">
-        <div className="font-medium">{r.qty} · {r.customer_name || "sem cliente"}</div>
+        <div className="font-medium">
+          {r.qty} · {r.customer_name || "sem cliente"}
+          {r.kit_name && <span className="font-normal text-muted-foreground"> · no kit {r.kit_name}</span>}
+        </div>
         <div className="text-xs text-muted-foreground">
           {formatDay(r.start)} a {lastDay(r.end)} · {r.manual ? `manual${r.created_by_name ? ` (${r.created_by_name})` : ""}` : "proposta aceita"}
           {r.status === "retirado" && " · retirado"}
@@ -436,6 +439,19 @@ export function InventoryItemDialog({ itemId, onClose, canEdit, canEditPrice = f
             <PriceSection item={item} canEdit={canEditPrice} onSaved={refresh} />
             <QuantitySection item={item} canEdit={canEdit} onSaved={refresh} />
             <DetailsSection item={item} canEdit={canEdit} onSaved={refresh} />
+            {item.kits?.length > 0 && (
+              <Section title={`Peça de ${item.kits.length} kit${item.kits.length === 1 ? "" : "s"}`}>
+                <ul className="flex flex-wrap gap-1.5">
+                  {item.kits.map((k) => (
+                    <li key={k.id} className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs">
+                      <Boxes className="w-3.5 h-3.5 text-primary" />{k.name}
+                      <span className="text-muted-foreground">· {k.qty} por kit</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">Para remover este item do estoque, tire-o desses kits antes.</p>
+              </Section>
+            )}
             <ReservationsSection item={item} canEdit={canEdit} myId={myId} onSaved={refresh} />
             <AdjustmentsSection item={item} />
 

@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from inventory.models import BILLING_UNITS, LINES, InventoryItem, InventoryMovement, InventoryReservation
+from inventory.models import BILLING_UNITS, LINES, InventoryItem, InventoryKit, InventoryMovement, InventoryReservation
 from inventory.services.inventory_service import InventoryService
 from sales.services.pricing_service import set_item_price
 from users.permissions import PORTA, has_role
@@ -71,6 +71,20 @@ def _new_code(name: str, line: str) -> str:
 
 def _invalid_text(data) -> bool:
     return any(k in data and not isinstance(data[k], (str, type(None))) for k in TEXT_FIELDS)
+
+
+def _in_kits(item, active_only: bool = True):
+    """Item que é peça de kit não sai do estoque sem antes sair do kit (o kit ficaria pela metade)."""
+    kits = service.kits_with_item(item, active_only=active_only)
+    if not kits:
+        return None
+    names = ", ".join(k["name"] for k in kits)
+    return Response({"detail": f"{item.name} é peça do(s) kit(s) {names}. Tire do kit antes de remover."},
+                    status=status.HTTP_400_BAD_REQUEST)
+
+
+def _kit(kit_id):
+    return InventoryKit.objects(id=ObjectId(kit_id)).first() if ObjectId.is_valid(kit_id) else None
 
 
 class InventoryItemsController(APIView):
@@ -155,6 +169,8 @@ class InventoryItemDetailController(APIView):
                 return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         if _invalid_text(request.data):
             return Response({"detail": "Nome, tamanho e textos devem ser texto."}, status=status.HTTP_400_BAD_REQUEST)
+        if request.data.get("active") is False and (blocked := _in_kits(item)):
+            return blocked
         qty = request.data.get("qty_total")
         if qty is not None and (isinstance(qty, bool) or not isinstance(qty, (int, float)) or qty < 0):
             return Response({"detail": "Quantidade total deve ser um número maior ou igual a zero."},
@@ -185,6 +201,8 @@ class InventoryItemDetailController(APIView):
         item = _item(item_id)
         if not item:
             return Response({"detail": "Item não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        if blocked := _in_kits(item, active_only=False):
+            return blocked
         if request.query_params.get("permanent") in ("1", "true"):
             if InventoryReservation.objects(item=item).first() or InventoryMovement.objects(item=item).first():
                 return Response({"detail": "Item com reservas ou movimentações: só dá para remover (desativar)."},
@@ -240,6 +258,100 @@ class InventoryObservationsController(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
         service.remove_observation(item, observation_id)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KitsController(APIView):
+    """GET /inventory/kits/?start=&end=&include_inactive=1: kits com peças, preço e quantos dá para
+    montar no período. POST cria {name, line, pieces: [{code, qty}], description, show_pieces, sale_price}
+    (admin ou porta; preço só admin)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            start, end = _period(request.query_params)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(service.kits(start, end, include_inactive=request.query_params.get("include_inactive") in ("1", "true")))
+
+    def post(self, request):
+        if not _can_edit(request.user):
+            return Response({"detail": FORBIDDEN}, status=status.HTTP_403_FORBIDDEN)
+        return _save_kit(request, None, status.HTTP_201_CREATED)
+
+
+def _save_kit(request, kit, ok_status):
+    data = request.data if isinstance(request.data, dict) else {}
+    price_given = "sale_price" in data
+    try:
+        if price_given:
+            if not has_role(request.user):
+                return Response({"detail": PRICE_FORBIDDEN}, status=status.HTTP_403_FORBIDDEN)
+            price = _price_value(data)
+        kit = service.save_kit(kit, data, user=request.user)
+    except ValueError as e:
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    if price_given:
+        set_item_price(kit.code, price)
+    start, end = _period(request.query_params)
+    return Response(service.kit(kit, start, end), status=ok_status)
+
+
+class KitDetailController(APIView):
+    """GET ficha do kit (?start=&end=). PATCH edita (peças, nome, linha, descrição, show_pieces, active,
+    sale_price). DELETE remove (desativa; propostas antigas continuam valendo). Faixas de som não saem."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, kit_id):
+        kit = _kit(kit_id)
+        if not kit:
+            return Response({"detail": "Kit não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            start, end = _period(request.query_params)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(service.kit(kit, start, end))
+
+    def patch(self, request, kit_id):
+        if not _can_edit(request.user):
+            return Response({"detail": FORBIDDEN}, status=status.HTTP_403_FORBIDDEN)
+        kit = _kit(kit_id)
+        if not kit:
+            return Response({"detail": "Kit não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        return _save_kit(request, kit, status.HTTP_200_OK)
+
+    def delete(self, request, kit_id):
+        if not _can_edit(request.user):
+            return Response({"detail": FORBIDDEN}, status=status.HTTP_403_FORBIDDEN)
+        kit = _kit(kit_id)
+        if not kit:
+            return Response({"detail": "Kit não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            service.save_kit(kit, {"active": False}, user=request.user)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class KitReserveController(APIView):
+    """POST /inventory/kits/<id>/reserve/ {qty, start, end, client_name | customer_id, note}: reserva
+    manual de N kits (todas as peças de uma vez)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, kit_id):
+        kit = _kit(kit_id)
+        if not kit:
+            return Response({"detail": "Kit não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        data = request.data
+        try:
+            if not isinstance(data.get("start"), str) or not isinstance(data.get("end", ""), (str, type(None))):
+                raise ValueError("Informe o período.")
+            start, end = _period(data)
+            reservations = service.reserve_kit(kit, data.get("qty"), start, end, client_name=data.get("client_name"),
+                                               customer_id=data.get("customer_id"), note=data.get("note"),
+                                               user=request.user)
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(reservations, status=status.HTTP_201_CREATED)
 
 
 class AvailabilityController(APIView):
