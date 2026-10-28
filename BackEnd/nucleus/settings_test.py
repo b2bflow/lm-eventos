@@ -19,8 +19,10 @@ os.environ.setdefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173")
 from .settings import *  # noqa: E402,F401,F403
 
 import mongomock  # noqa: E402
+import mongomock.gridfs  # noqa: E402
 import mongoengine  # noqa: E402
 
+mongomock.gridfs.enable_gridfs_integration()  # arquivos da aba WhatsApp ficam no GridFS
 mongoengine.disconnect_all()
 mongoengine.connect(
     db="lm_test",

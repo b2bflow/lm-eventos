@@ -31,6 +31,8 @@ PUBLIC_ROUTES = {
     f"/api/v1/sales/proposals/{FAKE_ID}/pdf/": "link assinado (?t=)",
     f"/api/v1/sales/proposals/{FAKE_ID}/pdf/{FAKE_ID}": "link assinado (?t=)",
     "/api/v1/agenda/google/callback/": "state assinado do OAuth",
+    f"/api/v1/chat/files/{FAKE_ID}/": "link assinado (?t=) do arquivo enviado na conversa",
+    f"/api/v1/chat/files/{FAKE_ID}/{FAKE_ID}": "link assinado (?t=) do arquivo enviado na conversa",
 }
 
 
@@ -82,6 +84,8 @@ def test_public_routes_refuse_without_their_own_credential():
     assert client.post("/api/v1/gateway/webhook/zapi/", {"phone": "5562999990000"}, format="json").status_code == 401
     assert client.get(f"/api/v1/sales/proposals/{FAKE_ID}/pdf/").status_code == 401
     assert client.get(f"/api/v1/sales/proposals/{FAKE_ID}/pdf/?t=forjado").status_code == 401
+    assert client.get(f"/api/v1/chat/files/{FAKE_ID}/").status_code == 404
+    assert client.get(f"/api/v1/chat/files/{FAKE_ID}/a.pdf?t=forjado").status_code == 404
     assert client.get("/api/v1/agenda/google/callback/?state=forjado&code=x").status_code == 400
     assert client.post("/api/v1/users/token/", {"username": "erica", "password": "errada"}, format="json").status_code == 401
 

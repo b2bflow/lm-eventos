@@ -610,22 +610,41 @@ class MessageService(IMessageService):
         if not getattr(conversation, "customer", None) or not getattr(conversation.customer, "phone", None):
             raise ValueError("Conversa sem telefone válido.")
 
-        filename = os.path.basename(getattr(uploaded_file, "name", "arquivo"))
+        from chat.services.chat_file_service import public_base_url, save_chat_file, signed_file_url
+
+        filename = os.path.basename(getattr(uploaded_file, "name", "") or "") or "arquivo"
         content_type = (
             getattr(uploaded_file, "content_type", None)
             or mimetypes.guess_type(filename)[0]
             or "application/octet-stream"
         )
         size = getattr(uploaded_file, "size", None)
-        file_bytes = b"".join(uploaded_file.chunks())
+        if not size:
+            raise ValueError("Arquivo vazio.")
 
-        zapi_response = self.chat.send_file_bytes(
-            phone=conversation.customer.phone,
-            file_bytes=file_bytes,
-            filename=filename,
-            content_type=content_type,
-            caption=caption,
-        )
+        # Guardado antes de enviar: a conversa mostra o arquivo e a Z-API baixa os grandes pelo link.
+        chat_file = save_chat_file(conversation, uploaded_file, filename, content_type)
+        file_url = signed_file_url(chat_file)
+
+        # Base64 dentro do JSON infla 33% e pesa na Z-API: acima do limite vai o link público.
+        inline_max = int(os.getenv("CHAT_FILE_INLINE_MAX_MB", "10")) * 1024 * 1024
+        if size > inline_max and public_base_url():
+            zapi_response = self.chat.send_file(
+                phone=conversation.customer.phone,
+                file=file_url,
+                filename=filename,
+                content_type=content_type,
+                caption=caption,
+            )
+        else:
+            uploaded_file.seek(0)
+            zapi_response = self.chat.send_file_bytes(
+                phone=conversation.customer.phone,
+                file_bytes=b"".join(uploaded_file.chunks()),
+                filename=filename,
+                content_type=content_type,
+                caption=caption,
+            )
         send_target = zapi_response.get("send_target", {})
         message_type = send_target.get("message_type", "file")
 
@@ -636,10 +655,13 @@ class MessageService(IMessageService):
             "file_name": filename,
             "content_type": content_type,
             "size": size,
+            "chat_file_id": str(chat_file.id),
             "send_endpoint": send_target.get("endpoint"),
             "payload_key": send_target.get("payload_key"),
             "zapi_response": zapi_response,
         }
+        if message_type == "file":
+            metadata["document"] = {"documentUrl": file_url, "fileName": filename}
 
         message = self._save_and_notify(
             conversation_id=conversation_id,
@@ -649,6 +671,7 @@ class MessageService(IMessageService):
             external_id=external_id,
             raw_metadata=metadata,
             message_type=message_type,
+            media_url=file_url,
             status="SENT_TO_GATEWAY",
         )
 

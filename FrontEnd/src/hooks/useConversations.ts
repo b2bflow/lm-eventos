@@ -95,6 +95,7 @@ function previewFromEvent(event: NewMessageEvent): string {
   const parsed = parseMediaContent(event.content, event.message_type, event.media_url);
   if (parsed.type === "image") return parsed.text ? `[Imagem] ${parsed.text}` : "[Imagem]";
   if (parsed.type === "file") return "[Arquivo]";
+  if (parsed.type === "video") return parsed.text ? `[Vídeo] ${parsed.text}` : "[Vídeo]";
   if (parsed.type === "audio") return `[Áudio] ${parsed.text}`.trim();
   return normalizeChatMessageContent(event.content);
 }

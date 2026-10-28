@@ -48,6 +48,10 @@ export function MessageBody({ message, isIncoming }: MessageBodyProps) {
                 </div>
             )}
 
+            {type === "video" && url && (
+                <video controls preload="metadata" src={url} className="rounded-lg max-h-72 max-w-full bg-black/5" />
+            )}
+
             {type === "file" && url && (
                 <div className="space-y-2">
                     {isPdf && (

@@ -179,15 +179,13 @@ export default function WhatsApp() {
       const formData = new FormData();
       formData.append("conversation_id", conversationId);
       formData.append("file", file);
-      await api.post("/chat/messages/files/", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await api.post("/chat/messages/files/", formData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: messagesKey(selectedConversationId, "conversation") });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
-    onError: () => toast.error("Falha ao enviar arquivo."),
+    onError: (error) => apiError(error, "Falha ao enviar arquivo."),
   });
 
   // Contato sem conversa: a busca no backend não acha conversa, então procura o contato para iniciar uma.

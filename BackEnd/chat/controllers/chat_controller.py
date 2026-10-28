@@ -1,12 +1,12 @@
 from utils.logger import logger
 import os
+import requests
 from bson import ObjectId
-from django.conf import settings
-from django.core.files.uploadhandler import MemoryFileUploadHandler
+from django.http import FileResponse
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_mongoengine.viewsets import ModelViewSet
 
@@ -17,6 +17,7 @@ from chat.models.message_model import MessageModel
 from chat.pagination import paginate_desc, parse_page_size
 from chat.repositories.conversation_repository import ConversationRepository
 from chat.repositories.message_repository import MessageRepository
+from chat.services.chat_file_service import get_signed_file
 
 
 def _parse_bool(value):
@@ -259,23 +260,19 @@ class MessageFileUploadView(APIView):
 
     def post(self, request, *args, **kwargs) -> Response:
         try:
-            max_upload_mb = int(os.getenv("CHAT_FILE_UPLOAD_MAX_MB", "15"))
-            configured_max_bytes = max_upload_mb * 1024 * 1024
-            django_memory_limit = getattr(settings, "FILE_UPLOAD_MAX_MEMORY_SIZE", configured_max_bytes)
-            max_upload_bytes = min(configured_max_bytes, django_memory_limit)
-            effective_max_mb = max_upload_bytes // (1024 * 1024)
+            # Não limitar ao FILE_UPLOAD_MAX_MEMORY_SIZE (2,5 MB padrão): acima dele o Django grava em
+            # arquivo temporário, e o PDF da proposta passa disso (antes voltava 413 "limite de 2MB").
+            effective_max_mb = int(os.getenv("CHAT_FILE_UPLOAD_MAX_MB", "100"))
+            max_upload_bytes = effective_max_mb * 1024 * 1024
 
             if request.META.get("CONTENT_LENGTH"):
                 content_length = int(request.META["CONTENT_LENGTH"])
-                if content_length > max_upload_bytes:
+                # Folga para os cabeçalhos do multipart: o tamanho do arquivo é conferido abaixo.
+                if content_length > max_upload_bytes + 1024 * 1024:
                     return Response(
                         {"detail": f"Arquivo excede o limite de {effective_max_mb}MB."},
                         status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     )
-
-            request._request.upload_handlers = [
-                MemoryFileUploadHandler(request._request)
-            ]
 
             conversation_id = request.data.get("conversation_id")
             uploaded_file = request.FILES.get("file")
@@ -313,12 +310,54 @@ class MessageFileUploadView(APIView):
         except ValueError as ve:
             return Response({"detail": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
 
+        except requests.RequestException as e:
+            logger.error(f"[ChatController] Z-API recusou o arquivo: {e}")
+            return Response(
+                {"detail": "O WhatsApp (Z-API) não aceitou o arquivo. Tente de novo em instantes."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
         except Exception as e:
             logger.error(f"[ChatController] File upload error: {e}")
             return Response(
                 {"detail": "Erro interno ao enviar arquivo."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class ChatFileDownloadView(APIView):
+    """GET /chat/files/<id>/<nome>?t=: arquivo enviado na conversa, sem login (link assinado).
+
+    A Z-API baixa por aqui os arquivos grandes; o painel abre/mostra o arquivo na conversa.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, file_id, file_name=None):
+        chat_file = get_signed_file(file_id, request.query_params.get("t"))
+        if not chat_file or not chat_file.data:
+            return Response({"detail": "Link inválido ou expirado."}, status=status.HTTP_404_NOT_FOUND)
+        response = FileResponse(
+            chat_file.data,
+            content_type=chat_file.content_type or "application/octet-stream",
+            as_attachment=bool(request.query_params.get("download")),
+            filename=chat_file.file_name,
+        )
+        if chat_file.size:
+            response["Content-Length"] = str(chat_file.size)
+        response["X-Content-Type-Options"] = "nosniff"
+        content_type = (chat_file.content_type or "").lower()
+        if content_type == "application/pdf":
+            # A conversa mostra o PDF num iframe do painel (mesma regra do PDF da proposta).
+            from sales.controllers import _panel_origins
+            response.xframe_options_exempt = True
+            response["Content-Security-Policy"] = "frame-ancestors " + " ".join(["'self'", *_panel_origins()])
+        elif not content_type.startswith(("image/", "audio/", "video/")) or "svg" in content_type:
+            # HTML/SVG/etc. do operador nunca rodam como página do domínio da API (o sandbox bloquearia
+            # o leitor de PDF do Chrome, por isso o PDF fica de fora).
+            response["Content-Security-Policy"] = "sandbox"
+        response["Cache-Control"] = "private, max-age=3600"
+        return response
 
 
 def _team_action(fn):

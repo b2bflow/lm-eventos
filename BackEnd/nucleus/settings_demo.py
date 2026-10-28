@@ -23,11 +23,13 @@ from .settings import *  # noqa: E402,F401,F403
 
 import fakeredis  # noqa: E402
 import mongomock  # noqa: E402
+import mongomock.gridfs  # noqa: E402
 import mongoengine  # noqa: E402
 import redis  # noqa: E402
 
 DEBUG = True
 
+mongomock.gridfs.enable_gridfs_integration()  # arquivos da aba WhatsApp ficam no GridFS
 mongoengine.disconnect_all()
 mongoengine.connect(db="lm_demo", host="mongodb://localhost", mongo_client_class=mongomock.MongoClient)
 

@@ -1,7 +1,7 @@
 import { safeMediaUrl } from "./safeUrl";
 
 /** note e event: mensagens internas da equipe (direction INTERNAL), nunca enviadas ao cliente. */
-export type ChatMessageType = "text" | "image" | "audio" | "file" | "note" | "event";
+export type ChatMessageType = "text" | "image" | "audio" | "video" | "file" | "note" | "event";
 
 export interface ChatMenuButton {
   id: string;

@@ -452,43 +452,35 @@ class ZAPIClient(IChat):
 
         raise last_exception
 
+    # Tipos que o WhatsApp mostra como mídia; o resto (svg, heic, wav, mkv, zip, ...) vai como documento.
+    _NATIVE_MEDIA = {
+        "image": ("image/jpeg", "image/png", "image/webp", "image/gif"),
+        "audio": ("audio/mpeg", "audio/ogg", "audio/mp4", "audio/aac", "audio/x-m4a", "audio/amr"),
+        "video": ("video/mp4", "video/3gpp"),
+    }
+
     def _resolve_file_send_target(
         self,
         filename: str,
         content_type: str | None = None,
     ) -> dict:
+        mime_type = (content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream").lower()
+        mime_type = mime_type.split(";")[0].strip()
         extension = Path(filename).suffix.lower().lstrip(".")
-        mime_type = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        if mime_type.startswith("image/"):
-            return {
-                "endpoint": "send-image",
-                "payload_key": "image",
-                "message_type": "image",
-                "extension": extension,
-                "mime_type": mime_type,
-            }
+        for kind, mime_types in self._NATIVE_MEDIA.items():
+            if mime_type in mime_types:
+                return {
+                    "endpoint": f"send-{kind}",
+                    "payload_key": kind,
+                    "message_type": kind,
+                    "extension": extension,
+                    "mime_type": mime_type,
+                }
 
-        if mime_type.startswith("audio/"):
-            return {
-                "endpoint": "send-audio",
-                "payload_key": "audio",
-                "message_type": "audio",
-                "extension": extension,
-                "mime_type": mime_type,
-            }
-
-        if mime_type.startswith("video/"):
-            return {
-                "endpoint": "send-video",
-                "payload_key": "video",
-                "message_type": "video",
-                "extension": extension,
-                "mime_type": mime_type,
-            }
-
-        if not extension:
-            raise ValueError("Arquivo sem extensão.")
+        # A Z-API pede a extensão na rota: arquivo sem extensão usa a do tipo ou "bin".
+        if not re.fullmatch(r"[a-z0-9]{1,10}", extension):
+            extension = (mimetypes.guess_extension(mime_type) or ".bin").lstrip(".")
 
         return {
             "endpoint": f"send-document/{extension}",
@@ -497,6 +489,41 @@ class ZAPIClient(IChat):
             "extension": extension,
             "mime_type": mime_type,
         }
+
+    def send_file(
+        self,
+        phone: str,
+        file: str,
+        filename: str,
+        content_type: str | None = None,
+        caption: str | None = None,
+    ) -> dict:
+        """Envia `file` (URL pública ou base64 "data:<tipo>;base64,...") pela rota certa do tipo."""
+        if not self.__validate_cell_number(phone):
+            raise ValueError("Telefone inválido para envio de arquivo.")
+
+        target = self._resolve_file_send_target(filename, content_type)
+        url = f"{self._resolve_url()}/{target['endpoint']}"
+        headers = {**self._headers, "Client-Token": self._client_token}
+        payload = {"phone": self._resolve_phone(phone), target["payload_key"]: file}
+
+        if target["payload_key"] == "document":
+            payload["fileName"] = filename
+
+        if caption:
+            payload["caption"] = caption
+
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        response.raise_for_status()
+
+        result = response.json()
+        logger.info(
+            "[Z-API] Arquivo enviado para %s via %s: %s",
+            phone,
+            target["endpoint"],
+            to_json_dump({**result, "fileName": filename}),
+        )
+        return {**result, "send_target": target}
 
     def send_file_bytes(
         self,
@@ -509,36 +536,9 @@ class ZAPIClient(IChat):
         if not file_bytes:
             raise ValueError("Arquivo vazio.")
 
-        if not self.__validate_cell_number(phone):
-            raise ValueError("Telefone inválido para envio de arquivo.")
-
         target = self._resolve_file_send_target(filename, content_type)
-        document_base64 = base64.b64encode(file_bytes).decode("ascii")
-
-        url = f"{self._resolve_url()}/{target['endpoint']}"
-        headers = {**self._headers, "Client-Token": self._client_token}
-        payload = {
-            "phone": self._resolve_phone(phone),
-            target["payload_key"]: f"data:{target['mime_type']};base64,{document_base64}",
-        }
-
-        if target["payload_key"] == "document":
-            payload["fileName"] = filename
-
-        if caption:
-            payload["caption"] = caption
-
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
-        response.raise_for_status()
-
-        result = response.json()
-        logger.info(
-            "[Z-API] Arquivo enviado para %s via %s: %s",
-            phone,
-            target["endpoint"],
-            to_json_dump({**result, "fileName": filename}),
-        )
-        return {**result, "send_target": target}
+        file_base64 = base64.b64encode(file_bytes).decode("ascii")
+        return self.send_file(phone, f"data:{target['mime_type']};base64,{file_base64}", filename, content_type, caption)
 
     def send_document_bytes(
         self,
