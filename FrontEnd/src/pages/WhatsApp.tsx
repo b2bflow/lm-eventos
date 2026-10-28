@@ -18,6 +18,7 @@ import { CallDialog } from "@/components/domain/funnel/LeadDialogs";
 import { quickRepliesFor, useLmSettings } from "@/hooks/useLmSettings";
 import { useCurrentUser } from "@/hooks/useFunnel";
 import { formatDateTime } from "@/lib/format";
+import { formatChatListTime } from "@/lib/dateUtils";
 import {
   appendMessageToCache,
   discardPendingConversationRefreshes,
@@ -115,6 +116,7 @@ export default function WhatsApp() {
     fetchNextPage: fetchMoreConversations,
     hasNextPage: hasMoreConversations,
     isFetchingNextPage: isFetchingMoreConversations,
+    internalFolder,
   } = useConversations(activeTab, search, listFilters);
 
   const selectedConversationObj =
@@ -196,7 +198,7 @@ export default function WhatsApp() {
     }
     let cancelled = false;
     api
-      .get("/chat/contacts/search/", { params: { search, status: activeTab } })
+      .get("/chat/contacts/search/", { params: { search, status: activeTab === "CLOSED" ? "CLOSED" : "OPEN" } })
       .then(({ data }) => {
         if (cancelled) return;
         const results: ContactSearchResult[] = data.results || [];
@@ -240,6 +242,22 @@ export default function WhatsApp() {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     },
     onError: (error) => apiError(error, "Não foi possível atribuir a conversa."),
+  });
+
+  // Chats internos: a conversa sai da lista em que está (principal ou pasta) e segue aberta pelo snapshot.
+  const internalMutation = useMutation({
+    mutationFn: async ({ id, internal }: { id: string; internal: boolean }) =>
+      (await api.post<Conversa>(`/chat/conversations/${id}/internal/`, { internal })).data,
+    onSuccess: (updated) => {
+      toast.success(updated.customer_internal_chat
+        ? "Conversa movida para os Chats internos."
+        : "Conversa voltou para a lista principal.");
+      applyConversation(updated);
+      discardPendingConversationRefreshes();
+      removeConversationFromCache(queryClient, updated.id);
+      refreshFirstConversationPages(queryClient);
+    },
+    onError: (error) => apiError(error, "Não foi possível mover a conversa."),
   });
 
   const noteMutation = useMutation({
@@ -410,7 +428,7 @@ export default function WhatsApp() {
       phone: c.customer_phone,
       name: c.customer_name,
       lastMessage: normalizeChatMessageContent(c.last_message_content),
-      time: c.last_interaction_at ? new Date(c.last_interaction_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      time: formatChatListTime(c.last_interaction_at),
       tag: c.tag as "AGENTE" | "OPERADOR",
       unread: (c.unread_count || 0) > 0,
       finished: c.status === "CLOSED" || c.status === "ARCHIVED",
@@ -418,6 +436,7 @@ export default function WhatsApp() {
       needs_attention: c.needs_attention,
       assignee: c.assignee,
       aiQualified: !!c.customer_ai_qualified_at,
+      internal: !!c.customer_internal_chat,
     }));
     contactCandidates.forEach((contact) =>
       items.push({
@@ -461,6 +480,7 @@ export default function WhatsApp() {
                 onToggleTag={handleToggleTag}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
+                internalFolder={internalFolder}
                 search={searchInput}
                 onSearchChange={setSearchInput}
                 onLoadMore={handleLoadMoreConversations}
@@ -488,7 +508,15 @@ export default function WhatsApp() {
                   isUploadingFile={sendFileMutation.isPending}
                   isAIActive={selectedConversationObj.tag === "AGENTE"}
                   onToggleAI={(mode) => toggleTagMutation.mutate({ id: selectedConversationId, newTag: mode })}
-                  aiBlocked={!!selectedConversationObj.customer_human_operator}
+                  aiBlocked={!!selectedConversationObj.customer_human_operator || !!selectedConversationObj.customer_internal_chat}
+                  aiBlockedReason={selectedConversationObj.customer_internal_chat
+                    ? "Chat interno não tem IA. Tire dos Chats internos para a IA atender."
+                    : undefined}
+                  isInternal={!!selectedConversationObj.customer_internal_chat}
+                  onToggleInternal={() => internalMutation.mutate({
+                    id: selectedConversationId,
+                    internal: !selectedConversationObj.customer_internal_chat,
+                  })}
                   handoverInfo={selectedConversationObj.handover_by_name
                     ? `${selectedConversationObj.tag === "AGENTE" ? "IA retomada" : "Assumida"} por ${selectedConversationObj.handover_by_name} em ${formatDateTime(selectedConversationObj.handover_at)}`
                     : undefined}

@@ -1,4 +1,4 @@
-import { Send, Loader2, Paperclip, MoreVertical, Sparkles, CheckCircle, ArrowLeft, History, Phone, StickyNote, Zap, Smartphone } from "lucide-react";
+import { Send, Loader2, Paperclip, MoreVertical, Sparkles, CheckCircle, ArrowLeft, History, Phone, StickyNote, Zap, Smartphone, Archive, ArchiveRestore } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,12 @@ interface ChatAreaProps {
     isAIActive: boolean;
     /** Muda para o modo pedido: AGENTE (retomar IA) ou OPERADOR (assumir). */
     onToggleAI: (mode: "AGENTE" | "OPERADOR") => void;
-    /** Parceiro: a IA não atende, então "Retomar IA" fica desabilitado. */
+    /** Parceiro ou Chats internos: a IA não atende, então "Retomar IA" fica desabilitado. */
     aiBlocked?: boolean;
+    aiBlockedReason?: string;
+    /** Conversa nos Chats internos (fora da lista principal, sem IA) e o botão que põe ou tira de lá. */
+    isInternal?: boolean;
+    onToggleInternal?: () => void;
     /** Ex.: "IA retomada por Erica" (quem fez a última passagem). */
     handoverInfo?: string;
     onAddNote?: (text: string) => void;
@@ -58,6 +62,9 @@ export function ChatArea({
     isAIActive,
     onToggleAI,
     aiBlocked = false,
+    aiBlockedReason = "Parceiro fica com a Erica: a IA não atende este contato.",
+    isInternal = false,
+    onToggleInternal,
     handoverInfo,
     onAddNote,
     onCall,
@@ -219,6 +226,17 @@ export function ChatArea({
                         </Button>
                     )}
 
+                    {onToggleInternal && (
+                        <Button variant="outline" size="sm" onClick={onToggleInternal}
+                            title={isInternal ? "Tirar dos Chats internos (volta para a lista principal)"
+                                : "Mover para os Chats internos (sai da lista principal e pausa a IA)"}
+                            className={cn("h-8 px-2 2xl:px-3 text-xs border-border/50",
+                                isInternal && "text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20")}>
+                            {isInternal ? <ArchiveRestore className="w-4 h-4 2xl:mr-1.5" /> : <Archive className="w-4 h-4 2xl:mr-1.5" />}
+                            <span className="hidden 2xl:inline">{isInternal ? "Tirar dos internos" : "Chat interno"}</span>
+                        </Button>
+                    )}
+
                     {isAIActive ? (
                         <Button variant="outline" size="sm" onClick={() => onToggleAI("OPERADOR")}
                             title={handoverInfo ? `${handoverInfo}. Clique para assumir a conversa.` : "IA respondendo. Clique para assumir a conversa."}
@@ -228,7 +246,7 @@ export function ChatArea({
                         </Button>
                     ) : (
                         <Button size="sm" onClick={() => onToggleAI("AGENTE")} disabled={aiBlocked}
-                            title={aiBlocked ? "Parceiro fica com a Erica: a IA não atende este contato." : handoverInfo || "Devolver a conversa para a IA"}
+                            title={aiBlocked ? aiBlockedReason : handoverInfo || "Devolver a conversa para a IA"}
                             className="h-8 px-2 sm:px-3 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white">
                             <Sparkles className="w-3.5 h-3.5 xl:mr-1.5" />
                             <span className="hidden xl:inline">Retomar IA</span>

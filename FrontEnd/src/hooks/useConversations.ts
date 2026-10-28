@@ -24,6 +24,8 @@ export interface Conversa {
   customer_human_operator?: boolean;
   customer_ai_qualified_at?: string | null;
   customer_funnel_entered_at?: string | null;
+  /** Contato nos Chats internos (fora da lista principal, sem IA). */
+  customer_internal_chat?: boolean;
 }
 
 export interface CursorPage<T> {
@@ -31,9 +33,12 @@ export interface CursorPage<T> {
   next_cursor: string | null;
   has_more: boolean;
   total?: number;
+  /** Só na lista de abertas sem busca: conversas dos Chats internos (para a linha da pasta). */
+  internal?: { total: number; unread: number };
 }
 
-export type ConversationTab = "OPEN" | "CLOSED";
+/** INTERNAL = pasta "Chats internos" (abertas dos contatos marcados como internos). */
+export type ConversationTab = "OPEN" | "CLOSED" | "INTERNAL";
 export type ConversationsData = InfiniteData<CursorPage<Conversa>, string | null>;
 export type MessagesData = InfiniteData<CursorPage<ChatMessage>, string | null>;
 
@@ -68,7 +73,8 @@ export const conversationsKey = (tab: ConversationTab, search: string, filters: 
 
 async function fetchConversations(tab: ConversationTab, search: string, cursor: string | null,
   filters: ConversationFilters = {}) {
-  const params: Record<string, string | number> = { page_size: PAGE_SIZE, status: tab };
+  const params: Record<string, string | number> = { page_size: PAGE_SIZE, status: tab === "INTERNAL" ? "OPEN" : tab };
+  if (tab === "INTERNAL") params.internal = "1";
   if (search) params.search = search;
   if (filters.assignee) params.assignee = filters.assignee;
   if (filters.attendance) params.tag = filters.attendance;
@@ -225,7 +231,12 @@ export function useConversations(tab: ConversationTab, search: string, filters: 
     return () => window.clearInterval(timer);
   }, [refresh]);
 
-  return { ...query, conversations: flattenUnique(query.data), total: query.data?.pages[0]?.total };
+  return {
+    ...query,
+    conversations: flattenUnique(query.data),
+    total: query.data?.pages[0]?.total,
+    internalFolder: query.data?.pages[0]?.internal,
+  };
 }
 
 export const messagesKey = (conversationId: string | null, scope: "conversation" | "customer") =>

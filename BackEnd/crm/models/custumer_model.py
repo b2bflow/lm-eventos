@@ -73,6 +73,8 @@ class Customer(Document):
     # --- Funil ---
     owner = StringField(choices=tuple(domain.OWNERS), default='sdr')
     human_operator = BooleanField(default=False)  # parceiro/cliente antigo: fica com a Erica, fora da fila da SDR
+    # "Chats internos" da aba WhatsApp (como o Arquivadas do WhatsApp): conversa sem IA e fora da lista principal.
+    internal_chat = BooleanField(default=False)
     product = StringField(choices=tuple(domain.PRODUCTS), null=True)
     qualification = DictField()  # todos os campos coletados (IA ou SDR), ver LeadQualificationService
     pending_fields = ListField(StringField())  # o que ficou "não sei"

@@ -40,17 +40,19 @@ class ConversationRepository(IConversationRepository):
     @staticmethod
     def create_conversation(customer) -> ConversationModel: # Removi a tipagem rígida de Customer aqui para evitar avisos da IDE
         try:
+            # Ajuste aqui: Se 'customer' for string, usa ela direto. Se for objeto, pega o .id
+            customer_id = customer if isinstance(customer, str) else str(getattr(customer, 'id', customer))
+            # Contato dos Chats internos: a conversa nova já nasce sem IA (nem menu de boas-vindas).
+            internal = Customer.objects(id=customer_id, internal_chat=True).count() > 0
 
             conv = ConversationModel(
                 customer=customer,
                 status='OPEN',
-                tag='AGENTE',
-                ai_active=True,
+                tag='OPERADOR' if internal else 'AGENTE',
+                ai_active=not internal,
+                last_message_at=datetime.utcnow(),
             )
             conv.save()
-
-            # Ajuste aqui: Se 'customer' for string, usa ela direto. Se for objeto, pega o .id
-            customer_id = customer if isinstance(customer, str) else str(getattr(customer, 'id', customer))
 
             # Conversa nova não põe o contato no funil: ele entra quando a IA qualifica
             # (ver crm.services.funnel_entry).
@@ -81,11 +83,35 @@ class ConversationRepository(IConversationRepository):
             raise e
 
     @staticmethod
+    def internal_customer_ids() -> list:
+        return list(Customer.objects(internal_chat=True).scalar('id'))
+
+    @staticmethod
+    def fill_missing_last_message_at() -> int:
+        """Conversas gravadas antes de `last_message_at` existir: usa a última mensagem não interna
+        (ou a última atualização, se não tiver mensagem). Só mexe nas que estão sem o campo."""
+        from chat.models.message_model import MessageModel
+        missing = list(ConversationModel.objects(last_message_at=None).only('id', 'updated_at', 'created_at'))
+        if not missing:
+            return 0
+        latest = {
+            row['_id']: row['last']
+            for row in MessageModel.objects(
+                conversation__in=[c.id for c in missing], direction__ne='INTERNAL',
+            ).aggregate([{'$group': {'_id': '$conversation', 'last': {'$max': '$created_at'}}}])
+        }
+        for conv in missing:
+            value = latest.get(conv.id) or conv.updated_at or conv.created_at or datetime.utcnow()
+            ConversationModel.objects(id=conv.id).update(set__last_message_at=value)
+        return len(missing)
+
+    @staticmethod
     def filtered_queryset(search: str | None = None, tag: str | None = None, needs_attention: bool | None = None, status: str | None = None,
-                          assignee: str | None = None, ai_qualified: bool | None = None):
+                          assignee: str | None = None, ai_qualified: bool | None = None, internal: bool | None = None):
         """Conversas filtradas no banco: busca por nome ou telefone do cliente, etiqueta, atenção e situação.
 
         status: OPEN (abertas) ou CLOSED (fechadas e arquivadas).
+        internal: True só os Chats internos; False tira eles (lista principal de abertas). None não filtra.
         tag: AGENTE (IA atendendo) ou OPERADOR (inclui as variações gravadas pela IA ao transferir).
         ai_qualified: só conversas de leads qualificados pela IA (Customer.ai_qualified_at).
         assignee: ia (IA atendendo), none (humano sem responsável) ou sdr, erica, lucia.
@@ -96,6 +122,10 @@ class ConversationRepository(IConversationRepository):
             queryset = queryset.filter(status__nin=['CLOSED', 'ARCHIVED'])
         elif status == 'CLOSED':
             queryset = queryset.filter(status__in=['CLOSED', 'ARCHIVED'])
+        if internal is True:
+            queryset = queryset.filter(customer__in=ConversationRepository.internal_customer_ids())
+        elif internal is False:
+            queryset = queryset.filter(customer__nin=ConversationRepository.internal_customer_ids())
         if search:
             term = search.strip()
             digits = "".join(ch for ch in term if ch.isdigit())

@@ -1,4 +1,4 @@
-import { format, isValid, parseISO, Locale } from "date-fns";
+import { differenceInCalendarDays, format, isValid, parseISO, Locale } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 /**
@@ -87,4 +87,18 @@ export function formatSafeTime(
   } catch {
     return fallback;
   }
+}
+
+/**
+ * Hora do card da lista de conversas, no padrão do WhatsApp: hoje mostra a hora, ontem "Ontem",
+ * nesta semana o dia da semana e antes disso a data.
+ */
+export function formatChatListTime(input: string | number | Date | null | undefined): string {
+  const date = parseSafeDate(input);
+  if (!date) return "";
+  const days = differenceInCalendarDays(new Date(), date);
+  if (days <= 0) return formatSafeTime(date);
+  if (days === 1) return "Ontem";
+  if (days < 7) return formatSafeDate(date, "EEEE");
+  return formatSafeDate(date, "dd/MM/yyyy");
 }

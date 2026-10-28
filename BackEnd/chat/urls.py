@@ -1,6 +1,7 @@
 from django.urls import path
 from chat.controllers.chat_controller import (
-    ConversationAssignController, ConversationCallController, ConversationModeController, ConversationNoteController,
+    ConversationAssignController, ConversationCallController, ConversationInternalController, ConversationModeController,
+    ConversationNoteController,
     ChatFileDownloadView, ConversationViewSet, MessageFileUploadView, MessageViewSet,
 )
 from chat.controllers.system_config_controller import SystemConfigController
@@ -44,6 +45,7 @@ urlpatterns = [
     path('conversations/<str:pk>/', conversation_detail, name='conversation-detail'),
     path('conversations/<str:pk>/mode/', ConversationModeController.as_view(), name='conversation-mode'),
     path('conversations/<str:pk>/assign/', ConversationAssignController.as_view(), name='conversation-assign'),
+    path('conversations/<str:pk>/internal/', ConversationInternalController.as_view(), name='conversation-internal'),
     path('conversations/<str:pk>/notes/', ConversationNoteController.as_view(), name='conversation-notes'),
     path('conversations/<str:pk>/calls/', ConversationCallController.as_view(), name='conversation-calls'),
     

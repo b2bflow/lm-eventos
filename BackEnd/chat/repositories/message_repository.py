@@ -49,10 +49,15 @@ class MessageRepository(IMessageRepository):
         
         try:
             msg.save()
-            return msg
         except Exception as e:
             logger.error(f"[MessageRepository] Erro ao criar mensagem: {e}")
             raise e
+
+        # Nota e evento internos não são conversa com o cliente: não mudam a hora nem a ordem da lista.
+        if direction != 'INTERNAL':
+            conversation.last_message_at = msg.created_at
+            ConversationModel.objects(id=conversation.id).update(set__last_message_at=msg.created_at)
+        return msg
 
     @staticmethod
     def get_recent_context(conversation_id: str, limit: int = 100) -> list:

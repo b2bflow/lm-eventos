@@ -43,28 +43,45 @@ class ConversationViewSet(ModelViewSet):
     def list(self, request, *args, **kwargs) -> Response:
         """Lista paginada por cursor, da conversa mais recente para a mais antiga.
 
+        Ordem: hora da última mensagem (abrir ou ler a conversa não a leva para o topo).
         Query: page_size (padrão 20, máx. 50), cursor, search (nome ou telefone), tag, needs_attention, assignee, ai_qualified,
-        status (OPEN ou CLOSED). Resposta: {results, next_cursor, has_more, total}.
+        status (OPEN ou CLOSED), internal (1 = só os Chats internos). As abertas sem busca deixam os Chats internos
+        de fora e trazem `internal` {total, unread} para a linha "Chats internos" da lista.
+        Resposta: {results, next_cursor, has_more, total[, internal]}.
         """
         try:
             params = request.query_params
             page_size = parse_page_size(params.get('page_size'), default=20, maximum=50)
+            ConversationRepository.fill_missing_last_message_at()
+            search = params.get('search')
+            conversation_status = params.get('status') or None
+            internal = _parse_bool(params.get('internal'))
+            # Como no Arquivadas do WhatsApp: a busca acha os internos também; a lista de abertas não.
+            main_open_list = conversation_status == 'OPEN' and not internal and not search
             queryset = ConversationRepository.filtered_queryset(
-                search=params.get('search'),
+                search=search,
                 tag=params.get('tag') or None,
                 needs_attention=_parse_bool(params.get('needs_attention')),
-                status=params.get('status') or None,
+                status=conversation_status,
                 assignee=params.get('assignee') or None,
                 ai_qualified=_parse_bool(params.get('ai_qualified')),
+                internal=True if internal else (False if main_open_list else None),
             )
-            items, next_cursor = paginate_desc(queryset, 'updated_at', params.get('cursor'), page_size)
+            items, next_cursor = paginate_desc(queryset, 'last_message_at', params.get('cursor'), page_size)
             serializer = self.get_serializer(items, many=True)
-            return Response({
+            data = {
                 "results": serializer.data,
                 "next_cursor": next_cursor,
                 "has_more": bool(next_cursor),
                 "total": queryset.count(),
-            })
+            }
+            if main_open_list:
+                internal_open = ConversationRepository.filtered_queryset(status='OPEN', internal=True)
+                data["internal"] = {
+                    "total": internal_open.count(),
+                    "unread": internal_open.filter(unread_count__gt=0).count(),
+                }
+            return Response(data)
         except ValueError as ve:
             return Response({"detail": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
@@ -381,6 +398,17 @@ class ConversationModeController(APIView):
     @_team_action
     def post(self, request, pk):
         conversation = ChatContainer.get_handover_service().set_mode(pk, request.data.get('mode'), user=request.user)
+        return Response(ConversationSerializer(conversation).data)
+
+
+class ConversationInternalController(APIView):
+    """POST /chat/conversations/<id>/internal/ {internal: true | false}: põe ou tira dos Chats internos."""
+    permission_classes = [IsAuthenticated]
+
+    @_team_action
+    def post(self, request, pk):
+        from chat.services.internal_chat_service import InternalChatService
+        conversation = InternalChatService().set_internal(pk, _parse_bool(request.data.get('internal')), user=request.user)
         return Response(ConversationSerializer(conversation).data)
 
 

@@ -48,7 +48,7 @@ def test_conversation_moving_to_top_does_not_repeat_or_skip(api_client):
 
     # Uma conversa da primeira página recebe mensagem e vai para o topo
     moved = ConversationModel.objects.get(id=first_ids[5])
-    moved.updated_at = BASE + timedelta(days=1)
+    moved.last_message_at = BASE + timedelta(days=1)
     moved.save()
 
     rest, cursor = [], first["next_cursor"]

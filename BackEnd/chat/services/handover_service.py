@@ -57,6 +57,8 @@ class ConversationHandoverService:
         customer = conversation.customer
         if mode == 'AGENTE' and customer and customer.human_operator:
             raise ValueError("Contato de parceiro fica com a Erica: a IA não atende este contato.")
+        if mode == 'AGENTE' and customer and customer.internal_chat:
+            raise ValueError("Conversa dos Chats internos não tem IA. Tire dos Chats internos para a IA atender.")
         if conversation.tag == mode and conversation.ai_active == (mode == 'AGENTE'):
             return conversation
 

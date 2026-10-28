@@ -28,3 +28,6 @@ class ConversationModel(Document):
 
     created_at = DateTimeField(default=datetime.utcnow)  # UTC sem fuso, como o resto do banco
     updated_at = DateTimeField(default=datetime.utcnow)
+    # Hora da última mensagem trocada com o cliente (padrão WhatsApp): ordena a lista e aparece no card.
+    # Abrir, ler, atribuir ou trocar IA/operador não mexe nela; notas e eventos internos também não.
+    last_message_at = DateTimeField(null=True)

@@ -23,7 +23,8 @@ class ConversationSerializer(DocumentSerializer):
     operator_requests = serializers.CharField(source='quote.operator_requests', read_only=True, allow_null=True)
     next_step = serializers.CharField(source='quote.next_step', read_only=True, allow_null=True)
     
-    last_interaction_at = serializers.DateTimeField(source='updated_at', read_only=True)
+    # Hora do card na lista: a da última mensagem, como no WhatsApp (não a do último acesso).
+    last_interaction_at = serializers.SerializerMethodField()
     past_conversations = serializers.SerializerMethodField()
     past_quotes = serializers.SerializerMethodField()
     final_customer_status = serializers.CharField(read_only=True)
@@ -35,7 +36,8 @@ class ConversationSerializer(DocumentSerializer):
     customer_funnel_entered_at = serializers.DateTimeField(source='customer.funnel_entered_at', read_only=True,
                                                            allow_null=True, default=None)
     handover_by_name = serializers.SerializerMethodField()
-    
+    customer_internal_chat = serializers.BooleanField(source='customer.internal_chat', read_only=True, default=False)
+
 
     class Meta:
         model = ConversationModel
@@ -50,8 +52,12 @@ class ConversationSerializer(DocumentSerializer):
             'final_customer_status', 'past_conversations', 'past_quotes',
             'needs_attention', 'blocked_until', 'assignee', 'handover_by', 'handover_by_name', 'handover_at',
             'customer_product', 'customer_human_operator', 'customer_ai_qualified_at',
-            'customer_funnel_entered_at',
+            'customer_funnel_entered_at', 'customer_internal_chat',
         ]
+
+    def get_last_interaction_at(self, obj):
+        value = getattr(obj, 'last_message_at', None) or getattr(obj, 'updated_at', None)
+        return serializers.DateTimeField().to_representation(value) if value else None
 
     def get_handover_by_name(self, obj):
         """Nome de quem retomou a IA ou assumiu a conversa por último."""

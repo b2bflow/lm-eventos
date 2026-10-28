@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2, BadgeCheck, UserCheck } from "lucide-react";
+import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2, BadgeCheck, UserCheck, Archive, ArrowLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_SOLID, OWNER_LABELS, conversationResponsible, resolveStage } from "@/constants/mappings";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import type { ConversationFilters } from "@/hooks/useConversations";
+import type { ConversationFilters, ConversationTab } from "@/hooks/useConversations";
 
 const ALL = "__all__";
 
@@ -23,6 +23,8 @@ interface Conversation {
   assignee?: string | null;
   /** Lead qualificado pela IA (Customer.ai_qualified_at). */
   aiQualified?: boolean;
+  /** Conversa dos Chats internos (sem IA): no lugar das etiquetas de IA e etapa aparece "Interno". */
+  internal?: boolean;
 }
 
 export type ConversationListItem = Conversation;
@@ -32,8 +34,10 @@ interface ConversationListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onToggleTag?: (id: string, currentTag: "AGENTE" | "OPERADOR") => void;
-  activeTab: "OPEN" | "CLOSED";
-  onTabChange: (tab: "OPEN" | "CLOSED") => void;
+  activeTab: ConversationTab;
+  onTabChange: (tab: ConversationTab) => void;
+  /** Pasta "Chats internos" no topo das abertas (como o Arquivadas do WhatsApp). */
+  internalFolder?: { total: number; unread: number };
   search: string;
   onSearchChange: (value: string) => void;
   onLoadMore: () => void;
@@ -52,9 +56,11 @@ const getStatusDisplay = (status: string | undefined) => {
 
 export function ConversationList({
   conversations, selectedId, onSelect, onToggleTag,
-  activeTab, onTabChange, search, onSearchChange,
+  activeTab, onTabChange, search, onSearchChange, internalFolder,
   onLoadMore, hasMore, isLoading, isLoadingMore, filters = {}, onFiltersChange,
 }: ConversationListProps) {
+  const inInternalFolder = activeTab === "INTERNAL";
+  const showInternalFolderRow = activeTab === "OPEN" && !search.trim() && !!internalFolder?.total;
   // A aba e a busca são filtradas no backend; a lista já chega filtrada e paginada.
   const filteredConversations = conversations;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -76,11 +82,27 @@ export function ConversationList({
   return (
     <div className="h-full flex flex-col bg-background/50 backdrop-blur-xl border-r border-border/50">
       <div className="p-5 border-b border-border/50 flex-shrink-0">
+        {inInternalFolder ? (
+          <div>
+            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+              <button type="button" onClick={() => onTabChange("OPEN")} aria-label="Voltar para as conversas"
+                className="-ml-1 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              Chats internos
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Conversas sem IA e sem orçamento, que a equipe acompanha pelo celular.
+            </p>
+          </div>
+        ) : (
         <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-primary" />
           Conversas
         </h2>
+        )}
 
+        {!inInternalFolder && (
         <div className="flex gap-2 mt-4 p-1 bg-secondary/50 rounded-lg">
           <button
             onClick={() => onTabChange("OPEN")}
@@ -101,6 +123,7 @@ export function ConversationList({
             Fechadas
           </button>
         </div>
+        )}
 
         <div className="relative mt-3">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -149,6 +172,21 @@ export function ConversationList({
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2">
+        {showInternalFolderRow && (
+          <button type="button" onClick={() => onTabChange("INTERNAL")}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-transparent bg-card/50 hover:bg-card hover:border-border/50 transition-colors text-left">
+            <span className="w-10 flex justify-center shrink-0"><Archive className="w-5 h-5 text-muted-foreground" /></span>
+            <span className="flex-1 text-sm font-semibold text-foreground">Chats internos</span>
+            {internalFolder!.unread > 0 ? (
+              <span className="min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center"
+                title="Conversas internas com mensagem nova">
+                {internalFolder!.unread}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">{internalFolder!.total}</span>
+            )}
+          </button>
+        )}
         {isLoading ? (
           <div className="flex justify-center py-10 text-muted-foreground">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -156,7 +194,9 @@ export function ConversationList({
         ) : filteredConversations.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             <CheckCircle2 className="w-10 h-10 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">Nenhuma conversa encontrada</p>
+            <p className="text-sm">{inInternalFolder && !search.trim()
+              ? "Nenhum chat interno. Use o botão \"Chat interno\" no topo da conversa para mover uma para cá."
+              : "Nenhuma conversa encontrada"}</p>
           </div>
         ) : (
           filteredConversations.map((conv) => {
@@ -210,7 +250,13 @@ export function ConversationList({
                     {/* LINHA INFERIOR: Tags (Esquerda) e Horário (Direita) */}
                     <div className="flex items-end justify-between gap-2 mt-auto">
                       <div className="flex flex-wrap items-center gap-2">
-                        {!conv.finished && (
+                        {!conv.finished && conv.internal && (
+                          <span className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                            title="Chat interno: sem IA, fora da lista principal">
+                            <Archive className="w-3 h-3" />Interno
+                          </span>
+                        )}
+                        {!conv.finished && !conv.internal && (
                           <>
                             <button
                               onClick={(e) => {
