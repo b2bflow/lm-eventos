@@ -63,8 +63,8 @@ class DashboardRepository:
                 daily_stats[day_str]["projected_revenue"] += revenue_reference
 
                 # Chaves antigas mantidas para o dashboard atual:
-                # análise = novo + qualificado; orçamento = proposta enviada; negociando = proposta aceita.
-                if stage in (domain.NEW_LEAD, domain.QUALIFIED):
+                # análise = novo + qualificado + reunião agendada; orçamento = proposta enviada; negociando = proposta aceita.
+                if stage in (domain.NEW_LEAD, domain.QUALIFIED, domain.MEETING_SCHEDULED):
                     summary["analysis"] += 1
                 elif stage == domain.PROPOSAL_SENT:
                     summary["budget"] += 1

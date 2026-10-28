@@ -1,7 +1,9 @@
-import { CalendarDays, Link2, Loader2, RefreshCw, Unplug, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CalendarDays, Link2, Loader2, RefreshCw, Unplug, Users, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -142,6 +144,7 @@ export function SystemSettings() {
       </div>
 
       <AiSwitch />
+      <AttendanceGroup />
     </div>
   );
 }
@@ -178,6 +181,80 @@ function AiSwitch() {
         <Switch id="ai-active" checked={config?.ai_active ?? false} disabled={!config || toggle.isPending}
           onCheckedChange={(value) => toggle.mutate(value)} />
       </div>
+    </div>
+  );
+}
+
+interface WhatsAppGroup {
+  id: string;
+  name: string;
+}
+
+/** Grupo de atendimento (Marcelo e Erica): recebe um aviso a cada lead qualificado pela IA. */
+function AttendanceGroup() {
+  const queryClient = useQueryClient();
+  const { data: settings } = useQuery({
+    queryKey: ["lm-settings"],
+    queryFn: async () => (await api.get<{ ai_leads_group?: string }>("/crm/settings/")).data,
+  });
+  const [value, setValue] = useState("");
+  const [groups, setGroups] = useState<WhatsAppGroup[] | null>(null);
+  useEffect(() => setValue(settings?.ai_leads_group ?? ""), [settings?.ai_leads_group]);
+
+  const search = useMutation({
+    mutationFn: async () => (await api.get<WhatsAppGroup[]>("/crm/settings/whatsapp-groups/")).data,
+    onSuccess: (data) => {
+      setGroups(data);
+      if (!data.length) toast.info("O número da LM não está em nenhum grupo.");
+    },
+    onError: (error) => toast.error(errorDetail(error, "Não foi possível buscar os grupos.")),
+  });
+  const save = useMutation({
+    mutationFn: async (group: string) => (await api.patch("/crm/settings/", { ai_leads_group: group })).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lm-settings"] });
+      toast.success(value ? "Grupo de atendimento salvo." : "Aviso no grupo desligado.");
+    },
+    onError: (error) => toast.error(errorDetail(error, "Não foi possível salvar o grupo.")),
+  });
+  const current = groups?.find((g) => g.id === value);
+  const changed = value.trim() !== (settings?.ai_leads_group ?? "");
+
+  return (
+    <div className="p-6 rounded-2xl border border-border/50 bg-background/40 backdrop-blur-xl shadow-sm space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <Users className="w-4 h-4 text-primary" /> Grupo de atendimento
+        </h3>
+        <p className="text-sm text-muted-foreground max-w-xl">
+          A cada lead qualificado pela IA, o grupo recebe um resumo com nome, telefone, evento e o link do card.
+          Vazio, o aviso não é enviado.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Id do grupo (ex.: 1203...-group)"
+          className="max-w-sm bg-secondary/30 border-border/50" aria-label="Id do grupo de atendimento" />
+        <Button variant="outline" onClick={() => search.mutate()} disabled={search.isPending} className="gap-2">
+          {search.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          Buscar grupos
+        </Button>
+        <Button onClick={() => save.mutate(value.trim())} disabled={!changed || save.isPending}>Salvar</Button>
+      </div>
+      {current && <p className="text-xs text-muted-foreground">Selecionado: {current.name}</p>}
+      {groups && groups.length > 0 && (
+        <ul className="grid gap-1 sm:grid-cols-2">
+          {groups.map((g) => (
+            <li key={g.id}>
+              <button type="button" onClick={() => setValue(g.id)}
+                className={cn("w-full text-left text-sm rounded-lg border px-3 py-2 hover:bg-secondary/50",
+                  g.id === value ? "border-primary bg-primary/5" : "border-border/50")}>
+                <span className="font-medium">{g.name}</span>
+                <span className="block text-xs text-muted-foreground truncate">{g.id}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

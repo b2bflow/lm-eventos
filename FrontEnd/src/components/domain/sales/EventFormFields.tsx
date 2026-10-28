@@ -33,6 +33,15 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
   const soundSystem = form.guests > 0 && catalog?.sound_tiers
     ? catalog.sound_tiers.find(([limit]) => limit === null || form.guests <= limit)?.[1]
     : undefined;
+  // Conjuntos de som: o PDF mostra as peças, não o nome do conjunto
+  const pieceName = (code: string) => (code === "som_mic_sem_fio" ? "Microfone sem fio" : itemName(code));
+  const pieces = (code?: string) =>
+    (code && catalog?.sound_sets?.[code]?.map((p) => `${p.qty} ${pieceName(p.code)}`).join(" + ")) || "";
+  const ceremonyDefault = catalog?.sound_sets?.som_cerimonia ?? [];
+  const ceremonyQty = (code: string) =>
+    form.ceremony_items?.[code] ?? ceremonyDefault.find((p) => p.code === code)?.qty ?? 0;
+  const setCeremonyQty = (code: string, value: number) => set("ceremony_items",
+    { ...Object.fromEntries(ceremonyDefault.map((p) => [p.code, ceremonyQty(p.code)])), [code]: value });
 
   const applyBasicPackage = () => {
     const pkg = catalog?.social_basic_package;
@@ -90,7 +99,8 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
         enabled={form.sound_enabled} onToggle={(v) => set("sound_enabled", v)}>
         <label className="flex items-center gap-2 text-sm mb-3">
           <Checkbox checked disabled />
-          {soundSystem ? itemName(soundSystem) : "Sistema de som"} <span className="text-muted-foreground">(1 microfone sem fio incluso)</span>
+          {soundSystem ? itemName(soundSystem) : "Sistema de som"}{" "}
+          <span className="text-muted-foreground">({pieces(soundSystem) || "1 microfone sem fio incluso"})</span>
         </label>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div className="space-y-1">
@@ -112,6 +122,19 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
               onChange={(v) => set("ceremony_sound", v)} />
           )}
         </div>
+        {social && form.ceremony_sound && ceremonyDefault.length > 0 && (
+          <div className="mt-3 rounded-lg border border-border/60 p-3 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Peças do som de cerimônia (o PDF mostra as peças, não o nome do conjunto)
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {ceremonyDefault.map((p) => (
+                <NumberField key={p.code} label={pieceName(p.code)} value={ceremonyQty(p.code)}
+                  onChange={(v) => setCeremonyQty(p.code, v)} />
+              ))}
+            </div>
+          </div>
+        )}
       </ToggleSection>
 
       <ToggleSection id={id("palco")} title="Palco e vídeo" enabled={form.stage_video_enabled}

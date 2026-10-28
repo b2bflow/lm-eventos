@@ -146,3 +146,19 @@ class LmSettingsController(APIView):
             return Response(settings.to_dict())
         except Exception as e:
             return Response({"detail": f"Configuração inválida: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class WhatsAppGroupsController(APIView):
+    """GET /crm/settings/whatsapp-groups/ (só admin): grupos do número da LM na Z-API, para escolher o
+    grupo de atendimento sem precisar caçar o id no log."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not has_role(request.user):
+            return Response({"detail": "Só a Erica (admin) vê os grupos."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            return Response(CrmContainer.get_notification_service().chat.list_groups())
+        except Exception as e:
+            logger.error(f"[WhatsAppGroups] Falha ao listar grupos na Z-API: {e}")
+            return Response({"detail": "Não foi possível buscar os grupos na Z-API."},
+                            status=status.HTTP_502_BAD_GATEWAY)

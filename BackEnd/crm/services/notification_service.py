@@ -59,3 +59,30 @@ class NotificationService:
     def notify_lucia(self, text: str) -> bool:
         return self._send(LmSettings.get().lucia_phone, text, "lucia")
 
+    def notify_ai_lead(self, customer) -> bool:
+        """Aviso no grupo de atendimento: a IA qualificou um lead (reunião com o Marcelo, 28/10)."""
+        return self._send(LmSettings.get().ai_leads_group, ai_lead_text(customer), "grupo_atendimento")
+
+
+def _fmt_day(value) -> str | None:
+    return value.strftime("%d/%m/%Y") if hasattr(value, "strftime") else (str(value) if value else None)
+
+
+def ai_lead_text(customer) -> str:
+    """Resumo do lead para o grupo (uma mensagem, uma informação por linha, sem emoji)."""
+    from crm import domain
+    get = (lambda key: customer.get(key)) if isinstance(customer, dict) else (lambda key: getattr(customer, key, None))
+    rows = [
+        ("Nome", get("name")),
+        ("Telefone", format_phone(get("phone"))),
+        ("Produto", domain.PRODUCTS.get(get("product") or "", None)),
+        ("Evento", get("celebration_type") or get("event_title")),
+        ("Data do evento", _fmt_day(get("event_date"))),
+        ("Convidados", get("guest_count") or None),
+        ("Local", get("venue")),
+        ("Próximo passo", get("next_step")),
+    ]
+    lines = ["Novo lead qualificado pela IA"]
+    lines += [f"{label}: {value}" for label, value in rows if value not in (None, "")]
+    lines.append(f"Card: {card_link(str(get('id')))}")
+    return "\n".join(lines)

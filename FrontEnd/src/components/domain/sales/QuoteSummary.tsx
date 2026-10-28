@@ -94,6 +94,11 @@ export function QuoteSummary({ result, loading, error, editing }: {
                     <span className="min-w-0">
                       {qty(line.qty)} {line.unit} · {line.name}
                       {line.note && <span className="text-xs text-muted-foreground"> ({line.note})</span>}
+                      {line.components && (
+                        <span className="block text-xs text-muted-foreground">
+                          No PDF: {line.components.map((c) => `${qty(c.qty)} ${c.name}`).join(", ")}
+                        </span>
+                      )}
                       {line.shortage && (
                         <span className="flex items-center gap-1 text-xs font-semibold">
                           <AlertTriangle className="w-3 h-3" /> Estoque insuficiente: disponível {line.available}

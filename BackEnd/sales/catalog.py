@@ -82,7 +82,7 @@ CATALOG = [
     _item("int_escada_aluminio", "Acessórios", "Escada de alumínio", "unidade", None, 2, rentable=False),
     _item("int_marreta", "Acessórios", "Marreta", "unidade", None, 3, rentable=False),
     # --- Som ----------------------------------------------------------------------------
-    _item("som_ate_150", "Som", "Som até 150 pessoas (4 caixas + 1 microfone sem fio)", "sistema", 1300.0, block="som"),
+    _item("som_ate_150", "Som", "Som até 150 pessoas", "sistema", 1300.0, block="som"),
     _item("som_150_200", "Som", "Som de 150 a 200 pessoas", "sistema", 2500.0, block="som"),
     _item("som_200_500", "Som", "Som de 200 a 500 pessoas (com par de sub)", "sistema", 3500.0, block="som"),
     _item("som_500_1500", "Som", "Som de 500 a 1.500 pessoas (com sub)", "sistema", 6000.0, block="som"),
@@ -92,8 +92,13 @@ CATALOG = [
     _item("som_backline", "Som", "Backline (banda)", "conjunto", 1800.0, block="som"),
     _item("som_mic_sem_fio", "Som", "Microfone sem fio adicional", "unidade", 150.0, block="som"),
     _item("som_mesa_digital", "Som", "Mesa de canais digital", "unidade", 150.0, block="som"),
-    _item("som_cerimonia", "Som", "Som de cerimônia (4 caixas ativas, pedestais, mesa e microfone)", "sistema", 1300.0,
+    _item("som_cerimonia", "Som", "Som de cerimônia", "sistema", 1300.0,
           block="som", note="Social"),
+    # Peças dos conjuntos de som (SOUND_SETS): é o que aparece no estoque e no PDF da proposta
+    _item("som_caixa_ativa", "Som", "Caixa de som ativa", "unidade", None, block="som",
+          note="Preço avulso a definir"),
+    _item("som_pedestal", "Som", "Pedestal de microfone", "unidade", None, block="som",
+          note="Preço avulso a definir"),
     # --- Iluminação ---------------------------------------------------------------------
     _item("luz_moving_beam", "Iluminação", "Moving beam (Move 9R)", "unidade", 150.0, block="iluminacao"),
     _item("luz_par_led", "Iluminação", "Par LED", "unidade", 50.0, block="iluminacao"),
@@ -164,6 +169,24 @@ SOUND_TIERS = [
 ]
 
 
+# Conjuntos de som (reunião com o Marcelo, 28/10): o preço é do conjunto (tabela de valores), mas o
+# estoque conta e o PDF mostra as peças, nunca o nome do conjunto ("4 caixas de som", não "Som até 150
+# pessoas"). Editável em LmSettings.price_table["sound_sets"]. Faixas sem composição aparecem pelo nome.
+SOUND_SETS = {
+    "som_ate_150": [{"code": "som_caixa_ativa", "qty": 4}, {"code": "som_mic_sem_fio", "qty": 1}],
+    "som_cerimonia": [
+        {"code": "som_caixa_ativa", "qty": 4}, {"code": "som_pedestal", "qty": 2},
+        {"code": "som_mesa_digital", "qty": 1}, {"code": "som_mic_sem_fio", "qty": 1},
+    ],
+}
+
+# Conjuntos e faixas de som são "títulos": têm preço (aba Valores), mas não são itens de estoque
+SOUND_SET_CODES = (*(code for _, code in SOUND_TIERS), "som_cerimonia")
+
+# Nome da peça dentro de um conjunto, quando o do catálogo é de venda avulsa
+COMPONENT_NAMES = {"som_mic_sem_fio": "Microfone sem fio"}
+
+
 # Estruturas montadas pela tabela Q30 (seção 5.2: "monte como kit de peças"). Editável em
 # LmSettings.price_table["kits"].
 STRUCTURE_KITS = {
@@ -204,6 +227,7 @@ def default_price_table() -> dict:
         "operational_costs": {k: v["price"] for k, v in OPERATIONAL_COSTS.items()},
         "sound_tiers": [[limit, code] for limit, code in SOUND_TIERS],
         "kits": {k: {"label": v["label"], "pieces": [dict(p) for p in v["pieces"]]} for k, v in STRUCTURE_KITS.items()},
+        "sound_sets": {k: [dict(p) for p in v] for k, v in SOUND_SETS.items()},
     }
 
 
@@ -219,4 +243,5 @@ def merge_price_table(overrides: dict | None) -> dict:
     if overrides.get("sound_tiers"):
         table["sound_tiers"] = overrides["sound_tiers"]
     table["kits"].update(overrides.get("kits") or {})
+    table["sound_sets"].update(overrides.get("sound_sets") or {})
     return table

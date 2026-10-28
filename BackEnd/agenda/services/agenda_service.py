@@ -268,6 +268,7 @@ class AgendaService:
         if customer:
             if event_type in FLAG_BY_TYPE:
                 CrmContainer.get_pipeline_service().set_flags(str(customer.id), add=[FLAG_BY_TYPE[event_type]], user=user)
+                self._move_to_meeting_stage(customer, user)
             ServiceLogRepository.create_log(
                 customer=customer, operator_id=_operator(user), action_type="MEETING_SCHEDULED",
                 description=f"{label} agendada para {_when(start)}." + (" Repete." if rule else "")
@@ -277,6 +278,19 @@ class AgendaService:
             if notify_customer and event_type in ("reuniao_online", "visita_tecnica"):
                 self._notify_customer(event, customer)
         return self._dict(event, warnings)
+
+    @staticmethod
+    def _move_to_meeting_stage(customer: Customer, user):
+        """Reunião ou visita marcada leva o card para "Reunião agendada" (e para o funil, se ainda não
+        estava). Lead que já está mais adiante (proposta enviada em diante) não volta de etapa."""
+        from crm import domain
+        from crm.services.funnel_entry import enter_funnel
+        customer.reload()
+        if customer.stage not in (domain.NEW_LEAD, domain.QUALIFIED, domain.LOST):
+            return
+        enter_funnel(customer)
+        CrmContainer.get_pipeline_service().change_stage(str(customer.id), domain.MEETING_SCHEDULED, user=user,
+                                                         system=True)
 
     def _notify_customer(self, event: CalendarEvent, customer: Customer, rescheduled: bool = False):
         name = (customer.name or "").split(" ")[0]

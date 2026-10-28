@@ -58,6 +58,7 @@ class CatalogController(APIView):
             "approval_ceiling": cfg.approval_ceiling,
             "proposal_validity_days": cfg.proposal_validity_days,
             "sound_tiers": table["sound_tiers"],
+            "sound_sets": table["sound_sets"],
             "kits": [{"code": k, "label": v["label"], "pieces": v["pieces"]} for k, v in table["kits"].items()],
             "social_basic_package": SOCIAL_BASIC_PACKAGE,
             "social_max_guests": cfg.social_max_guests,

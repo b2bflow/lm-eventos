@@ -3,6 +3,7 @@ from ai_agents.tools.continuar_tool import ContinuarTool
 from ai_agents.tools.deixar_tool import DeixarTool
 from ai_agents.tools.humano_tool import HumanoTool
 from ai_agents.tools.summary_tool import SummaryTool
+from ai_agents.tools.meeting_slots_tool import MeetingSlotsTool
 from ai_agents.interfaces.tool_interface import ITool
 
 from functools import partial
@@ -39,6 +40,14 @@ class ToolContainer:
 
             "resumo": partial(
                 SummaryTool,
+                ai_client=self._clients.ai(),
+                chat_client=self._clients.chat(),
+                customer_repository=self._repositories.customer,
+                conversation_repository=self._repositories.conversation,
+            ),
+
+            "oferecer_horarios": partial(
+                MeetingSlotsTool,
                 ai_client=self._clients.ai(),
                 chat_client=self._clients.chat(),
                 customer_repository=self._repositories.customer,

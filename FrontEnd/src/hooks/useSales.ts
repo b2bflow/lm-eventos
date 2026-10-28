@@ -24,6 +24,8 @@ export interface Catalog {
   proposal_validity_days: number;
   kits: { code: string; label: string; pieces: { code: string; qty: number }[] }[];
   sound_tiers?: [number | null, string][];
+  /** Peças de cada conjunto de som ({conjunto: [{code, qty}]}); o PDF mostra as peças. */
+  sound_sets?: Record<string, { code: string; qty: number }[]>;
   social_basic_package: {
     structure: string;
     led_m2: number;
@@ -155,7 +157,8 @@ export interface PriceRow {
 export interface PriceSettings {
   metro_price: (PriceRow & { line: string })[];
   operational_costs: (PriceRow & { code: string; label: string })[];
-  sound_tiers: (PriceRow & { code: string; label: string; limit: number | null })[];
+  /** `components`: peças do conjunto como saem no PDF (null = faixa sem composição cadastrada). */
+  sound_tiers: (PriceRow & { code: string; label: string; limit: number | null; components?: string | null })[];
 }
 
 export type PriceSettingsPatch = Partial<Record<keyof PriceSettings, Record<string, number | null>>>;

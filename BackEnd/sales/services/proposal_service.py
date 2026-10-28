@@ -144,6 +144,9 @@ class ProposalService:
         codes |= {i["code"] for i in inputs.get("extra_items") or []}
         kit = (table.get("kits") or {}).get(inputs.get("structure") or "")
         codes |= {p["code"] for p in (kit or {}).get("pieces", [])}
+        # Peças dos conjuntos de som: o estoque é conferido peça por peça
+        for code in list(codes):
+            codes |= {p["code"] for p in (table.get("sound_sets") or {}).get(code, [])}
         return codes
 
     def calculate(self, mode: str, inputs: dict, customer: Customer | None = None,
@@ -301,7 +304,7 @@ class ProposalService:
         customer.updated_at = now
         customer.save()
         _mirror_value_to_quote(customer, proposal.total, sent_at=now)
-        if customer.stage in (domain.NEW_LEAD, domain.QUALIFIED, domain.LOST):
+        if customer.stage in (domain.NEW_LEAD, domain.QUALIFIED, domain.MEETING_SCHEDULED, domain.LOST):
             CrmContainer.get_pipeline_service().change_stage(str(customer.id), domain.PROPOSAL_SENT, user=user, system=True,
                                                              note=f"Proposta v{proposal.version} enviada.")
         ServiceLogRepository.create_log(

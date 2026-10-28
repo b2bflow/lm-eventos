@@ -36,6 +36,8 @@ export interface EventForm {
   // Social
   structure: string;
   ceremony_sound: boolean;
+  /** Peças do som de cerimônia escolhidas na calculadora; null = composição padrão. */
+  ceremony_items: Record<string, number> | null;
   dj: boolean;
   has_project: boolean;
   competitor_quote: boolean;
@@ -65,7 +67,7 @@ export const emptyEvent = (variant: EventVariant): EventForm => ({
   slide_passer: 0, digital_mixer: 0, pass_cable_m: 0,
   sound_enabled: false, stage_video_enabled: false, lighting_enabled: false, operational: ["carga", "descarga", "frete", "alimentacao"],
   manual_freight: 0, project_cost: 0, margin: 0, with_invoice: true, discount: 0, manual_adjustment: 0,
-  structure: "nenhuma", ceremony_sound: false, dj: variant === "social", has_project: false, competitor_quote: false,
+  structure: "nenhuma", ceremony_sound: false, ceremony_items: null, dj: variant === "social", has_project: false, competitor_quote: false,
 });
 
 export const emptySingleProduct = (): SingleProductForm => ({
@@ -80,7 +82,7 @@ const COMMON_EVENT_KEYS: (keyof EventForm)[] = [
 ];
 const VARIANT_KEYS: Record<EventVariant, (keyof EventForm)[]> = {
   corporativo: ["led_technician", "tp", "slide_passer", "digital_mixer", "pass_cable_m"],
-  social: ["structure", "ceremony_sound", "dj", "has_project", "competitor_quote"],
+  social: ["structure", "ceremony_sound", "ceremony_items", "dj", "has_project", "competitor_quote"],
 };
 
 const positive = (record: Record<string, number>) => Object.fromEntries(Object.entries(record).filter(([, q]) => q > 0));

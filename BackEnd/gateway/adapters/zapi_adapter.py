@@ -42,6 +42,23 @@ class ZAPIClient(IChat):
         value = (phone or "").strip()
         return value.endswith("@lid") and value[:-4].isdigit()
 
+    @staticmethod
+    def is_group(phone: str | None) -> bool:
+        """Id de grupo da Z-API (`<dígitos>-group`): aceito como destino de avisos da equipe."""
+        value = (phone or "").strip()
+        return value.endswith("-group") and value[:-6].replace("-", "").isdigit()
+
+    def list_groups(self) -> list[dict]:
+        """Grupos em que o número da LM está: [{"id": "1203...-group", "name": "..."}]."""
+        url = f"{self._resolve_url()}/groups"
+        headers = {**self._headers, "Client-Token": self._client_token}
+        response = requests.get(url, params={"page": 1, "pageSize": 200}, headers=headers, timeout=20)
+        response.raise_for_status()
+        data = response.json()
+        groups = data if isinstance(data, list) else data.get("groups") or []
+        return [{"id": g.get("phone"), "name": g.get("name") or g.get("phone")} for g in groups
+                if isinstance(g, dict) and self.is_group(g.get("phone"))]
+
     def __validate_cell_number(self, cell_number: str) -> bool:
         # Verifica se o celular não está vazio
         if not cell_number:
@@ -50,8 +67,8 @@ class ZAPIClient(IChat):
             )
             return False
 
-        # Contato com @lid: não é número, vai como veio (antes era recusado e a resposta se perdia)
-        if self.is_lid(cell_number):
+        # Contato com @lid ou grupo: não é número, vai como veio (antes era recusado e a resposta se perdia)
+        if self.is_lid(cell_number) or self.is_group(cell_number):
             return True
 
         # Trata o telefone
@@ -77,7 +94,7 @@ class ZAPIClient(IChat):
         return True
 
     def _resolve_phone(self, phone: str) -> str:
-        if self.is_lid(phone):
+        if self.is_lid(phone) or self.is_group(phone):
             return phone.strip()
         # Coloca o número o prefixo 9 caso o número tenha 8 dígitos
         if len(phone[4:]) == 8:

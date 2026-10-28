@@ -18,6 +18,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--reset-counts", action="store_true", help="Volta as quantidades para a contagem de 2025.")
+        parser.add_argument("--only-missing", action="store_true",
+                            help="Só cria os itens novos do catálogo; não mexe nos que já existem.")
 
     def handle(self, *args, **options):
         created = updated = 0
@@ -32,6 +34,8 @@ class Command(BaseCommand):
                 InventoryItem(code=entry["code"], qty_total=entry["qty"], approximate_count=True,
                               counted_at=COUNTED_AT if entry["qty"] is not None else None, **fields).save()
                 created += 1
+                continue
+            if options["only_missing"]:
                 continue
             for key, value in fields.items():
                 setattr(item, key, value)

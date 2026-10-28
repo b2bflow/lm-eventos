@@ -86,7 +86,9 @@ def test_items_endpoint_shows_total_reserved_and_available_by_date(api_client, s
 
     after = {i["code"]: i for i in api_client.get("/api/v1/inventory/items/", {"start": "2026-10-28", "end": "2026-10-29"}).data}
     assert after["q30_torre_5m"]["available"] == 113
-    assert after["som_ate_150"]["available"] is None
+    # Faixas e conjuntos de som não são itens de estoque: aparecem as peças
+    assert "som_ate_150" not in after and "som_cerimonia" not in after
+    assert after["som_caixa_ativa"]["available"] is None
 
 
 # --- Proposta --------------------------------------------------------------------------------

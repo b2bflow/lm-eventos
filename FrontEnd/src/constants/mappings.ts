@@ -3,6 +3,7 @@ import type { Tone } from "@/lib/tones";
 export const LEAD_STATUS_OPTIONS = [
   "NEW_LEAD",
   "QUALIFIED",
+  "MEETING_SCHEDULED",
   "PROPOSAL_SENT",
   "PROPOSAL_ACCEPTED",
   "CONTRACT_SIGNED",
@@ -14,6 +15,7 @@ export type LeadStage = (typeof LEAD_STATUS_OPTIONS)[number];
 export const LEAD_STATUS_LABELS: Record<string, string> = {
   NEW_LEAD: "Novo lead",
   QUALIFIED: "Lead qualificado",
+  MEETING_SCHEDULED: "Reunião agendada",
   PROPOSAL_SENT: "Proposta enviada",
   PROPOSAL_ACCEPTED: "Proposta aceita",
   CONTRACT_SIGNED: "Contrato assinado",
@@ -29,6 +31,7 @@ export const LEAD_STATUS_LABELS: Record<string, string> = {
 export const LEAD_STATUS_STYLES: Record<string, string> = {
   NEW_LEAD: "bg-slate-500/10 text-slate-600 border-slate-500/20",
   QUALIFIED: "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  MEETING_SCHEDULED: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
   PROPOSAL_SENT: "bg-amber-500/10 text-amber-600 border-amber-500/20",
   PROPOSAL_ACCEPTED: "bg-sky-500/10 text-sky-600 border-sky-500/20",
   CONTRACT_SIGNED: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
@@ -54,6 +57,7 @@ export const QUOTE_STATUS_OPTIONS = [
 export const LEAD_STATUS_SOLID: Record<string, string> = {
   NEW_LEAD: "bg-slate-600 text-white border-slate-500",
   QUALIFIED: "bg-violet-600 text-white border-violet-500",
+  MEETING_SCHEDULED: "bg-indigo-600 text-white border-indigo-500",
   PROPOSAL_SENT: "bg-amber-500 text-white border-amber-400",
   PROPOSAL_ACCEPTED: "bg-sky-500 text-white border-sky-400",
   CONTRACT_SIGNED: "bg-emerald-500 text-white border-emerald-400",
@@ -190,6 +194,7 @@ export const CHAT_HANDOVER_MODES = {
 export const LEAD_STAGE_TONES: Record<string, Tone> = {
   NEW_LEAD: "neutral",
   QUALIFIED: "ai",
+  MEETING_SCHEDULED: "info",
   PROPOSAL_SENT: "warning",
   PROPOSAL_ACCEPTED: "info",
   CONTRACT_SIGNED: "success",

@@ -1,6 +1,7 @@
 from crm.models.lm_settings_model import LmSettings
 from sales.catalog import (
-    CATALOG_BY_CODE, METRO_PRICE, OPERATIONAL_COSTS, catalog_item_from_inventory, default_price_table, merge_price_table,
+    CATALOG_BY_CODE, COMPONENT_NAMES, METRO_PRICE, OPERATIONAL_COSTS, SOUND_SET_CODES, catalog_item_from_inventory,
+    default_price_table, merge_price_table,
 )
 from sales.services.quote_calculator import CalcConfig
 
@@ -57,10 +58,22 @@ def price_settings() -> dict:
         "sound_tiers": [
             {"limit": limit, "code": code, "label": CATALOG_BY_CODE[code]["name"],
              "price": table["items"].get(code, {}).get("sale_price"),
-             "default": defaults["items"][code]["sale_price"]}
-            for limit, code in table["sound_tiers"] if code in CATALOG_BY_CODE
+             "default": defaults["items"][code]["sale_price"], "components": _components_text(code, table)}
+            for limit, code in [*table["sound_tiers"], (None, "som_cerimonia")] if code in CATALOG_BY_CODE
         ],
     }
+
+
+def _components_text(code: str, table: dict) -> str | None:
+    """Peças do conjunto como saem no PDF ("4 Caixa de som ativa, 1 Microfone sem fio")."""
+    pieces = (table.get("sound_sets") or {}).get(code)
+    if not pieces:
+        return None
+    names = []
+    for piece in pieces:
+        item = CATALOG_BY_CODE.get(piece["code"]) or (table.get("extra_items") or {}).get(piece["code"]) or {}
+        names.append(f"{piece['qty']:g} {COMPONENT_NAMES.get(piece['code'], item.get('name', piece['code']))}")
+    return ", ".join(names)
 
 
 def _money(value, label: str):
@@ -85,7 +98,7 @@ def update_price_settings(data: dict) -> dict:
     sections = {
         "metro_price": set(METRO_PRICE),
         "operational_costs": set(OPERATIONAL_COSTS),
-        "sound_tiers": {code for _, code in default_price_table()["sound_tiers"]},
+        "sound_tiers": set(SOUND_SET_CODES),
     }
     for key, allowed in sections.items():
         values = data.get(key) or {}

@@ -15,7 +15,7 @@ type Draft = Record<Section, Record<string, string>>;
 
 const SECTIONS: { key: Section; title: string; hint: string }[] = [
   { key: "metro_price", title: "Preço do metro das torres", hint: "Torres cobradas por metro (a de 2,5 m conta como 3 m). Preço por peça editado no Estoque ganha deste." },
-  { key: "sound_tiers", title: "Faixas de som", hint: "Sistema de som pelo público do evento (caixas + 1 microfone sem fio)." },
+  { key: "sound_tiers", title: "Faixas de som", hint: "Preço de cada conjunto de som. No PDF o cliente vê as peças do conjunto, não o nome dele." },
   { key: "operational_costs", title: "Custos operacionais", hint: "Carga, montagem, frete, equipe e técnicos." },
 ];
 
@@ -138,6 +138,9 @@ export function PriceSettings({ only, onSaved }: { only?: Section[]; onSaved?: (
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">Padrão: {row.default == null ? "sem preço" : formatBRL(row.default)}</p>
+                  {"components" in row && row.components && (
+                    <p className="text-xs text-muted-foreground">No PDF: {row.components}</p>
+                  )}
                 </div>
               );
             })}

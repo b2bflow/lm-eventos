@@ -79,6 +79,8 @@ class LmSettings(Document):
     erica_phone = StringField(default="")
     sdr_phone = StringField(default="")
     lucia_phone = StringField(default="")
+    # Grupo de atendimento (Marcelo e Erica): aviso a cada lead qualificado pela IA. Id de grupo da Z-API.
+    ai_leads_group = StringField(default="")
     sdr_name = StringField(default="")
     dj_partner_contact = StringField(default="")
     job_link = StringField(default="")

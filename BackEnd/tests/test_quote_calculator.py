@@ -150,13 +150,13 @@ def test_counted_items_need_whole_quantities():
 
 
 def test_stock_check_adds_up_lines_of_the_same_item():
-    # 1 da banda + 2 extras = 3 pedidos; com 2 no estoque, cada linha sozinha passava
+    # 1 do som até 150 + 1 da banda + 2 extras = 4 pedidos; com 2 no estoque, cada linha sozinha passava
     result = calculate_corporativo(CorporateInput(guests=2, band="voz_violao", extra_mics=2), TABLE,
                                    availability={"som_mic_sem_fio": 2})
     assert "estoque_insuficiente" in lock_codes(result)
-    assert any("pedido 3, disponível 2" in (r["detail"] or "") for r in result.lock_reasons)
+    assert any("pedido 4, disponível 2" in (r["detail"] or "") for r in result.lock_reasons)
     ok = calculate_corporativo(CorporateInput(guests=2, band="voz_violao", extra_mics=2), TABLE,
-                               availability={"som_mic_sem_fio": 3})
+                               availability={"som_mic_sem_fio": 4})
     assert "estoque_insuficiente" not in lock_codes(ok)
 
 
@@ -208,7 +208,7 @@ def test_invalid_margin_rejected():
 
 def test_led_is_outsourced_warning_not_stock_lock():
     result = calculate_corporativo(CorporateInput(guests=100, led_m2=6), TABLE,
-                                   availability={"video_led_corporativo": 0, "som_ate_150": None})
+                                   availability={"video_led_corporativo": 0, "som_caixa_ativa": None})
     assert "estoque_insuficiente" not in lock_codes(result)
     assert any("fornecedor" in w for w in result.warnings)
     assert any("não contada" in w for w in result.warnings)

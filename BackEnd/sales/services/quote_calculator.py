@@ -19,7 +19,7 @@ from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from math import ceil
 
-from sales.catalog import CATALOG_BY_CODE, OPERATIONAL_COSTS
+from sales.catalog import CATALOG_BY_CODE, COMPONENT_NAMES, OPERATIONAL_COSTS
 from sales.formatting import format_brl
 
 CENT = Decimal("0.01")
@@ -117,7 +117,8 @@ class QuoteResult:
             return float(v) if isinstance(v, Decimal) else v
         return {
             "mode": self.mode,
-            "lines": [{k: f(v) for k, v in line.items()} for line in self.lines],
+            "lines": [{k: ([{ck: f(cv) for ck, cv in c.items()} for c in v] if k == "components" else f(v))
+                       for k, v in line.items()} for line in self.lines],
             "operational": [{k: f(v) for k, v in line.items()} for line in self.operational],
             "items_total": f(self.items_total), "costs_total": f(self.costs_total), "subtotal": f(self.subtotal),
             "margin_pct": f(self.margin_pct), "margin_value": f(self.margin_value),
@@ -193,19 +194,82 @@ def _add_line(result: QuoteResult, code: str, qty, table: dict, availability: di
     if availability is not None and code in availability:
         available = availability[code]
         line["available"] = available
-        # O mesmo item pode vir de mais de uma linha (banda + extras, kit + avulso): o estoque vale para a soma
-        requested = qty + sum((l["qty"] for l in result.lines if l["code"] == code), Decimal("0"))
-        warning = None
-        if not item["owned"]:
-            warning = f"{item['name']}: terceirizado, confirmar disponibilidade com o fornecedor."
-        elif available is None:
-            warning = f"{item['name']}: quantidade em estoque ainda não contada."
-        elif requested > available:
+        # O mesmo item pode vir de mais de uma linha (banda + extras, kit + avulso, peça de conjunto): o estoque
+        # vale para a soma
+        if _stock_check(result, item, qty + _requested(result, code), available):
             line["shortage"] = True
-            result.lock("estoque_insuficiente", f"{item['name']}: pedido {fmt_qty(requested)}, disponível {fmt_qty(available)}")
-        if warning and warning not in result.warnings:
-            result.warnings.append(warning)
     result.lines.append(line)
+
+
+def _requested(result: QuoteResult, code: str) -> Decimal:
+    """Quanto do item as linhas já pedem, somando as peças dos conjuntos de som."""
+    total = Decimal("0")
+    for line in result.lines:
+        if line["code"] == code:
+            total += line["qty"]
+        for component in line.get("components") or []:
+            if component["code"] == code:
+                total += component["qty"]
+    return total
+
+
+def _stock_check(result: QuoteResult, item: dict, requested: Decimal, available) -> bool:
+    """Aviso de terceirizado ou não contado; trava quando falta. Devolve True se faltou."""
+    warning = None
+    short = False
+    if not item["owned"]:
+        warning = f"{item['name']}: terceirizado, confirmar disponibilidade com o fornecedor."
+    elif available is None:
+        warning = f"{item['name']}: quantidade em estoque ainda não contada."
+    elif requested > available:
+        short = True
+        result.lock("estoque_insuficiente", f"{item['name']}: pedido {fmt_qty(requested)}, disponível {fmt_qty(available)}")
+    if warning and warning not in result.warnings:
+        result.warnings.append(warning)
+    return short
+
+
+def set_components(code: str, table: dict, custom: dict | None = None) -> list[dict] | None:
+    """Peças de um conjunto de som ({código: quantidade}); `custom` troca a composição só nesta proposta
+    (ex.: som de cerimônia sem mesa). None quando o item não é conjunto."""
+    pieces = (table.get("sound_sets") or {}).get(code)
+    if pieces is None:
+        return None
+    if custom is not None:
+        if not isinstance(custom, dict):
+            raise ValueError("Composição do conjunto inválida.")
+        allowed = {p["code"] for p in pieces}
+        unknown = [c for c in custom if c not in allowed]
+        if unknown:
+            raise ValueError(f"Peça fora do conjunto: {', '.join(unknown)}")
+        pieces = [{"code": p["code"], "qty": custom.get(p["code"], 0)} for p in pieces]
+    return [p for p in pieces if non_negative(p["qty"], "Quantidade da peça") > 0]
+
+
+def _add_set(result: QuoteResult, code: str, table: dict, availability: dict | None, note: str | None = None,
+             custom: dict | None = None):
+    """Conjunto de som: uma linha com o preço do conjunto e as peças em `components`. O estoque é
+    conferido peça por peça (o conjunto em si não é item de estoque)."""
+    pieces = set_components(code, table, custom)
+    if pieces is None:
+        return _add_line(result, code, 1, table, availability, note=note)
+    if custom is not None and not pieces:
+        return None
+    _add_line(result, code, 1, table, None, note=note)
+    line = result.lines[-1]
+    components = []
+    for piece in pieces:
+        item = catalog_item(piece["code"], table)
+        qty = non_negative(piece["qty"], f"Quantidade de {item['name']}")
+        component = {"code": piece["code"], "name": COMPONENT_NAMES.get(piece["code"], item["name"]), "qty": qty,
+                     "unit": item["billing_unit"]}
+        if availability is not None and piece["code"] in availability:
+            requested = qty + _requested(result, piece["code"])
+            if _stock_check(result, item, requested, availability[piece["code"]]):
+                line["shortage"] = True
+        components.append(component)
+    line["components"] = components
+    return line
 
 
 def rental_periods(pickup: date, return_date: date, base_days: int = 7) -> int:
@@ -321,7 +385,7 @@ def _add_sound(result: QuoteResult, guests: int, band: str, dance_floor: bool, t
                availability: dict | None):
     """Som pela faixa de público; sub duplo até 200 com banda ou pista; backline ou microfone pela banda."""
     sound = sound_system_for(guests, table)
-    _add_line(result, sound, 1, table, availability, note=f"{guests} pessoas")
+    _add_set(result, sound, table, availability, note=f"{guests} pessoas")
     if guests <= 200 and (band != "nenhuma" or dance_floor):
         _add_line(result, "som_sub_duplo", 1, table, availability, note="Banda ou pista até 200 pessoas")
     if band == "completa":
@@ -447,6 +511,7 @@ class SocialInput:
     led_structure: int = 0
     lights: dict = field(default_factory=dict)  # pontual, PAR 38, fumaça, piso de microlâmpadas...
     ceremony_sound: bool = False  # 4 caixas ativas, pedestais, mesa e microfone
+    ceremony_items: dict | None = None  # peças escolhidas na calculadora ({código: qtd}); None = padrão
     extra_mics: int = 0
     dj: bool = False
     sound_enabled: bool = True
@@ -489,7 +554,7 @@ def calculate_social(data: SocialInput, table: dict, config: CalcConfig | None =
     if data.sound_enabled:
         _add_sound(result, data.guests, data.band, data.dance_floor, table, config, availability)
         if data.ceremony_sound:
-            _add_line(result, "som_cerimonia", 1, table, availability)
+            _add_set(result, "som_cerimonia", table, availability, custom=data.ceremony_items)
         if data.extra_mics:
             _add_line(result, "som_mic_sem_fio", data.extra_mics, table, availability, note="Adicionais")
     if data.stage_video_enabled:

@@ -235,13 +235,14 @@ class LeadQualificationService:
 
         Fora do horário comercial, a ligação fica para as 9h do próximo dia útil.
         Contato de operador humano não gera tarefa (fica com a Erica).
-        Lead que já passou da qualificação (proposta enviada ou aceita, contrato assinado) não volta
+        Lead que já passou da qualificação (reunião agendada, proposta enviada ou aceita, contrato assinado) não volta
         de etapa: só as pendências e o "precisa da Erica" são atualizados, sem nova tarefa de ligação.
         """
         customer = _get(customer_id)
         now = now or datetime.utcnow()
         from crm.container import CrmContainer
-        if customer.stage in (domain.PROPOSAL_SENT, domain.PROPOSAL_ACCEPTED, domain.CONTRACT_SIGNED):
+        if customer.stage in (domain.MEETING_SCHEDULED, domain.PROPOSAL_SENT, domain.PROPOSAL_ACCEPTED,
+                              domain.CONTRACT_SIGNED):
             pending = list(customer.pending_fields or [])
             pending += [f for f in (pending_fields or []) if f not in pending]
             customer.pending_fields = pending

@@ -315,7 +315,8 @@ class PipelineService:
     # Etapas antigas ainda não migradas aparecem na coluna equivalente.
     _STAGE_SOURCES = {
         domain.NEW_LEAD: [domain.NEW_LEAD, 'ANALYSIS'],
-        domain.QUALIFIED: [domain.QUALIFIED],
+        domain.QUALIFIED: [domain.QUALIFIED, 'WAITING_BUDGET'],
+        domain.MEETING_SCHEDULED: [domain.MEETING_SCHEDULED],
         domain.PROPOSAL_SENT: [domain.PROPOSAL_SENT, 'NEGOTIATING'],
         domain.PROPOSAL_ACCEPTED: [domain.PROPOSAL_ACCEPTED],
         domain.CONTRACT_SIGNED: [domain.CONTRACT_SIGNED, 'WON'],
@@ -325,7 +326,7 @@ class PipelineService:
     def _stage_queryset(self, base, stage: str):
         sources = list(self._STAGE_SOURCES[stage])
         if stage == domain.QUALIFIED:
-            return base.filter(Q(customer_state_now=domain.QUALIFIED) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at=None)))
+            return base.filter(Q(customer_state_now__in=sources) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at=None)))
         if stage == domain.PROPOSAL_SENT:
             return base.filter(Q(customer_state_now__in=sources) | (Q(customer_state_now='BUDGET') & Q(proposal_sent_at__ne=None)))
         return base.filter(customer_state_now__in=sources)

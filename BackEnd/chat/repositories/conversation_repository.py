@@ -52,9 +52,8 @@ class ConversationRepository(IConversationRepository):
             # Ajuste aqui: Se 'customer' for string, usa ela direto. Se for objeto, pega o .id
             customer_id = customer if isinstance(customer, str) else str(getattr(customer, 'id', customer))
 
-            # Conversa nova atendida pela IA: o contato entra no funil (ver crm.services.funnel_entry)
-            from crm.services.funnel_entry import enter_funnel
-            enter_funnel(customer_id, only_eligible=True)
+            # Conversa nova não põe o contato no funil: ele entra quando a IA qualifica
+            # (ver crm.services.funnel_entry).
 
             logger.info(f"[ConversationRepository] Nova conversa iniciada para o Paciente {customer_id}. Tag definida como: {conv.tag}")
             return conv

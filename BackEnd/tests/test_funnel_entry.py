@@ -1,4 +1,4 @@
-"""Funil zerado: só entra quem a IA atende/qualifica ou quem tem lead aberto à mão."""
+"""Funil zerado: só entra quem a IA qualifica ou quem tem lead aberto à mão."""
 from datetime import datetime, timedelta
 from io import StringIO
 
@@ -18,22 +18,23 @@ CONVERSATIONS = "/api/v1/chat/conversations/"
 
 
 @pytest.mark.django_db
-def test_new_ai_conversation_puts_contact_in_funnel_but_not_partners():
+def test_new_ai_conversation_does_not_put_contact_in_funnel():
+    """Só entra no funil quem a IA qualifica (reunião com o Marcelo, 28/10): conversa nova não basta."""
     lead = Customer(name="Nova", phone="5562900000001").save()
-    partner = Customer(name="Parceiro", phone="5562900000002", human_operator=True).save()
-    supplier = Customer(name="Fornecedor", phone="5562900000003", contact_type="fornecedor").save()
-    for customer in (lead, partner, supplier):
-        ConversationRepository.create_conversation(customer)
-    for customer in (lead, partner, supplier):
-        customer.reload()
-    assert lead.funnel_entered_at is not None
-    assert partner.funnel_entered_at is None and supplier.funnel_entered_at is None
-
-    # Entrar de novo não muda a data
-    first = lead.funnel_entered_at
     ConversationRepository.create_conversation(lead)
     lead.reload()
-    assert lead.funnel_entered_at == first
+    assert lead.funnel_entered_at is None
+
+
+@pytest.mark.django_db
+def test_ai_qualification_skips_partners_and_suppliers():
+    partner = Customer(name="Parceiro", phone="5562900000002", human_operator=True).save()
+    supplier = Customer(name="Fornecedor", phone="5562900000003", contact_type="fornecedor").save()
+    for customer in (partner, supplier):
+        quote = Quote(customer=customer, status="ANALYSIS").save()
+        QuoteService().update_quote(str(quote.id), {"status": "WAITING_BUDGET"})
+        customer.reload()
+        assert customer.funnel_entered_at is None
 
 
 @pytest.mark.django_db

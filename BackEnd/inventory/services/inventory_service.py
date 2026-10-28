@@ -92,7 +92,9 @@ class InventoryService:
         from sales.services.pricing_service import effective_price_table
         from sales.services.quote_calculator import unit_price
 
-        queryset = InventoryItem.objects()
+        # Faixas e conjuntos de som não são itens: o estoque mostra as peças (caixas, microfones...)
+        from sales.catalog import SOUND_SET_CODES
+        queryset = InventoryItem.objects(code__nin=list(SOUND_SET_CODES))
         if not include_inactive:
             queryset = queryset.filter(active=True)
         if line:
@@ -128,6 +130,10 @@ class InventoryService:
         self.release(proposal_id)
         if not self.reservations_enabled():
             return []
+        # Conjunto de som reserva as peças (caixas, microfones...), não o conjunto
+        lines = [piece for line in lines for piece in (
+            [{"code": c["code"], "qty": float(c["qty"]) * float(line.get("qty") or 1)} for c in line["components"]]
+            if line.get("components") else [line])]
         items = {i.code: i for i in InventoryItem.objects(code__in=[l["code"] for l in lines])}
         created = []
         for line in lines:

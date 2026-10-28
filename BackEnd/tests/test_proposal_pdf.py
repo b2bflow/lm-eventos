@@ -71,8 +71,10 @@ def test_pdf_lists_band_microphone_apart_and_quantities_match_the_lines():
     items = [i for b in ctx["blocks"] for i in b["items"]]
     assert "01 Microfone sem fio (voz e violão): R$ 150,00" in items
     assert "02 Microfone sem fio adicional: R$ 150,00 cada = R$ 300,00" in items
+    # O som até 150 sai pelas peças, com o preço do conjunto
+    assert "04 Caixa de som ativa, 01 Microfone sem fio: R$ 1.300,00" in items
     # Cada quantidade do PDF bate com a soma das linhas do mesmo item
-    pdf_qty = sum(int(i.split()[0]) for i in items if "Microfone" in i)
+    pdf_qty = sum(int(i.split()[0]) for i in items if i.startswith(("01 Microfone", "02 Microfone")))
     assert pdf_qty == sum(l["qty"] for l in result["lines"] if l["code"] == "som_mic_sem_fio") == 3
 
 

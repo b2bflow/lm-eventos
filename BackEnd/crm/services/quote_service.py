@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 from typing import Any, Optional
 from bson import ObjectId
+from crm import domain
 from utils.logger import logger
 from crm.models.custumer_model import Customer
 from crm.models.quote_model import Quote
@@ -335,10 +336,13 @@ class QuoteService:
         if not updated:
             raise ValueError("Cotação não encontrada.")
 
-        customer_updates = {
-            "customer_state_now": updated["status"],
-            "updated_at": datetime.utcnow(),
-        }
+        ai_qualified = user is None and data.get("status") == "WAITING_BUDGET"
+        customer_updates = {"updated_at": datetime.utcnow()}
+        # O card guarda a etapa nova do funil (WAITING_BUDGET não aparece em nenhuma coluna). A
+        # qualificação da IA fica com o mark_ai_qualified, que não faz o lead voltar de etapa.
+        if not ai_qualified:
+            customer_updates["customer_state_now"] = domain.resolve_legacy_stage(
+                updated["status"], updated.get("proposal_sent_at"))
         if data.get("name") not in (None, ""):
             customer_updates["name"] = data.get("name")
 
@@ -349,7 +353,7 @@ class QuoteService:
 
         # A IA (summary_tool / visita_tecnica, sem usuário) só pede WAITING_BUDGET quando termina a
         # qualificação: lead "Qualificado pela IA" e no funil.
-        if user is None and data.get("status") == "WAITING_BUDGET":
+        if ai_qualified:
             from crm.services.funnel_entry import mark_ai_qualified
             mark_ai_qualified(updated["customer_id"])
 
@@ -371,7 +375,7 @@ class QuoteService:
 
         self.customer_repo.update(
             id=updated["customer_id"],
-            attributes={"customer_state_now": status_value, "updated_at": datetime.utcnow()},
+            attributes={"customer_state_now": domain.resolve_legacy_stage(status_value), "updated_at": datetime.utcnow()},
         )
         return updated
 

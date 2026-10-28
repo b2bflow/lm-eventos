@@ -204,6 +204,21 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
                                                                   "subtotal": 0.0, "unit_price": None})
             kit["subtotal"] += subtotal
             continue
+        # Conjunto de som: o cliente vê as peças ("04 Caixa de som ativa"), nunca o nome do conjunto. Com
+        # preço por item, as peças saem numa linha só com o preço do conjunto.
+        if line.get("components"):
+            if show_prices:
+                pieces = ", ".join(f"{_qty(c.get('qty'), c.get('unit') or 'unidade')} {c.get('name')}"
+                                   for c in line["components"])
+                blocks[block][f"set:{len(blocks[block])}"] = {"text": pieces, "qty": 1, "unit": "unidade",
+                                                              "subtotal": subtotal, "unit_price": None}
+                continue
+            for c in line["components"]:
+                entry = blocks[block].setdefault((c.get("code"), c.get("name"), None), {
+                    "qty": 0, "unit": c.get("unit") or "unidade", "name": c.get("name"), "subtotal": 0.0,
+                    "unit_price": None})
+                entry["qty"] += float(c.get("qty") or 0) * float(line.get("qty") or 1)
+            continue
         # Só soma linhas do mesmo item, com o mesmo nome e preço: o microfone da banda não some dentro dos
         # extras e "cada x quantidade" sempre bate com o subtotal
         name = LEGACY_LINE_NAMES.get((line.get("code"), line.get("note")), line.get("name"))
@@ -214,6 +229,8 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         entry["subtotal"] += subtotal
 
     def item_text(v: dict) -> str:
+        if v.get("text"):
+            return f"{v['text']}: {format_brl(v['subtotal'])}"
         text = f"{_qty(v['qty'], v['unit'])} {v['name']}"
         if not show_prices:
             return text

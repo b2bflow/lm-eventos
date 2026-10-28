@@ -142,6 +142,8 @@ export interface ProposalLine {
   /** Preço da tabela quando o preço da linha foi editado na proposta. */
   catalog_unit_price?: number | null;
   price_overridden?: boolean;
+  /** Conjunto de som: as peças que aparecem no PDF no lugar do nome do conjunto. */
+  components?: { code: string; name: string; qty: number; unit: string }[];
 }
 
 export interface Proposal {

@@ -9,6 +9,7 @@ from crm.controllers.contact_controller import (
 )
 from crm.controllers.funnel_controller import (
     FunnelBoardController, FunnelListController, FunnelMetaController, LmSettingsController, SdrTaskController,
+    WhatsAppGroupsController,
 )
 
 router = DefaultRouter()
@@ -24,6 +25,7 @@ urlpatterns = [
     path('tasks/', SdrTaskController.as_view(), name='sdr-tasks'),
     path('tasks/<str:task_id>/done/', SdrTaskController.as_view(), name='sdr-task-done'),
     path('settings/', LmSettingsController.as_view(), name='lm-settings'),
+    path('settings/whatsapp-groups/', WhatsAppGroupsController.as_view(), name='lm-whatsapp-groups'),
     path('contacts/', ContactListController.as_view(), name='contacts'),
     path('contacts/import-partners/', ContactImportController.as_view(), name='contacts-import'),
     path('contacts/<str:contact_id>/', ContactDetailController.as_view(), name='contact-detail'),
