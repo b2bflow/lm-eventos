@@ -87,6 +87,8 @@ class Command(BaseCommand):
             else:
                 messages.update(set__customer=real)
                 conversation.customer = real
+                # O orçamento era do contato @lid, que vai ser excluído: a conversa pega o do contato com número.
+                conversation.quote = None
                 conversation.save()
                 target = conversation
 

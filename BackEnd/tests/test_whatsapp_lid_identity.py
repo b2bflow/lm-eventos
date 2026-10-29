@@ -155,3 +155,23 @@ def test_fix_command_merges_lid_contact_and_removes_placeholders():
     assert [m.id for m in MessageModel.objects(content=PLACEHOLDER)] == [old_ad_click.id]
     real_conv.reload()
     assert real_conv.tag == "OPERADOR"
+
+
+@pytest.mark.django_db
+def test_conversation_list_survives_a_deleted_quote(api_client):
+    """Orçamento apagado com a conversa ainda apontando para ele: a lista não pode dar 500."""
+    from crm.models.quote_model import Quote
+    post(incoming("Oi", "IN1"))
+    conversation = ConversationModel.objects.get()
+    quote = Quote(customer=conversation.customer).save()
+    ConversationModel.objects(id=conversation.id).update(set__quote=quote)
+    Quote._get_collection().delete_one({"_id": quote.id})  # some sem o NULLIFY, como em produção
+
+    resp = api_client.get("/api/v1/chat/conversations/?page_size=20&status=OPEN")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["results"][0]["quote_id"] is None
+
+    # A mensagem seguinte do cliente continua entrando e a conversa fica sem a referência quebrada.
+    post(incoming("Ainda está aí?", "IN2"))
+    assert MessageModel.objects(external_id="IN2").count() == 1
+    assert ConversationModel._get_collection().find_one({"_id": conversation.id}).get("quote") != quote.id
