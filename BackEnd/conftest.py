@@ -20,7 +20,7 @@ def no_external_side_effects(monkeypatch):
     """Nenhum teste fala com Z-API, Redis/Socket.IO ou OpenAI de verdade."""
     sent = []
 
-    def fake_send_message(self, phone, message):
+    def fake_send_message(self, phone, message, split=True):
         sent.append({"phone": phone, "message": message})
         return True
 

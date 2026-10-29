@@ -12,7 +12,8 @@ def handle_send_outgoing_message(payload: dict):
         gateway: ZAPIClient = GatewayContainer().chat
 
         # send_message devolve False quando a Z-API recusa ou o telefone é inválido: não logar sucesso
-        if gateway.send_message(phone=to_phone, message=content):
+        # Texto do operador sai inteiro, com as quebras de linha; o resto segue dividido em frases.
+        if gateway.send_message(phone=to_phone, message=content, split=not payload.get('keep_format')):
             logger.info(f"[GatewayListeners] Mensagem enviada com sucesso para {to_phone}.")
             _store_sent_ids(payload.get('message_id'), getattr(gateway, 'last_sent_ids', None))
         else:

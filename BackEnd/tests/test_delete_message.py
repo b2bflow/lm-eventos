@@ -29,7 +29,7 @@ def test_send_listener_stores_every_zapi_id(conversation, monkeypatch):
     from gateway.adapters.zapi_adapter import ZAPIClient
     from gateway.listeners import handle_send_outgoing_message
 
-    def fake_send(self, phone, message):
+    def fake_send(self, phone, message, split=True):
         self.last_sent_ids = ["ID-1", "ID-2"]
         return True
 

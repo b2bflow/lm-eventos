@@ -427,7 +427,8 @@ class ZAPIClient(IChat):
             logger.exception(f"[Z-API] Falha ao enviar documento {file_name} para {phone}: {e}")
             raise e
 
-    def send_message(self, phone: str, message: str) -> bool:
+    def send_message(self, phone: str, message: str, split: bool = True) -> bool:
+        # split=False manda o texto como foi digitado (quebras de linha, pontos): é o caso do operador no painel.
         if not self.__validate_message(message) or not self.__validate_cell_number(
             phone
         ):
@@ -445,11 +446,11 @@ class ZAPIClient(IChat):
         for attempt in range(1, 4):
             self.last_sent_ids = []
             try:
-                messages = self._resolve_message(message)
+                messages = self._resolve_message(message) if split else [message.strip()]
                 for msg in messages:
                     if not msg:
                         continue
-                    msg_clean = msg[:-1] if msg.endswith(".") else msg
+                    msg_clean = msg[:-1] if split and msg.endswith(".") else msg
                     payload["message"] = msg_clean
                     response = requests.post(url, json=payload, headers=headers)
                     logger.info(

@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -96,6 +96,7 @@ export function ChatArea({
     const [toDelete, setToDelete] = useState<Message | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const topSentinelRef = useRef<HTMLDivElement>(null);
     // Altura antes de carregar mensagens antigas: usada para manter a posição da rolagem.
@@ -138,6 +139,14 @@ export function ChatArea({
         return () => observer.disconnect();
     }, [hasOlder, isLoadingOlder, onLoadOlder, firstId]);
 
+    // Caixa de texto cresce com as quebras de linha (até o max-h, depois rola).
+    useLayoutEffect(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+    }, [inputValue]);
+
     // Imagem carregada depois da rolagem inicial muda a altura: mantém no fim se o usuário estava lá.
     const handleMediaLoaded = () => {
         const el = scrollRef.current;
@@ -161,8 +170,9 @@ export function ChatArea({
         setInputValue("");
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) {
+    // Enter envia; Shift+Enter quebra a linha (como no WhatsApp Web).
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             handleSend();
         }
@@ -459,7 +469,7 @@ export function ChatArea({
                     </p>
                 )}
                 <div className={cn(
-                    "border rounded-xl p-1 flex items-center gap-1 shadow-inner",
+                    "border rounded-xl p-1 flex items-end gap-1 shadow-inner",
                     noteMode ? "bg-amber-50 dark:bg-amber-500/10 border-amber-400/60" : "bg-card/50 border-border/50"
                 )}>
                     {onAddNote && (
@@ -512,13 +522,15 @@ export function ChatArea({
                             </PopoverContent>
                         </Popover>
                     )}
-                    <Input
+                    <Textarea
+                        ref={textareaRef}
+                        rows={1}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={noteMode ? "Nota interna para a equipe..." : isClosed ? "Atendimento fechado..." : "Escreva uma mensagem..."}
                         disabled={isClosed && !noteMode}
-                        className="flex-1 bg-transparent border-none focus-visible:ring-0 shadow-none h-10 text-sm"
+                        className="flex-1 min-h-10 max-h-40 resize-none overflow-y-auto bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none py-2.5 text-sm leading-5"
                     />
                     <Button
                         onClick={handleSend}

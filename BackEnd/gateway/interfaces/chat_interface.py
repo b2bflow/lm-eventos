@@ -8,7 +8,7 @@ class IChat(ABC):
         pass
 
     @abstractmethod
-    def send_message(self, phone: str, message: str) -> bool:
+    def send_message(self, phone: str, message: str, split: bool = True) -> bool:
         pass
 
     @abstractmethod

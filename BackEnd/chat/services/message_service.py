@@ -584,6 +584,7 @@ class MessageService(IMessageService):
                     "phone": conversation.customer.phone,
                     "content": content,
                     "message_id": str(message.id),
+                    "keep_format": sender_role == "OPERATOR",
                 })
                 logger.info(f"[MessageService] Evento de envio enfileirado para o telefone {conversation.customer.phone}.")
             else:

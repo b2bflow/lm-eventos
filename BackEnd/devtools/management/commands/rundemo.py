@@ -27,7 +27,7 @@ def _disable_external_services():
     if hasattr(ZAPIClient, "send_document"):
         ZAPIClient.send_document = log_only("send_document")
 
-    def demo_send_message(self, phone, message):
+    def demo_send_message(self, phone, message, split=True):
         # Id falso, como o da Z-API: a mensagem do painel ganha a opção de apagar.
         import uuid
         logger.info(f"[DEMO] Z-API desligada: send_message {phone} {message[:300]!r}")
