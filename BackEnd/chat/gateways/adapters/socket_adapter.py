@@ -16,3 +16,11 @@ class SocketAdapter(IEventGateway):
         except Exception as e:
             logger.error(f"[SocketAdapter] Falha de emissão no SocketAdapter: {e}")
             raise e
+
+    def emit_message_updated(self, payload: dict) -> None:
+        """Mensagem já exibida que mudou (ex.: apagada): o painel troca a bolha no lugar."""
+        try:
+            external_mgr = socketio.RedisManager(self.redis_url, write_only=True)
+            external_mgr.emit('message_updated', data=payload)
+        except Exception as e:
+            logger.error(f"[SocketAdapter] Falha ao emitir message_updated: {e}")

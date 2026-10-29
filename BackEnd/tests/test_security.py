@@ -395,9 +395,11 @@ def test_conversation_and_message_history_cannot_be_edited_or_deleted(api_client
     assert api_client.put(conv_url, {"tag": "AGENTE", "customer": FAKE_ID}, format="json").status_code == 405
     assert api_client.delete(conv_url).status_code == 405
     assert api_client.post("/api/v1/chat/conversations/", {"customer": str(customer.id)}, format="json").status_code == 405
-    for method in ("put", "patch", "delete"):
+    for method in ("put", "patch"):
         assert getattr(api_client, method)(msg_url, {"content": "alterado"}, format="json").status_code == 405
-    assert api_client.delete(f"/api/v1/chat/mensagens/{message.id}/").status_code == 405
+    # DELETE só "apaga para todos" no WhatsApp o que a LM enviou (fica no histórico); recebida não.
+    assert api_client.delete(msg_url).status_code == 400
+    assert api_client.delete(f"/api/v1/chat/mensagens/{message.id}/").status_code == 400
     message.reload()
     assert message.content == "original" and ConversationModel.objects(id=conversation.id).count() == 1
     # O que o painel usa continua funcionando

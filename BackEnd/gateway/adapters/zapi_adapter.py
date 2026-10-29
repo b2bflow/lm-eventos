@@ -23,6 +23,8 @@ class ZAPIClient(IChat):
         self._headers = {"Content-Type": "application/json"}
         self._after_send_hooks: list[dict] = []
         self._executing_hooks = False
+        # messageId de cada parte do último send_message (o texto longo vira várias mensagens).
+        self.last_sent_ids: list[str] = []
 
     def __validate_message(self, message: str) -> bool:
         # Trata a mensagem
@@ -441,6 +443,7 @@ class ZAPIClient(IChat):
         last_exception = None
 
         for attempt in range(1, 4):
+            self.last_sent_ids = []
             try:
                 messages = self._resolve_message(message)
                 for msg in messages:
@@ -453,6 +456,9 @@ class ZAPIClient(IChat):
                         f"[Z-API] Enviando mensagem para {phone}: {msg_clean!r} payload:\n{to_json_dump(payload)} \nresponse:{to_json_dump(response.json())}"
                     )
                     response.raise_for_status()
+                    sent_id = (response.json() or {}).get("messageId")
+                    if sent_id:
+                        self.last_sent_ids.append(sent_id)
                     pause = random.randint(2, 3)
                     time.sleep(pause)
                 return True
@@ -468,6 +474,15 @@ class ZAPIClient(IChat):
         )
 
         raise last_exception
+
+    def delete_message(self, phone: str, message_id: str) -> None:
+        """Apaga para todos (owner=true) uma mensagem enviada pelo número da LM."""
+        url = f"{self._resolve_url()}/messages"
+        headers = {**self._headers, "Client-Token": self._client_token}
+        params = {"messageId": message_id, "phone": self._resolve_phone(phone), "owner": "true"}
+        response = requests.delete(url, params=params, headers=headers, timeout=20)
+        response.raise_for_status()
+        logger.info(f"[Z-API] Mensagem {message_id} apagada para {phone}.")
 
     # Tipos que o WhatsApp mostra como mídia; o resto (svg, heic, wav, mkv, zip, ...) vai como documento.
     _NATIVE_MEDIA = {

@@ -19,6 +19,7 @@ conversation_detail = ConversationViewSet.as_view({
 })
 
 # Mensagem do operador entra pelo POST (vai para a Z-API); mensagens gravadas não são editadas.
+# DELETE apaga para todos no WhatsApp uma mensagem enviada (fica no histórico marcada como apagada).
 message_list = MessageViewSet.as_view({
     'get': 'list',
     'post': 'create'
@@ -26,6 +27,7 @@ message_list = MessageViewSet.as_view({
 
 message_detail = MessageViewSet.as_view({
     'get': 'retrieve',
+    'delete': 'destroy',
 })
 
 system_config = SystemConfigController.as_view({

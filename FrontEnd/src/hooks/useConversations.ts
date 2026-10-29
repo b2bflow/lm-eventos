@@ -56,6 +56,8 @@ export interface NewMessageEvent {
   author_name?: string | null;
   raw_metadata?: Record<string, unknown> | null;
   created_at: string;
+  deletable?: boolean;
+  deleted?: boolean;
 }
 
 const PAGE_SIZE = 20;
@@ -284,5 +286,21 @@ export function appendMessageToCache(queryClient: QueryClient, event: NewMessage
     const pages = [...old.pages];
     pages[0] = { ...pages[0], results: [...pages[0].results, message] };
     return { ...old, pages };
+  });
+}
+
+/** Troca no cache uma mensagem já exibida que mudou (evento `message_updated`, ex.: apagada). */
+export function replaceMessageInCache(queryClient: QueryClient, event: NewMessageEvent) {
+  const message = toChatMessage(event);
+  queryClient.setQueriesData<MessagesData>({ queryKey: ["messages"] }, (old) => {
+    if (!old?.pages?.length) return old;
+    if (!old.pages.some((p) => p.results.some((m) => m.id === message.id))) return old;
+    return {
+      ...old,
+      pages: old.pages.map((p) => ({
+        ...p,
+        results: p.results.map((m) => (m.id === message.id ? { ...message, conversation: m.conversation } : m)),
+      })),
+    };
   });
 }

@@ -238,6 +238,27 @@ class MessageViewSet(ModelViewSet):
             return Response({"detail": "Mensagem não encontrada."}, status=status.HTTP_404_NOT_FOUND)
         return Response(self.get_serializer(message).data)
 
+    def destroy(self, request, pk=None, *args, **kwargs) -> Response:
+        """DELETE /chat/messages/<id>/: apaga para todos no WhatsApp a mensagem enviada pela LM.
+
+        A mensagem fica no histórico marcada como apagada (fora do contexto da IA).
+        """
+        from chat.services.message_delete_service import MessageDeleteError, MessageDeleteService
+        if not ObjectId.is_valid(pk or ""):
+            return Response({"detail": "Mensagem não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            message = MessageDeleteService().delete(pk, user=request.user)
+            return Response(self.get_serializer(message).data)
+        except LookupError as le:
+            return Response({"detail": str(le)}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError as ve:
+            return Response({"detail": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except MessageDeleteError as de:
+            return Response({"detail": str(de)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            logger.error(f"[ChatController] Falha ao apagar a mensagem {pk}: {e}")
+            return Response({"detail": "Erro interno."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def create(self, request, *args, **kwargs) -> Response:
         try:
             conversation_id = request.data.get('conversation_id')

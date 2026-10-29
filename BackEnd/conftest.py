@@ -41,6 +41,9 @@ def no_external_side_effects(monkeypatch):
 
     monkeypatch.setattr(ZAPIClient, "send_document", fake_send_document)
     monkeypatch.setattr(SocketAdapter, "emit_new_message", lambda self, payload: None)
+    monkeypatch.setattr(SocketAdapter, "emit_message_updated", lambda self, payload: None)
+    monkeypatch.setattr(ZAPIClient, "delete_message",
+                        lambda self, phone, message_id: sent.append({"phone": phone, "deleted": message_id}))
     return sent
 
 

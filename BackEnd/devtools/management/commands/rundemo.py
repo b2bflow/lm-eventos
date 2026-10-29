@@ -26,6 +26,16 @@ def _disable_external_services():
         setattr(ZAPIClient, method, log_only(method))
     if hasattr(ZAPIClient, "send_document"):
         ZAPIClient.send_document = log_only("send_document")
+
+    def demo_send_message(self, phone, message):
+        # Id falso, como o da Z-API: a mensagem do painel ganha a opção de apagar.
+        import uuid
+        logger.info(f"[DEMO] Z-API desligada: send_message {phone} {message[:300]!r}")
+        self.last_sent_ids = [f"DEMO-{uuid.uuid4().hex[:12]}"]
+        return True
+
+    ZAPIClient.send_message = demo_send_message
+    ZAPIClient.delete_message = log_only("delete_message")
     tasks.trigger_ai_agent_task.apply_async = lambda *a, **kw: logger.info("[DEMO] IA desligada")
 
 

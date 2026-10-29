@@ -1,4 +1,9 @@
-import { Send, Loader2, Paperclip, MoreVertical, Sparkles, CheckCircle, ArrowLeft, History, Phone, StickyNote, Zap, Smartphone, Archive, ArchiveRestore } from "lucide-react";
+import { Send, Loader2, Paperclip, MoreVertical, Sparkles, CheckCircle, ArrowLeft, History, Phone, StickyNote, Zap, Smartphone, Archive, ArchiveRestore, ChevronDown, Ban, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+    AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +25,8 @@ interface ChatAreaProps {
     messages: Message[];
     onSendMessage: (message: string) => void;
     onSendFile?: (file: File) => void;
+    /** Apaga para todos no WhatsApp uma mensagem enviada pela LM. */
+    onDeleteMessage?: (messageId: string) => Promise<void>;
     isSending?: boolean;
     isUploadingFile?: boolean;
     isAIActive: boolean;
@@ -57,6 +64,7 @@ export function ChatArea({
     messages, 
     onSendMessage, 
     onSendFile,
+    onDeleteMessage,
     isSending, 
     isUploadingFile,
     isAIActive,
@@ -85,6 +93,8 @@ export function ChatArea({
     // Nota interna: só a equipe vê (não vai ao cliente nem à IA).
     const [noteMode, setNoteMode] = useState(false);
     const [quickOpen, setQuickOpen] = useState(false);
+    const [toDelete, setToDelete] = useState<Message | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -364,7 +374,35 @@ export function ChatArea({
                                             <span className="text-[10px] uppercase font-bold">Pelo WhatsApp</span>
                                         </div>
                                     )}
-                                    <MessageBody message={msg} isIncoming={isIncoming} />
+                                    {!isIncoming && msg.deletable && onDeleteMessage && (
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    aria-label="Opções da mensagem"
+                                                    className="absolute top-1 right-1 rounded-full p-0.5 bg-black/20 text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                                                >
+                                                    <ChevronDown className="w-3.5 h-3.5" />
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => setToDelete(msg)}>
+                                                    <Trash2 className="w-4 h-4 mr-2" /> Apagar para todos
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    )}
+                                    {msg.deleted ? (
+                                        <div>
+                                            <p className="flex items-center gap-1.5 text-sm italic opacity-80">
+                                                <Ban className="w-3.5 h-3.5" /> Mensagem apagada{msg.deleted_by ? ` por ${msg.deleted_by}` : ""}
+                                            </p>
+                                            {/* Só a equipe vê o que foi apagado; o cliente vê "mensagem apagada". */}
+                                            <p className="text-xs opacity-50 line-through whitespace-pre-wrap break-words mt-1">{msg.content}</p>
+                                        </div>
+                                    ) : (
+                                        <MessageBody message={msg} isIncoming={isIncoming} />
+                                    )}
                                     <span className={cn(
                                         "text-[10px] mt-1.5 block font-medium opacity-60 text-right",
                                         isIncoming ? "text-muted-foreground" : "text-white/80"
@@ -378,6 +416,41 @@ export function ChatArea({
                 })}
                 <div className="h-1" />
             </div>
+
+            <AlertDialog open={!!toDelete} onOpenChange={(open) => { if (!open && !isDeleting) setToDelete(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Apagar mensagem para todos?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            A mensagem some do WhatsApp do cliente (ele vê "Mensagem apagada"). Aqui no painel ela fica
+                            riscada no histórico da equipe e sai do contexto da IA.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {toDelete && (
+                        <p className="text-sm bg-secondary/60 rounded-lg px-3 py-2 whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                            {toDelete.content}
+                        </p>
+                    )}
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            disabled={isDeleting}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                if (!toDelete || !onDeleteMessage) return;
+                                setIsDeleting(true);
+                                onDeleteMessage(toDelete.id)
+                                    .then(() => setToDelete(null))
+                                    .catch(() => undefined)
+                                    .finally(() => setIsDeleting(false));
+                            }}
+                        >
+                            {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Apagar para todos"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <div className="p-3 sm:p-4 bg-background/50 border-t border-border/50 shrink-0">
                 {noteMode && (

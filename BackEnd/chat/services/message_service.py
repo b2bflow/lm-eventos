@@ -582,7 +582,8 @@ class MessageService(IMessageService):
                 from events.bus import EventBus
                 EventBus.publish("SEND_OUTGOING_MESSAGE", {
                     "phone": conversation.customer.phone,
-                    "content": content
+                    "content": content,
+                    "message_id": str(message.id),
                 })
                 logger.info(f"[MessageService] Evento de envio enfileirado para o telefone {conversation.customer.phone}.")
             else:

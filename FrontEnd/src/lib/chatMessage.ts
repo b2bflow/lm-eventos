@@ -23,6 +23,11 @@ export interface ChatMessage {
   author_name?: string | null;
   /** Enviada pela equipe direto no WhatsApp (celular/Web), fora da plataforma. */
   sent_from_phone?: boolean;
+  /** Enviada pela LM e ainda dá para apagar para todos no WhatsApp. */
+  deletable?: boolean;
+  /** Apagada para todos pelo painel (o texto fica só para a equipe). */
+  deleted?: boolean;
+  deleted_by?: string | null;
 }
 
 export function normalizeChatMessageContent(content: unknown): string {
@@ -91,5 +96,8 @@ export function toChatMessage(raw: any): ChatMessage {
     buttons: Array.isArray(raw.buttons) ? raw.buttons : undefined,
     author_name: raw.author_name ?? null,
     sent_from_phone: !!raw.raw_metadata?.sent_from_phone,
+    deletable: !!raw.deletable,
+    deleted: !!raw.deleted,
+    deleted_by: raw.raw_metadata?.deleted_by ?? null,
   };
 }

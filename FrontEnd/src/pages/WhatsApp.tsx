@@ -21,6 +21,7 @@ import { formatDateTime } from "@/lib/format";
 import { formatChatListTime } from "@/lib/dateUtils";
 import {
   appendMessageToCache,
+  replaceMessageInCache,
   discardPendingConversationRefreshes,
   messagesKey,
   patchConversationInCache,
@@ -155,11 +156,31 @@ export default function WhatsApp() {
         markAsRead(convId);
       }
     }
+    // Mensagem que mudou (apagada, ou texto enviado que ganhou o id do WhatsApp): troca a bolha no lugar.
+    function onMessageUpdated(data: NewMessageEvent) {
+      replaceMessageInCache(queryClient, data);
+    }
     socket.on("new_message", onNewMessage);
+    socket.on("message_updated", onMessageUpdated);
     return () => {
       socket.off("new_message", onNewMessage);
+      socket.off("message_updated", onMessageUpdated);
     };
   }, [queryClient, selectedConversationId, markAsRead]);
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: string) => {
+      const { data } = await api.delete<NewMessageEvent>(`/chat/messages/${messageId}/`);
+      return data;
+    },
+    onSuccess: (data) => {
+      replaceMessageInCache(queryClient, data);
+      // Se era a última mensagem, o card da lista passa a mostrar "Mensagem apagada".
+      refreshFirstConversationPages(queryClient);
+      toast.success("Mensagem apagada para todos.");
+    },
+    onError: (error) => apiError(error, "Não foi possível apagar a mensagem."),
+  });
 
   const sendMessageMutation = useMutation({
     mutationFn: async ({ conversationId, message }: { conversationId: string; message: string }) => {
@@ -504,6 +525,7 @@ export default function WhatsApp() {
                   messages={messages}
                   onSendMessage={handleSendMessage}
                   onSendFile={handleSendFile}
+                  onDeleteMessage={(id) => deleteMessageMutation.mutateAsync(id).then(() => undefined)}
                   isSending={isSending}
                   isUploadingFile={sendFileMutation.isPending}
                   isAIActive={selectedConversationObj.tag === "AGENTE"}

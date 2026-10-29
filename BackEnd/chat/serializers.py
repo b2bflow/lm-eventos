@@ -100,13 +100,25 @@ class MessageSerializer(DocumentSerializer):
     conversation_id = serializers.CharField(source='conversation.id', read_only=True)
     buttons = serializers.SerializerMethodField()
     author_name = serializers.SerializerMethodField()
+    deletable = serializers.SerializerMethodField()
+    deleted = serializers.SerializerMethodField()
 
     class Meta:
         model = MessageModel
         fields = [
             'id', 'conversation_id', 'role', 'direction', 
-            'status', 'message_type', 'content', 'media_url', 'raw_metadata', 'buttons', 'author_name', 'created_at'
+            'status', 'message_type', 'content', 'media_url', 'raw_metadata', 'buttons', 'author_name', 'created_at',
+            'deletable', 'deleted',
         ]
+
+    def get_deletable(self, obj):
+        """Enviada pela LM com o id do WhatsApp e ainda dentro do prazo de apagar para todos."""
+        from chat.services.message_delete_service import can_delete
+        return can_delete(obj)
+
+    def get_deleted(self, obj):
+        from chat.services.message_delete_service import is_deleted
+        return is_deleted(obj)
 
     def get_author_name(self, obj):
         """Quem escreveu a nota interna ou fez a ação (mensagens INTERNAL)."""
