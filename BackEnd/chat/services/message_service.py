@@ -474,11 +474,16 @@ class MessageService(IMessageService):
         media_url: str = None,
         status: str = "QUEUED",
         hidden_from_ai: bool = False,
+        claim_sent_ids: bool = True,
     ) -> Any:
         try:
             conversation = self.conversation_repo.get_by_id(conversation_id)
             if not conversation:
                 raise ValueError(f"Conversa {conversation_id} não encontrada para salvar a mensagem.")
+
+            if claim_sent_ids and direction == 'OUTGOING' and sender_role == 'assistant' and not external_id:
+                # Resposta da IA (e menu) já enviada: guarda o id do WhatsApp para poder apagar depois.
+                external_id, raw_metadata, status = self._claim_sent_ids(conversation, content, raw_metadata, status)
 
             message = self.message_repo.create(
                 conversation=conversation,
@@ -511,6 +516,20 @@ class MessageService(IMessageService):
         except Exception as e:
             logger.error(f"[MessageService] Falha ao salvar/notificar mensagem: {e}")
             raise e
+
+    @staticmethod
+    def _claim_sent_ids(conversation, content: str, raw_metadata: dict | None, status: str):
+        from chat.models.message_model import MessageModel
+        from gateway.adapters.zapi_adapter import ZAPIClient
+        customer = getattr(conversation, "customer", None)
+        claimed = ZAPIClient.claim_recent_sent(
+            [getattr(customer, "phone", None), getattr(customer, "whatsapp_lid", None)], content)
+        if not claimed:
+            return None, raw_metadata, status
+        ids, phone = claimed
+        metadata = {**(raw_metadata or {}), "zapi_message_ids": ids, "zapi_phone": phone}
+        external_id = ids[0] if not MessageModel.objects(external_id=ids[0]).first() else None
+        return external_id, metadata, "SENT_TO_GATEWAY"
 
     @staticmethod
     def _extract_media(raw_metadata: dict | None) -> tuple[str, str | None]:
@@ -575,12 +594,14 @@ class MessageService(IMessageService):
         try:
             metadata = {"operator_id": sender_id} if sender_id else {}
 
+            # Gravada antes do envio: o id do WhatsApp chega pelo listener de envio.
             message = self._save_and_notify(
                 conversation_id=conversation_id,
                 content=content,
                 direction='OUTGOING',
                 sender_role=sender_role,
-                raw_metadata=metadata
+                raw_metadata=metadata,
+                claim_sent_ids=False,
             )
 
             conversation = self.conversation_repo.get_by_id(conversation_id)

@@ -3,6 +3,7 @@ import os
 import re
 import time
 import random
+import threading
 import emoji
 import base64
 import mimetypes
@@ -13,6 +14,17 @@ from gateway.interfaces.chat_interface import IChat
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Envios de texto recentes por telefone: {telefone: (momento, texto, ids, telefone usado)}. A resposta da IA é
+# enviada e só depois gravada (em ai_agents/, que não conhece o id): a gravação busca o id aqui.
+_RECENT_SENDS: dict[str, tuple[float, str, list[str], str]] = {}
+_RECENT_SENDS_LOCK = threading.Lock()
+RECENT_SEND_MAX_AGE = 30  # segundos entre o fim do envio e a gravação da mensagem
+
+
+def _send_text_key(text: str) -> str:
+    return re.sub(r"[\W_]+", "", (text or "").lower())[:20]
+
 
 class ZAPIClient(IChat):
     def __init__(self):
@@ -462,6 +474,7 @@ class ZAPIClient(IChat):
                         self.last_sent_ids.append(sent_id)
                     pause = random.randint(2, 3)
                     time.sleep(pause)
+                self.remember_sent(phone, message, self.last_sent_ids)
                 return True
             except Exception as e:
                 last_exception = e
@@ -475,6 +488,38 @@ class ZAPIClient(IChat):
         )
 
         raise last_exception
+
+    @classmethod
+    def _recent_key(cls, phone: str | None) -> str:
+        return cls._resolve_phone(cls, (phone or "").strip()) if phone else ""
+
+    @classmethod
+    def remember_sent(cls, phone: str, text: str, ids: list[str]) -> None:
+        if not phone or not ids:
+            return
+        with _RECENT_SENDS_LOCK:
+            now = time.monotonic()
+            for key in [k for k, v in _RECENT_SENDS.items() if now - v[0] > RECENT_SEND_MAX_AGE]:
+                del _RECENT_SENDS[key]
+            _RECENT_SENDS[cls._recent_key(phone)] = (now, _send_text_key(text), list(ids), phone)
+
+    @classmethod
+    def claim_recent_sent(cls, phones: list[str | None], text: str) -> tuple[list[str], str] | None:
+        """Ids (e o telefone usado) do texto que acabou de sair para um destes telefones, uma vez só.
+
+        Confere o começo do texto: um aviso enviado sem gravar na conversa não passa como a resposta da IA.
+        """
+        wanted = _send_text_key(text)
+        with _RECENT_SENDS_LOCK:
+            now = time.monotonic()
+            for phone in phones:
+                key = cls._recent_key(phone)
+                entry = _RECENT_SENDS.get(key) if key else None
+                if not entry or now - entry[0] > RECENT_SEND_MAX_AGE or not wanted or entry[1] != wanted:
+                    continue
+                del _RECENT_SENDS[key]
+                return entry[2], entry[3]
+        return None
 
     def delete_message(self, phone: str, message_id: str) -> None:
         """Apaga para todos (owner=true) uma mensagem enviada pelo número da LM."""

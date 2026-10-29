@@ -1,6 +1,6 @@
 """Apagar para todos, pelo painel, uma mensagem que a LM enviou no WhatsApp.
 
-A Z-API apaga pelo messageId de cada mensagem: texto do painel guarda os ids em
+A Z-API apaga pelo messageId de cada mensagem: texto do painel e resposta da IA guardam os ids em
 raw_metadata.zapi_message_ids (o texto longo sai em várias partes); arquivo e mensagem enviada pelo
 celular guardam o id em external_id. A mensagem continua salva (histórico da equipe), marcada como
 apagada e fora do contexto da IA.
@@ -62,7 +62,9 @@ class MessageDeleteService:
         if not can_delete(message):
             raise ValueError("O WhatsApp só deixa apagar para todos até 2 dias depois do envio.")
 
-        phone = getattr(message.customer, "phone", None) or getattr(message.conversation.customer, "phone", None)
+        # A resposta da IA pode ter saído para o @lid do contato: apaga no mesmo destino do envio.
+        phone = ((message.raw_metadata or {}).get("zapi_phone") or getattr(message.customer, "phone", None)
+                 or getattr(message.conversation.customer, "phone", None))
         for zapi_id in ids:
             try:
                 self.chat.delete_message(phone=phone, message_id=zapi_id)
