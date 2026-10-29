@@ -26,7 +26,7 @@ class Customer(Document):
         'indexes': [
             'name', 'phone', 'customer_state_now', '-created_at',
             'product', 'owner', 'human_operator', 'flags', 'next_action_at', 'funnel_entered_at',
-            'funnel_archived_at',
+            'funnel_archived_at', 'whatsapp_lid',
         ],
         'strict': False
     }
@@ -75,6 +75,8 @@ class Customer(Document):
     human_operator = BooleanField(default=False)  # parceiro/cliente antigo: fica com a Erica, fora da fila da SDR
     # "Chats internos" da aba WhatsApp (como o Arquivadas do WhatsApp): conversa sem IA e fora da lista principal.
     internal_chat = BooleanField(default=False)
+    # Identificador privado do WhatsApp (`<dígitos>@lid`) do contato, quando a Z-API manda (chat.services.whatsapp_identity).
+    whatsapp_lid = StringField(null=True)
     product = StringField(choices=tuple(domain.PRODUCTS), null=True)
     qualification = DictField()  # todos os campos coletados (IA ou SDR), ver LeadQualificationService
     pending_fields = ListField(StringField())  # o que ficou "não sei"

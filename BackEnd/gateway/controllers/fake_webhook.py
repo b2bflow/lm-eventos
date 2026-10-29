@@ -37,6 +37,12 @@ class FakeWebhookController(ViewSet):
 
             logger.info(f"[ENDPOINT RECEIVE MESSAGE] Requisição recebida")
 
+            # "Aguardando mensagem" (o WhatsApp ainda não decifrou) e avisos (chamada, foto de perfil, etiqueta)
+            # não trazem conteúdo. Saem antes da deduplicação: a mensagem de verdade pode vir depois com o mesmo messageId.
+            if data.get("waitingMessage") or data.get("notification"):
+                logger.info(f"[ZApiWebhook] Aviso sem conteúdo de {phone} ignorado (waitingMessage/notification).")
+                return Response({"status": "ignored"}, status=status.HTTP_200_OK)
+
             if self.guard.is_duplicate(data):
                 logger.info(f"[ZApiWebhook] Mensagem repetida de {phone} ignorada.")
                 return Response({"status": "duplicate"}, status=status.HTTP_200_OK)

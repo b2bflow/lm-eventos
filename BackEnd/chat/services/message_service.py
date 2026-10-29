@@ -77,8 +77,14 @@ class MessageService(IMessageService):
                 message = f"<kwargs>{kwargs}</kwargs>"
 
             else:
+                # Sem texto nem mídia (reação, chamada, "aguardando mensagem"...): não vira mensagem. Antes virava
+                # "Olá, Tenho interesse e queria mais informações", repetido na conversa e respondido pela IA.
+                from chat.services.whatsapp_identity import text_or_label
                 transcribed_message = self.audio_transcription_service.transcribe(**kwargs)
-                message = transcribed_message or self.chat.get_message(**kwargs)
+                message = transcribed_message or text_or_label(kwargs)
+                if not message:
+                    logger.info(f"[MessageService] Aviso sem conteúdo de {phone} ignorado: {sorted(kwargs)}")
+                    return
 
             external_id = kwargs.get("messageId") or kwargs.get("id")
             return {'phone':phone, 'content':message, 'external_id':external_id, 'raw_data':kwargs}
@@ -251,7 +257,10 @@ class MessageService(IMessageService):
 
             customer_service = CrmContainer.get_customer_service()
             quote_service = CrmContainer.get_quote_service()
-            customer = customer_service.get_customer_by_phone(phone)
+            # Mesmo contato pelo número ou pelo @lid (o celular da LM manda o lid; o cliente, o número).
+            from chat.services.whatsapp_identity import find_customer, payload_lids, remember_lid
+            found = find_customer(phone, raw_metadata or {})
+            customer = found.to_dict() if found else None
 
             if not customer:
                 logger.info(f"[MessageService] Mensagem de número desconhecido: {phone}. Criando paciente temporário.")
@@ -269,6 +278,8 @@ class MessageService(IMessageService):
                         "phone": phone
                     }
                 )
+                from crm.models.custumer_model import Customer
+                remember_lid(Customer.objects.get(id=customer["id"]), payload_lids(raw_metadata or {}))
 
             blocked_until = customer.get("blocked_until") if isinstance(customer, dict) else None
             if isinstance(blocked_until, str):

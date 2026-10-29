@@ -9,6 +9,8 @@ para OPERADOR (a IA para de responder esse cliente).
 from datetime import datetime, timedelta
 
 from chat.models.message_model import MessageModel
+from chat.services.whatsapp_identity import find_customer, payload_lids, remember_lid, text_or_label
+from crm.models.custumer_model import Customer
 from utils.logger import logger
 from utils.safe_url import safe_media_url
 
@@ -69,13 +71,17 @@ class PhoneSentMessageService:
         message_service = ChatContainer.get_message_service()
         conversation_repo = message_service.conversation_repo
 
-        customer = customer_service.get_customer_by_phone(phone)
-        if not customer:
+        # Pelo celular a Z-API costuma mandar o lid em `phone`: acha o contato que já existe pelo número.
+        customer = find_customer(phone, data)
+        if customer:
+            customer_id = str(customer.id)
+        else:
             # chatName é o nome do contato na agenda do aparelho; senderName seria o da própria LM.
-            customer = customer_service.register_customer(
+            created = customer_service.register_customer(
                 data={"name": data.get("chatName") or f"WhatsApp {phone}", "phone": phone}
             )
-        customer_id = customer.get("id") if isinstance(customer, dict) else str(customer.id)
+            customer_id = created.get("id") if isinstance(created, dict) else str(created.id)
+            remember_lid(Customer.objects.get(id=customer_id), payload_lids(data))
 
         conversation = conversation_repo.get_active_conversation(customer_id)
         if not conversation:
@@ -110,10 +116,6 @@ class PhoneSentMessageService:
 
     def _content(self, data: dict) -> tuple[str, str, str | None] | None:
         """(texto salvo, message_type, media_url), ou None para o que não vale registrar."""
-        text = data.get("text")
-        if isinstance(text, dict) and (text.get("message") or "").strip():
-            return text["message"], "text", None
-
         for kind, key, url_key, label in MEDIA_KINDS:
             media = data.get(key)
             if not isinstance(media, dict) or not media.get(url_key):
@@ -125,15 +127,8 @@ class PhoneSentMessageService:
                 caption = f"{label} {media.get('fileName') or ''}".strip()
             return caption or label, kind, safe_media_url(media[url_key])
 
-        location = data.get("location")
-        if isinstance(location, dict):
-            name = location.get("name") or location.get("address") or ""
-            return f"[Localização] {name}".strip(), "text", None
-
-        contact = data.get("contact")
-        if isinstance(contact, dict):
-            return f"[Contato] {contact.get('displayName') or ''}".strip(), "text", None
-        return None
+        label = text_or_label(data)
+        return (label, "text", None) if label else None
 
     @staticmethod
     def _is_platform_echo(conversation, text: str) -> bool:
