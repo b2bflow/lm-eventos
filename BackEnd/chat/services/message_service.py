@@ -518,7 +518,7 @@ class MessageService(IMessageService):
         from utils.safe_url import safe_media_url
         data = raw_metadata or {}
         for kind, key, url_key in (("image", "image", "imageUrl"), ("file", "document", "documentUrl"),
-                                   ("audio", "audio", "audioUrl")):
+                                   ("audio", "audio", "audioUrl"), ("video", "video", "videoUrl")):
             if isinstance(data.get(key), dict) and data[key].get(url_key):
                 # URL fora de http(s) não vai para o painel (o content da IA continua igual).
                 return kind, safe_media_url(data[key][url_key])

@@ -91,4 +91,30 @@ def text_or_label(data: dict) -> str | None:
         return f"[Contato] {contact.get('displayName') or ''}".strip()
     if isinstance(data.get("audio"), dict):
         return "[Áudio]"
+    video = data.get("video")
+    if isinstance(video, dict):
+        return f"[Vídeo] {video.get('caption') or ''}".strip()
+    document = data.get("document")
+    if isinstance(document, dict):
+        return f"[Arquivo] {document.get('fileName') or document.get('caption') or ''}".strip()
+    # Mensagens de empresas e robôs (modelo, botões, lista): o texto principal, se houver.
+    for key in INTERACTIVE_KEYS:
+        if isinstance(data.get(key), dict):
+            body = _first_text(data[key])
+            return f"[Mensagem interativa] {body}".strip() if body else "[Mensagem interativa]"
     return None
+
+
+INTERACTIVE_KEYS = ("hydratedTemplate", "buttonsMessage", "listMessage", "interactiveMessage", "carouselMessage")
+
+
+def _first_text(value: dict) -> str:
+    for key in ("message", "description", "text", "title", "body"):
+        item = value.get(key)
+        if isinstance(item, str) and item.strip():
+            return item.strip()
+        if isinstance(item, dict):
+            found = _first_text(item)
+            if found:
+                return found
+    return ""

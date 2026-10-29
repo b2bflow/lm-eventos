@@ -5,17 +5,19 @@ Sem --apply só mostra o que faria. Duas correções:
 - contatos @lid duplicados: o celular da LM manda o lid em `phone`, o cliente manda o número, e a
   mesma pessoa virou dois contatos com duas conversas. As mensagens do contato "<dígitos>@lid" vão
   para a conversa do contato com número (o lid fica guardado nele) e o contato @lid é excluído.
-  Só junta quando o lid aparece nas mensagens recebidas do contato com número; contato @lid com
-  proposta fica para revisão manual.
+  Só junta quando o lid aparece nas mensagens recebidas do contato com número. Contato @lid com
+  dados de lead (funil, qualificação da IA, proposta, lead arquivado) fica para revisão manual.
 - "Olá, Tenho interesse e queria mais informações, por favor." sem texto no payload: era o texto
-  que a plataforma colocava em avisos sem conteúdo (aguardando mensagem, reação, chamada). Essas
-  mensagens são apagadas.
+  que a plataforma punha quando a mensagem não tinha texto. A maioria é áudio de cliente cuja
+  transcrição falhou (de maio a 13/10): essas e as outras com conteúdo (vídeo, arquivo, localização,
+  contato, mensagem de empresa) ficam com o rótulo certo ("[Áudio]"...). Só os avisos sem conteúdo
+  (chamada, mensagem apagada, reação, "aguardando mensagem") são apagados.
 """
 from django.core.management.base import BaseCommand
 
 from chat.models.conversation_model import ConversationModel
 from chat.models.message_model import MessageModel
-from chat.services.whatsapp_identity import _by_lid_in_messages
+from chat.services.whatsapp_identity import _by_lid_in_messages, text_or_label
 from crm.models.custumer_model import Customer
 from gateway.adapters.zapi_adapter import ZAPIClient
 
@@ -35,7 +37,7 @@ def _refresh_preview(conversation: ConversationModel) -> None:
 
 
 class Command(BaseCommand):
-    help = "Junta contatos @lid duplicados e apaga as mensagens 'Olá, Tenho interesse' geradas por avisos sem conteúdo."
+    help = "Junta contatos @lid duplicados e corrige as mensagens 'Olá, Tenho interesse' que não eram texto."
 
     def add_arguments(self, parser):
         parser.add_argument("--apply", action="store_true", help="Grava as correções (sem ele, só mostra).")
@@ -43,16 +45,29 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         apply = options["apply"]
         prefix = "" if apply else "[simulação] "
-        merged = self._merge_lid_contacts(apply, prefix)
-        removed = self._remove_placeholders(apply, prefix)
+        merged, review = self._merge_lid_contacts(apply, prefix)
+        relabeled, removed = self._fix_placeholders(apply, prefix)
         self.stdout.write(self.style.SUCCESS(
-            f"{prefix}{merged} contato(s) @lid juntado(s); {removed} mensagem(ns) 'Olá, Tenho interesse' apagada(s)."
+            f"{prefix}{merged} contato(s) @lid juntado(s), {review} para revisar à mão; "
+            f"'Olá, Tenho interesse': {relabeled} com rótulo corrigido, {removed} aviso(s) apagado(s)."
             + ("" if apply else " Rode com --apply para gravar.")
         ))
 
-    def _merge_lid_contacts(self, apply: bool, prefix: str) -> int:
+    @staticmethod
+    def _lead_data(customer: Customer) -> str | None:
+        """Motivo para não excluir o contato @lid sozinho (ele tem dados de lead)."""
+        from crm.models.opportunity_model import Opportunity
         from sales.models import Proposal
-        merged = 0
+        if Proposal.objects(customer=customer).count():
+            return "tem proposta"
+        if Opportunity.objects(customer=customer).count():
+            return "tem lead arquivado"
+        if customer.funnel_entered_at or customer.ai_qualified_at:
+            return "está no funil ou foi qualificado pela IA"
+        return None
+
+    def _merge_lid_contacts(self, apply: bool, prefix: str) -> tuple[int, int]:
+        merged = review = 0
         for lid_customer in Customer.objects(phone__endswith="@lid"):
             lid = lid_customer.phone
             if not ZAPIClient.is_lid(lid):
@@ -63,14 +78,16 @@ class Command(BaseCommand):
             conversations = list(ConversationModel.objects(customer=lid_customer).order_by("created_at"))
             count = MessageModel.objects(conversation__in=conversations).count() if conversations else 0
             label = f"{lid_customer.name or lid} ({lid}) -> {real.name or real.phone} ({real.phone}): {count} mensagem(ns)"
-            if Proposal.objects(customer=lid_customer).count():
-                self.stdout.write(self.style.WARNING(f"{prefix}revisar à mão, contato @lid tem proposta: {label}"))
+            reason = self._lead_data(lid_customer)
+            if reason:
+                review += 1
+                self.stdout.write(self.style.WARNING(f"{prefix}revisar à mão ({reason}): {label}"))
                 continue
             self.stdout.write(f"{prefix}juntar {label}")
             merged += 1
             if apply:
                 self._merge(lid_customer, real, conversations)
-        return merged
+        return merged, review
 
     def _merge(self, lid_customer: Customer, real: Customer, conversations: list[ConversationModel]) -> None:
         from chat.container import ChatContainer
@@ -100,22 +117,35 @@ class Command(BaseCommand):
             if moved_from_phone and (target.ai_active or target.tag == "AGENTE"):
                 ChatContainer.get_handover_service().take_over(target, TAKEOVER_TEXT)
 
-    def _remove_placeholders(self, apply: bool, prefix: str) -> int:
+    def _fix_placeholders(self, apply: bool, prefix: str) -> tuple[int, int]:
+        from chat.services.message_service import MessageService
         # Só com o payload salvo (raw_metadata.phone) e sem texto nele: mensagem antiga sem payload fica.
         query = {"direction": "INCOMING", "content": PLACEHOLDER,
                  "raw_metadata.phone": {"$exists": True}, "raw_metadata.text": {"$exists": False}}
-        messages = MessageModel.objects(__raw__=query)
-        total = messages.count()
-        by_conversation: dict = {}
-        for message in messages.only("conversation"):
-            by_conversation.setdefault(message.conversation, 0)
-            by_conversation[message.conversation] += 1
-        for conversation, count in sorted(by_conversation.items(), key=lambda item: -item[1]):
-            customer = conversation.customer
-            self.stdout.write(f"{prefix}apagar {count} 'Olá, Tenho interesse' de {customer.name if customer else '?'} "
-                              f"({customer.phone if customer else '?'})")
-        if apply and total:
-            messages.delete()
-            for conversation in by_conversation:
+        kinds: dict = {}
+        to_delete, conversations = [], set()
+        relabeled = 0
+        for message in MessageModel.objects(__raw__=query).only("id", "conversation", "raw_metadata"):
+            data = message.raw_metadata or {}
+            label = None if data.get("waitingMessage") or data.get("notification") else text_or_label(data)
+            kind = label.split("]")[0] + "]" if label and label.startswith("[") else (
+                "apagar: " + (data.get("notification") or ("aguardando mensagem" if data.get("waitingMessage")
+                                                          else "reação" if data.get("reaction") else "sem conteúdo")))
+            kinds[kind] = kinds.get(kind, 0) + 1
+            conversations.add(message.conversation.id if message.conversation else None)
+            if not label:
+                to_delete.append(message.id)
+                continue
+            relabeled += 1
+            if apply:
+                message_type, media_url = MessageService._extract_media(data)
+                MessageModel.objects(id=message.id).update(set__content=label, set__message_type=message_type,
+                                                          set__media_url=media_url)
+        for kind, count in sorted(kinds.items(), key=lambda item: -item[1]):
+            self.stdout.write(f"{prefix}{count} {kind}")
+        if apply:
+            if to_delete:
+                MessageModel.objects(id__in=to_delete).delete()
+            for conversation in ConversationModel.objects(id__in=[c for c in conversations if c]):
                 _refresh_preview(conversation)
-        return total
+        return relabeled, len(to_delete)

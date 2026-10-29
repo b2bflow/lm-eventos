@@ -125,6 +125,10 @@ def _split_contacts():
                  content="Fiz uma endoscopia", raw_metadata={"sent_from_phone": True}).save()
     MessageModel(conversation=real_conv, customer=real, direction="INCOMING", role="user", content=PLACEHOLDER,
                  raw_metadata={"phone": PHONE, "waitingMessage": True}).save()
+    # Áudio do cliente cuja transcrição falhou: virou o mesmo texto, mas é mensagem de verdade.
+    MessageModel(conversation=real_conv, customer=real, direction="INCOMING", role="user", content=PLACEHOLDER,
+                 raw_metadata={"phone": PHONE, "audio": {"audioUrl": "https://cdn.z-api.io/a.ogg"}},
+                 external_id="AUDIO1").save()
     return real, lid_customer, real_conv
 
 
@@ -133,9 +137,9 @@ def test_fix_command_dry_run_changes_nothing():
     _split_contacts()
     out = StringIO()
     call_command("fix_whatsapp_contacts", stdout=out)
-    assert "1 contato(s) @lid juntado(s); 1 mensagem(ns)" in out.getvalue()
+    assert "1 contato(s) @lid juntado(s), 0 para revisar à mão; 'Olá, Tenho interesse': 1 com rótulo corrigido, 1 aviso(s) apagado(s)" in out.getvalue()
     assert Customer.objects.count() == 2
-    assert MessageModel.objects(content=PLACEHOLDER).count() == 1
+    assert MessageModel.objects(content=PLACEHOLDER).count() == 2
 
 
 @pytest.mark.django_db
@@ -151,8 +155,10 @@ def test_fix_command_merges_lid_contact_and_removes_placeholders():
     assert ConversationModel.objects.count() == 1
     contents = [m.content for m in MessageModel.objects(conversation=real_conv, direction__ne="INTERNAL")]
     assert "Fiz uma endoscopia" in contents
-    # Só some o texto falso; o que o cliente digitou de verdade (tem text no payload) fica.
+    # Some só o aviso vazio; o que o cliente digitou de verdade (tem text no payload) fica.
     assert [m.id for m in MessageModel.objects(content=PLACEHOLDER)] == [old_ad_click.id]
+    audio = MessageModel.objects(external_id="AUDIO1").get()
+    assert (audio.content, audio.message_type, audio.media_url) == ("[Áudio]", "audio", "https://cdn.z-api.io/a.ogg")
     real_conv.reload()
     assert real_conv.tag == "OPERADOR"
 
@@ -175,3 +181,25 @@ def test_conversation_list_survives_a_deleted_quote(api_client):
     post(incoming("Ainda está aí?", "IN2"))
     assert MessageModel.objects(external_id="IN2").count() == 1
     assert ConversationModel._get_collection().find_one({"_id": conversation.id}).get("quote") != quote.id
+
+
+@pytest.mark.django_db
+def test_fix_command_keeps_lid_contact_with_lead_data_for_review():
+    from datetime import datetime
+    real, lid_customer, _ = _split_contacts()
+    Customer.objects(id=lid_customer.id).update(set__funnel_entered_at=datetime.utcnow())
+    out = StringIO()
+
+    call_command("fix_whatsapp_contacts", "--apply", stdout=out)
+
+    assert "revisar à mão (está no funil ou foi qualificado pela IA)" in out.getvalue()
+    assert Customer.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_business_messages_and_videos_get_a_label():
+    post(incoming("Oi", "IN1"))
+    post(incoming(message_id="B1", buttonsMessage={"message": "Promoção de caixas de som", "buttons": []}))
+    post(incoming(message_id="H1", hydratedTemplate={"header": {}, "message": "", "hydratedButtons": []}))
+    assert MessageModel.objects(external_id="B1").get().content == "[Mensagem interativa] Promoção de caixas de som"
+    assert MessageModel.objects(external_id="H1").get().content == "[Mensagem interativa]"
