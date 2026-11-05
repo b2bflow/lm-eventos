@@ -8,6 +8,9 @@ cliente ter opções diferentes de verdade.
 Folga (05/11): o horário oferecido fica a pelo menos 30 min do começo e do fim de qualquer compromisso
 já marcado. Ex.: reunião às 12:00-12:40 -> não oferece 11:00 (termina 11:40) nem 13:00; oferece 10:30
 e 13:30. Os inícios são sempre em hora cheia ou meia hora (8:00, 8:30 ... 17:00).
+
+Duração: para o cliente a reunião é de 40 min (MEETING_MINUTES, na mensagem), mas na agenda da Erica ela
+ocupa 1 h (AGENDA_MINUTES): é essa duração que precisa caber no expediente e respeitar a folga.
 """
 from datetime import date, datetime, time, timedelta
 
@@ -15,7 +18,8 @@ from crm.models.lm_settings_model import LmSettings
 from crm.services.business_hours import day_window, to_local, to_utc_naive
 from utils.logger import logger
 
-MEETING_MINUTES = 40
+MEETING_MINUTES = 40  # o que a mensagem diz ao cliente
+AGENDA_MINUTES = 60  # o que a reunião ocupa na agenda da Erica
 LEAD_TIME = timedelta(hours=1)
 STEP = timedelta(minutes=30)
 GAP_BETWEEN_OPTIONS = timedelta(hours=2)
@@ -49,7 +53,7 @@ def _candidates(business_hours: dict, now_utc: datetime, duration: timedelta):
             start += STEP
 
 
-def next_free_slots(count: int = 2, now: datetime | None = None, minutes: int = MEETING_MINUTES,
+def next_free_slots(count: int = 2, now: datetime | None = None, minutes: int = AGENDA_MINUTES,
                     agenda=None) -> list[datetime]:
     """Até `count` inícios livres (UTC sem fuso). Lista vazia se a agenda não puder ser lida."""
     now = now or datetime.utcnow()

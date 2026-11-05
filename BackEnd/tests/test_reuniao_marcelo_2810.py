@@ -125,7 +125,7 @@ def test_free_slots_respect_business_hours_conflicts_and_gap():
     assert describe_slot(slots[1], now) == "hoje às 13h30"
 
 
-def _meeting(day: int, hour: int, minute: int = 0, minutes: int = 40):
+def _meeting(day: int, hour: int, minute: int = 0, minutes: int = 60):
     """Reunião já marcada, horário de Brasília (UTC-3) em 10/2026."""
     start = datetime(2026, 10, day, hour + 3, minute)
     CalendarEvent(type="reuniao_online", title="Reunião", start=start, end=start + timedelta(minutes=minutes),
@@ -134,19 +134,20 @@ def _meeting(day: int, hour: int, minute: int = 0, minutes: int = 40):
 
 @pytest.mark.django_db
 def test_free_slots_keep_30_min_from_existing_meetings():
-    # Segunda 19/10 às 9:00. Reuniões às 12:00-12:40 e 16:00-16:40.
+    # Segunda 19/10 às 9:00. Reuniões às 12:00-13:00 e 16:00-17:00 (1 h na agenda).
     _meeting(19, 12)
     _meeting(19, 16)
     offered = set()
     for minutes_after in range(0, 8 * 60, 30):
         now = datetime(2026, 10, 19, 11, 0) + timedelta(minutes=minutes_after)
         offered.update(describe_slot(s, datetime(2026, 10, 19, 12, 0)) for s in next_free_slots(count=2, now=now))
-    # 11:00 termina 11:40 (20 min antes das 12:00) e 13:00 começa 20 min depois das 12:40: não podem.
+    # Oferta ocupa 1 h: 11:00 termina 12:00 (sem folga) e 13:00 começa colado no fim: não podem.
     for blocked in ("hoje às 11h", "hoje às 11h30", "hoje às 12h", "hoje às 12h30", "hoje às 13h",
-                    "hoje às 15h", "hoje às 15h30", "hoje às 16h", "hoje às 16h30", "hoje às 17h"):
+                    "hoje às 15h", "hoje às 15h30", "hoje às 16h", "hoje às 16h30", "hoje às 17h",
+                    "hoje às 17h30"):
         assert blocked not in offered
-    assert "hoje às 10h30" in offered  # termina 11:10, 50 min antes
-    assert "hoje às 13h30" in offered  # 50 min depois do fim (12:40)
+    assert "hoje às 10h30" in offered  # ocupa até 11:30, 30 min antes
+    assert "hoje às 13h30" in offered  # 30 min depois do fim (13:00)
 
 
 @pytest.mark.django_db
@@ -157,8 +158,15 @@ def test_free_slots_buffer_exactly_30_min_is_allowed_and_only_round_times():
     slots = next_free_slots(now=now)
     assert describe_slot(slots[0], now) == "hoje às 10h30"
     for s in next_free_slots(count=2, now=now) + next_free_slots(now=datetime(2026, 10, 19, 12, 7)):
-        local_minute = s.minute
-        assert local_minute in (0, 30)
+        assert s.minute in (0, 30)
+
+
+@pytest.mark.django_db
+def test_free_slots_reserve_one_hour_and_end_by_18h():
+    # Sexta 23/10 às 15:00 Brasília: ocupando 1 h, o último horário do dia é 17:00 (termina 18:00).
+    now = datetime(2026, 10, 23, 18, 0)
+    slots = next_free_slots(now=now)
+    assert [describe_slot(s, now) for s in slots] == ["hoje às 16h", "amanhã às 8h"]
 
 
 @pytest.mark.django_db
