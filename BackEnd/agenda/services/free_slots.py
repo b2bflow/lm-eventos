@@ -4,6 +4,10 @@ Regra (reunião com o Marcelo, 28/10): sempre dois horários. Candidatos de meia
 horário comercial (LmSettings.business_hours), a partir de 1 h depois de agora, sem cair em bloqueio,
 reunião, visita ou compromisso do Google. O segundo fica pelo menos 2 h depois do primeiro, para o
 cliente ter opções diferentes de verdade.
+
+Folga (05/11): o horário oferecido fica a pelo menos 30 min do começo e do fim de qualquer compromisso
+já marcado. Ex.: reunião às 12:00-12:40 -> não oferece 11:00 (termina 11:40) nem 13:00; oferece 10:30
+e 13:30. Os inícios são sempre em hora cheia ou meia hora (8:00, 8:30 ... 17:00).
 """
 from datetime import date, datetime, time, timedelta
 
@@ -15,6 +19,7 @@ MEETING_MINUTES = 40
 LEAD_TIME = timedelta(hours=1)
 STEP = timedelta(minutes=30)
 GAP_BETWEEN_OPTIONS = timedelta(hours=2)
+BUFFER = timedelta(minutes=30)  # distância mínima de compromissos já marcados, antes e depois
 SEARCH_DAYS = 10
 
 WEEKDAYS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
@@ -58,7 +63,7 @@ def next_free_slots(count: int = 2, now: datetime | None = None, minutes: int = 
         for start in _candidates(business_hours, now, duration):
             if found and start < found[-1] + GAP_BETWEEN_OPTIONS:
                 continue
-            if agenda.conflicts(start, start + duration):
+            if agenda.conflicts(start - BUFFER, start + duration + BUFFER):
                 continue
             found.append(start)
             if len(found) == count:

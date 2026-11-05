@@ -118,11 +118,47 @@ def test_free_slots_respect_business_hours_conflicts_and_gap():
     CalendarEvent(type="bloqueio", title="Almoço", start=datetime(2026, 10, 19, 13, 0),
                   end=datetime(2026, 10, 19, 14, 0), status="confirmado").save()
     slots = next_free_slots(now=now)
-    # 10:00 está bloqueado (13:00 UTC); 10:30 também (o bloqueio vai até 11:00 Brasília). Livre: 11:00.
-    assert slots[0] == datetime(2026, 10, 19, 14, 0)
+    # Bloqueio 10:00-11:00 Brasília: 10:00, 10:30 e 11:00 (sem 30 min de folga) caem fora. Livre: 11:30.
+    assert slots[0] == datetime(2026, 10, 19, 14, 30)
     assert slots[1] - slots[0] >= timedelta(hours=2)
-    assert describe_slot(slots[0], now) == "hoje às 11h"
-    assert describe_slot(slots[1], now) == "hoje às 13h"
+    assert describe_slot(slots[0], now) == "hoje às 11h30"
+    assert describe_slot(slots[1], now) == "hoje às 13h30"
+
+
+def _meeting(day: int, hour: int, minute: int = 0, minutes: int = 40):
+    """Reunião já marcada, horário de Brasília (UTC-3) em 10/2026."""
+    start = datetime(2026, 10, day, hour + 3, minute)
+    CalendarEvent(type="reuniao_online", title="Reunião", start=start, end=start + timedelta(minutes=minutes),
+                  status="confirmado").save()
+
+
+@pytest.mark.django_db
+def test_free_slots_keep_30_min_from_existing_meetings():
+    # Segunda 19/10 às 9:00. Reuniões às 12:00-12:40 e 16:00-16:40.
+    _meeting(19, 12)
+    _meeting(19, 16)
+    offered = set()
+    for minutes_after in range(0, 8 * 60, 30):
+        now = datetime(2026, 10, 19, 11, 0) + timedelta(minutes=minutes_after)
+        offered.update(describe_slot(s, datetime(2026, 10, 19, 12, 0)) for s in next_free_slots(count=2, now=now))
+    # 11:00 termina 11:40 (20 min antes das 12:00) e 13:00 começa 20 min depois das 12:40: não podem.
+    for blocked in ("hoje às 11h", "hoje às 11h30", "hoje às 12h", "hoje às 12h30", "hoje às 13h",
+                    "hoje às 15h", "hoje às 15h30", "hoje às 16h", "hoje às 16h30", "hoje às 17h"):
+        assert blocked not in offered
+    assert "hoje às 10h30" in offered  # termina 11:10, 50 min antes
+    assert "hoje às 13h30" in offered  # 50 min depois do fim (12:40)
+
+
+@pytest.mark.django_db
+def test_free_slots_buffer_exactly_30_min_is_allowed_and_only_round_times():
+    # Reunião 9:00-10:00: 10:30 fica a exatamente 30 min do fim e pode.
+    _meeting(19, 9, minutes=60)
+    now = datetime(2026, 10, 19, 10, 0)  # 7:00 Brasília
+    slots = next_free_slots(now=now)
+    assert describe_slot(slots[0], now) == "hoje às 10h30"
+    for s in next_free_slots(count=2, now=now) + next_free_slots(now=datetime(2026, 10, 19, 12, 7)):
+        local_minute = s.minute
+        assert local_minute in (0, 30)
 
 
 @pytest.mark.django_db
@@ -138,7 +174,7 @@ def test_meeting_message_has_two_options():
     now = datetime(2026, 10, 19, 12, 0)
     slots = [datetime(2026, 10, 19, 18, 0), datetime(2026, 10, 20, 13, 0)]
     text = build_meeting_message("Ana Paula", "Casamento", slots, now)
-    assert text.startswith("Perfeito, Ana. Pelo que você me passou, a gente consegue te atender.")
+    assert text.startswith("Perfeito, Ana. Estamos analisando o seu pedido")
     assert "reunião de 40 minutos entre você e o nosso time técnico" in text
     assert "todos os detalhes do seu casamento" in text
     assert text.endswith("Se nos organizarmos para falar hoje às 15h ou amanhã às 10h, você consegue?")
