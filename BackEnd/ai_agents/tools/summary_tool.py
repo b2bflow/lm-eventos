@@ -37,6 +37,16 @@ class SummaryTool(ITool, FunctionCallMixin):
 
         normalized = str(value).strip().replace(" às ", " ").replace(" as ", " ")
 
+        # "10/01" (sem ano): próxima ocorrência dessa data.
+        day_month = re.fullmatch(r"(\d{1,2})/(\d{1,2})", normalized)
+        if day_month:
+            today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            try:
+                candidate = datetime(today.year, int(day_month.group(2)), int(day_month.group(1)))
+                return candidate if candidate >= today else candidate.replace(year=today.year + 1)
+            except ValueError:
+                return None
+
         for fmt in (
             "%d/%m/%Y %H:%M",
             "%d/%m/%y %H:%M",
@@ -63,7 +73,8 @@ class SummaryTool(ITool, FunctionCallMixin):
         return int(match.group()) if match else 0
 
     def _build_notes(self, arguments: dict) -> str:
-        dedicated_fields = {"horario_evento", "hora_evento", "event_time"}
+        # Horário que não vira hora (ex.: "Não sei", "à noite") fica nas notas em vez de se perder.
+        dedicated_fields = {"horario_evento", "hora_evento", "event_time"} if self._get_event_time(arguments) else set()
         lines = []
         for key, value in arguments.items():
             if not value or key in dedicated_fields:
@@ -82,13 +93,12 @@ class SummaryTool(ITool, FunctionCallMixin):
         if value in (None, ""):
             return None
 
-        normalized = str(value).strip().lower().replace("h", ":")
-        if normalized.isdigit():
-            return f"{int(normalized):02d}:00"
-        if normalized.endswith(":"):
-            return f"{normalized}00"
-
-        return normalized
+        # Mesma regra da cotação: o que não for um horário ("Não sei", "à noite") vira None,
+        # senão update_quote lança ValueError e o cliente fica sem resposta.
+        try:
+            return self.quote_service._parse_time(value)
+        except ValueError:
+            return None
 
     def _build_customer_attributes(self, customer: dict, arguments: dict) -> dict:
         notes = self._build_notes(arguments)
@@ -195,14 +205,21 @@ class SummaryTool(ITool, FunctionCallMixin):
         customer_attributes["status"] = "WAITING_BUDGET"
 
         self._block_customer_and_mark_budget(customer)
-        active_quote = self.quote_service.get_or_create_active_quote_for_customer(
-            customer_id=customer.get("id"),
-            seed=customer_attributes,
-        )
-        if active_quote:
-            self.quote_service.update_quote(
-                quote_id=active_quote.get("id"),
-                data=customer_attributes,
+        # A IA já foi pausada acima: uma falha aqui não pode deixar o cliente sem resposta.
+        try:
+            active_quote = self.quote_service.get_or_create_active_quote_for_customer(
+                customer_id=customer.get("id"),
+                seed=customer_attributes,
+            )
+            if active_quote:
+                self.quote_service.update_quote(
+                    quote_id=active_quote.get("id"),
+                    data=customer_attributes,
+                )
+        except Exception:
+            logger.exception(
+                "[SUMMARY TOOL] Falha ao atualizar a cotação do cliente %s; resposta enviada mesmo assim",
+                phone,
             )
 
         # Thread(

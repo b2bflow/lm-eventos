@@ -171,6 +171,57 @@ def test_meeting_tool_pauses_ai_qualifies_lead_and_offers_slots(group_notices):
     assert group_notices == [str(lead.id)]
 
 
+def _meeting_tool():
+    return MeetingSlotsTool(ai_client=None, chat_client=None,
+                            customer_repository=CustomerRepository(MongoDBClient()),
+                            conversation_repository=ConversationRepository())
+
+
+@pytest.mark.django_db
+@freeze_time("2026-11-05 16:00:00")
+def test_meeting_tool_handles_unknown_time_and_date_without_year(group_notices):
+    # Log de produção 05/11: horario_evento "Não sei" derrubava update_quote e o cliente ficava sem resposta.
+    lead = Customer(name="João", phone="5562900001008", agent="event_agent").save()
+    ConversationRepository.create_conversation(lead)
+    arguments = {"data_evento": "10/01", "numero_pessoas": "100", "tipo_evento": "Aniversário de 15 anos",
+                 "local_evento": "Casa de eventos zzz", "espaco": "Não sei", "horario_evento": "Não sei",
+                 "dj_ou_banda": "DJ", "recursos_adicionais": "pista de dança com DJ"}
+    output = asyncio.run(_meeting_tool().execute("fc1", "call1", "oferecer_horarios", lead.to_dict(), [], arguments))
+
+    assert "reunião de 40 minutos" in output[0]["content"]
+    lead.reload()
+    assert lead.customer_state_now == domain.QUALIFIED and lead.guest_count == 100
+    assert lead.event_date == datetime(2027, 1, 10)  # sem ano: próxima ocorrência
+    quote = Quote.objects(customer=lead).first()
+    assert not quote.event_time
+    assert "Horario evento: Não sei" in quote.notes
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("19h", "19h00"), ("20:30", "20h30"), ("a partir das 21h", "21h00"),
+    ("Não sei", None), ("à noite", None), ("", None),
+])
+def test_tool_event_time_never_raises(raw, expected):
+    assert _meeting_tool()._get_event_time({"horario_evento": raw}) == expected
+
+
+@pytest.mark.django_db
+@freeze_time("2026-10-19 12:00:00")
+def test_meeting_tool_still_answers_when_quote_update_fails(group_notices, monkeypatch):
+    lead = Customer(name="Lia", phone="5562900001009", agent="event_agent").save()
+    ConversationRepository.create_conversation(lead)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("falha qualquer")
+
+    monkeypatch.setattr(QuoteService, "update_quote", boom)
+    arguments = {"data_evento": "12/12/2026", "numero_pessoas": "80", "tipo_evento": "Casamento",
+                 "local_evento": "Espaço", "espaco": "aberto", "horario_evento": "19h",
+                 "dj_ou_banda": "DJ", "recursos_adicionais": ""}
+    output = asyncio.run(_meeting_tool().execute("fc1", "call1", "oferecer_horarios", lead.to_dict(), [], arguments))
+    assert "hoje às 10h ou hoje às 12h" in output[0]["content"]
+
+
 # --- Grupo de atendimento -------------------------------------------------------------------
 
 @pytest.mark.django_db

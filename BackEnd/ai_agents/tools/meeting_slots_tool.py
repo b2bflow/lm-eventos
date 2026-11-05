@@ -84,12 +84,19 @@ class MeetingSlotsTool(SummaryTool):
             attributes={"new_service": True, "agent": "response_orchestrator", "next_step": customer_attributes["next_step"]},
         )
         # Cotação em WAITING_BUDGET: lead qualificado pela IA, no funil e aviso no grupo de atendimento.
-        active_quote = self.quote_service.get_or_create_active_quote_for_customer(
-            customer_id=customer.get("id"),
-            seed=customer_attributes,
-        )
-        if active_quote:
-            self.quote_service.update_quote(quote_id=active_quote.get("id"), data=customer_attributes)
+        # A IA já foi pausada acima: uma falha aqui não pode deixar o cliente sem a mensagem dos horários.
+        try:
+            active_quote = self.quote_service.get_or_create_active_quote_for_customer(
+                customer_id=customer.get("id"),
+                seed=customer_attributes,
+            )
+            if active_quote:
+                self.quote_service.update_quote(quote_id=active_quote.get("id"), data=customer_attributes)
+        except Exception:
+            logger.exception(
+                "[MEETING SLOTS TOOL] Falha ao atualizar a cotação do cliente %s; mensagem enviada mesmo assim",
+                customer.get("phone"),
+            )
 
         message = build_meeting_message(customer.get("name"), arguments.get("tipo_evento"), slots, now)
         return [{"role": "assistant", "content": message}]
