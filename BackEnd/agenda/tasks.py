@@ -20,6 +20,6 @@ def sync_google_calendar():
 
 @shared_task
 def send_agenda_reminders():
-    """Lembretes de reunião e visita para cliente e Erica, 24 h e 2 h antes."""
+    """Lembretes de reunião e visita para cliente e Erica, 24 h e 2 h antes; link da reunião online 1 h antes."""
     from agenda.services.agenda_service import AgendaService
     return AgendaService().send_reminders()

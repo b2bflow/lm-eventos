@@ -92,6 +92,55 @@ def _meet_link(created: dict) -> str | None:
          if ep.get("entryPointType") == "video"), None)
 
 
+MEETING_LINK_BEFORE = timedelta(hours=1)  # link da call para o cliente
+
+
+def _greeting(local_now: datetime) -> str:
+    if local_now.hour < 12:
+        return "Bom dia"
+    return "Boa tarde" if local_now.hour < 18 else "Boa noite"
+
+
+def meeting_link_message(customer_name: str | None, start_utc: datetime, link: str, now_utc: datetime) -> str:
+    """Mensagem do link da reunião online, 1 h antes (texto do João, 05/11/2026)."""
+    local_now, local_start = to_local(now_utc), to_local(start_utc)
+    first = (customer_name or "").strip().split(" ")[0]
+    name = f" {first}" if first and not first.startswith("WhatsApp") else ""
+    day = "hoje" if local_start.date() == local_now.date() else "amanhã"
+    return "\n".join([
+        f"{_greeting(local_now)}{name}! Tudo bem?",
+        "",
+        f"Para facilitar seu acesso a nossa reunião de {day} as {local_start:%H:%M} segue link da call",
+        "",
+        link,
+        "",
+        "Qualquer coisa só chamar!",
+    ])
+
+
+def _record_in_conversation(customer: Customer, text: str, event: CalendarEvent, sent_ids: list[str]):
+    """O envio do link aparece na conversa da aba WhatsApp (e pode ser apagado para todos)."""
+    try:
+        from chat.container import ChatContainer
+        from chat.models.conversation_model import ConversationModel
+        conversation = ConversationModel.objects(customer=customer).order_by("-updated_at").first()
+        if not conversation:
+            return
+        metadata = {"automatic": "link_reuniao", "event_id": str(event.id)}
+        if sent_ids:
+            metadata["zapi_message_ids"] = sent_ids
+        ChatContainer.get_message_service()._save_and_notify(
+            conversation_id=str(conversation.id), content=text, direction="OUTGOING", sender_role="OPERATOR",
+            raw_metadata=metadata, status="SENT_TO_GATEWAY",
+        )
+        conversation.last_message_content = text
+        conversation.updated_at = datetime.utcnow()
+        conversation.save()
+    except Exception as e:
+        # O link já foi enviado ao cliente; falha ao registrar na conversa não desfaz o envio.
+        logger.error(f"[Agenda] Falha ao registrar o link da reunião na conversa: {e}")
+
+
 def _validate(event_type: str, start: datetime, end: datetime, location: str | None):
     if end <= start:
         raise ValueError("O fim deve ser depois do início.")
@@ -696,13 +745,16 @@ class AgendaService:
         removed = CalendarEvent.objects(source="google").delete()
         return {"disconnected": True, "mirror_removed": removed}
 
-    # --- Lembretes (24 h e 2 h antes) ----------------------------------------------------
+    # --- Lembretes (24 h e 2 h antes; link da reunião online 1 h antes) ---------------------
 
     def send_reminders(self, now: datetime | None = None) -> int:
         now = now or datetime.utcnow()
         self.extend_series(now + timedelta(days=2))  # séries longas: garante as ocorrências dos próximos dias
-        sent = 0
         notifications = CrmContainer.get_notification_service()
+        return self._send_time_reminders(now, notifications) + self._send_meeting_links(now, notifications)
+
+    def _send_time_reminders(self, now: datetime, notifications) -> int:
+        sent = 0
         for key, delta in (("24h", timedelta(hours=24)), ("2h", timedelta(hours=2))):
             window = CalendarEvent.objects(status="confirmado", type__in=["reuniao_online", "visita_tecnica"],
                                            start__gt=now, start__lte=now + delta)
@@ -718,7 +770,9 @@ class AgendaService:
                     ]))
                     done.add(f"{key}_erica")
                     sent += 1
-                if event.customer and f"{key}_cliente" not in done:
+                # Reunião online: em vez do lembrete de 2 h, o cliente recebe o link da call 1 h antes.
+                skip_client = key == "2h" and event.type == "reuniao_online"
+                if event.customer and f"{key}_cliente" not in done and not skip_client:
                     lines = [f"Lembrete: sua {label} com a LM Eventos é em {_when(event.start)}."]
                     if event.meet_link:
                         lines.append(f"Link: {event.meet_link}")
@@ -732,6 +786,45 @@ class AgendaService:
                     sent += 1
                 event.reminders_sent = sorted(done)
                 event.save()
+        return sent
+
+    def _send_meeting_links(self, now: datetime, notifications) -> int:
+        """Reunião online com lead: 1 h antes o cliente recebe o link da call (uma vez por horário; remarcar
+        zera os lembretes). Sem link no evento, a Erica é avisada e o envio fica para quando o link existir."""
+        sent = 0
+        window = CalendarEvent.objects(status="confirmado", type="reuniao_online",
+                                       start__gt=now, start__lte=now + MEETING_LINK_BEFORE)
+        for event in window:
+            customer = event.customer
+            done = set(event.reminders_sent or [])
+            if not customer or "1h_cliente" in done:
+                continue
+            who = customer.name or format_phone(customer.phone)
+            if not (event.meet_link or "").strip():
+                if "1h_sem_link" not in done:
+                    notifications.notify_erica(
+                        f"Atenção: a reunião online com {who} às {to_local(event.start):%H:%M} não tem link "
+                        f"cadastrado. O link não foi enviado ao cliente; envie manualmente.")
+                    done.add("1h_sem_link")
+                    event.update(set__reminders_sent=sorted(done))
+                    sent += 1
+                continue
+            text = meeting_link_message(customer.name, event.start, event.meet_link.strip(), now)
+            try:
+                ok = bool(notifications.chat.send_message(phone=customer.phone, message=text, split=False))
+            except Exception as e:
+                logger.error(f"[Agenda] Falha ao enviar o link da reunião para {customer.phone}: {e}")
+                ok = False
+            done.add("1h_cliente")  # marcado mesmo em falha: nada de reenviar a cada rodada
+            event.update(set__reminders_sent=sorted(done))
+            if ok:
+                sent += 1
+                sent_ids = list(getattr(notifications.chat, "last_sent_ids", None) or [])
+                _record_in_conversation(customer, text, event, sent_ids)
+            else:
+                notifications.notify_erica(
+                    f"Não foi possível enviar o link da reunião das {to_local(event.start):%H:%M} para {who} "
+                    f"({format_phone(customer.phone)}). Envie manualmente: {event.meet_link}")
         return sent
 
     def confirmed_event_dates(self, start: datetime, end: datetime) -> set:

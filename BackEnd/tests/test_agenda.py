@@ -165,7 +165,7 @@ def test_reminders_24h_and_2h_sent_once(lead, erica_phone, zapi_outbox):
     service = AgendaService(google=FakeGoogle())
     assert service.send_reminders(now=now) == 2  # 24h: Erica + cliente
     assert service.send_reminders(now=now) == 0
-    assert service.send_reminders(now=now + timedelta(hours=19)) == 2  # 2h: Erica + cliente
+    assert service.send_reminders(now=now + timedelta(hours=19)) == 2  # 2h: Erica; cliente recebe o link (1h)
     phones = [m["phone"] for m in zapi_outbox]
     assert phones.count("5562900000002") == 2 and phones.count(lead.phone) == 2
 

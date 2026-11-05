@@ -26,9 +26,10 @@ CELERY_BEAT_SCHEDULE: dict = {
         "task": "agenda.tasks.sync_google_calendar",
         "schedule": crontab(minute="*/10"),
     },
-    # Lembretes de reunião e visita (24 h e 2 h antes)
+    # Lembretes de reunião e visita (24 h e 2 h antes) e link da reunião online para o cliente 1 h antes
+    # (a cada 5 min: o link sai entre 55 e 60 min antes)
     "agenda-reminders": {
         "task": "agenda.tasks.send_agenda_reminders",
-        "schedule": crontab(minute="*/15"),
+        "schedule": crontab(minute="*/5"),
     },
 }
