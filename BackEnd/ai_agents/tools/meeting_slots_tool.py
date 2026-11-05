@@ -28,7 +28,7 @@ def build_meeting_message(customer_name: str | None, event_type: str | None, slo
     word = _event_word(event_type)
     article = "da" if word == "formatura" else "do"
     text = (
-        f"{greeting} Pelo que você me passou, a gente consegue te atender. Estamos analisando o seu pedido e "
+        f"{greeting} Estamos analisando o seu pedido e "
         f"gostaríamos de agendar uma reunião de {MEETING_MINUTES} minutos entre você e o nosso time técnico para "
         f"entender todos os detalhes {article} seu {word} e te entregar o melhor orçamento possível."
     )
