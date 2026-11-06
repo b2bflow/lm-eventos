@@ -12,7 +12,7 @@ são sempre em hora cheia ou meia hora.
 Duração: para o cliente a reunião é de 40 min (MEETING_MINUTES, na mensagem), mas na agenda da Erica ela
 ocupa 1 h (AGENDA_MINUTES): é essa duração que precisa caber no horário de reuniões e respeitar a folga.
 
-Horário de reuniões (06/11): das 8h às 19h (último início 18:00). Sábado das 8h às 12h, domingo não.
+Horário de reuniões (06/11): de segunda a sexta, das 8h às 19h (último início 18:00). Sábado e domingo não.
 """
 from datetime import date, datetime, time, timedelta
 
@@ -31,7 +31,7 @@ SEARCH_DAYS = 10
 # Dia da semana (0 = segunda) -> [início, fim] das reuniões; None = sem reunião.
 MEETING_HOURS = {
     "0": ["08:00", "19:00"], "1": ["08:00", "19:00"], "2": ["08:00", "19:00"],
-    "3": ["08:00", "19:00"], "4": ["08:00", "19:00"], "5": ["08:00", "12:00"], "6": None,
+    "3": ["08:00", "19:00"], "4": ["08:00", "19:00"], "5": None, "6": None,
 }
 
 # Período que o cliente pede ("só consigo à tarde"), pelo horário de início.

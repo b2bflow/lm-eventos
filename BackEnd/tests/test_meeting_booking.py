@@ -1,6 +1,6 @@
 """IA de social e corporativo agenda a reunião com o time técnico (pedido do João, 06/11/2026).
 
-Reuniões das 8h às 19h. Depois de oferecer os horários, a IA marca o que o cliente aceitar (ou o horário
+Reuniões de segunda a sexta, das 8h às 19h. Depois de oferecer os horários, a IA marca o que o cliente aceitar (ou o horário
 que ele disser, se estiver livre), oferece outros horários num período/dia ou pergunta o melhor horário
 uma vez só; se ainda não der, passa para a equipe.
 """
@@ -82,7 +82,7 @@ def test_check_slot_rules():
     assert check_slot(utc(19, 8), now=utc(19, 7)) is None
     assert check_slot(utc(19, 18, 30), now=now) == CLOSED  # terminaria 19:30
     assert check_slot(utc(19, 7, 30), now=utc(19, 6)) == CLOSED
-    assert check_slot(utc(24, 11, 30), now=now) == CLOSED  # sábado fecha 12:00
+    assert check_slot(utc(24, 9), now=now) == CLOSED  # sábado
     assert check_slot(utc(25, 10), now=now) == CLOSED  # domingo
     assert check_slot(utc(19, 14, 15), now=now) == NOT_ROUND
     assert check_slot(utc(19, 9, 20), now=now) == PAST  # menos de 30 min
@@ -185,7 +185,8 @@ def test_second_try_with_free_time_is_booked():
 def test_client_time_out_of_hours_explains_the_hours():
     lead = lead_waiting([utc(19, 10), utc(19, 14)])
     output = run(BookMeetingTool, lead, data="21/10/2026", horario="19:00")
-    assert text(output).startswith("Nossas reuniões são de segunda a sexta, das 8h às 19h")
+    assert text(output).startswith("Nossas reuniões são de segunda a sexta, das 8h às 19h.")
+    assert "sábado" not in text(output)
 
 
 # --- Período, dia e pergunta extra ------------------------------------------------------------
@@ -228,7 +229,7 @@ def test_day_without_time_offers_slots_that_day():
 @freeze_time(NOW)
 def test_no_slot_in_period_asks_for_day_and_time():
     lead = lead_waiting([utc(19, 10), utc(19, 14)])
-    output = run(OtherSlotsTool, lead, periodo="noite", data="24/10/2026")  # sábado fecha 12:00
+    output = run(OtherSlotsTool, lead, periodo="manha", data="24/10/2026")  # sábado: sem reunião
     assert text(output) == ("Nesse período não tenho horário livre na agenda. "
                             "Qual outro dia e horário seria melhor para você?")
     lead.reload()

@@ -167,14 +167,15 @@ def test_free_slots_reserve_one_hour_and_end_by_19h():
     now = datetime(2026, 10, 23, 18, 0)
     slots = next_free_slots(now=now)
     assert [describe_slot(s, now) for s in slots] == ["hoje às 16h", "hoje às 18h"]
-    # Sexta 17:30: não cabe mais nada hoje; sábado vai até 12:00 (último início 11:00).
+    # Sexta 17:30: não cabe mais nada hoje e não tem reunião no fim de semana: vai para segunda.
     now = datetime(2026, 10, 23, 20, 30)
-    assert [describe_slot(s, now) for s in next_free_slots(now=now)] == ["amanhã às 8h", "amanhã às 10h"]
+    assert [describe_slot(s, now) for s in next_free_slots(now=now)] == [
+        "segunda-feira (26/10) às 8h", "segunda-feira (26/10) às 10h"]
 
 
 @pytest.mark.django_db
 def test_free_slots_skip_to_next_business_day():
-    # Sábado 24/10 às 11:30 Brasília (fecha 12:00): vai para segunda.
+    # Sábado 24/10 às 11:30 Brasília: fim de semana não tem reunião, vai para segunda.
     now = datetime(2026, 10, 24, 14, 30)
     slots = next_free_slots(now=now)
     assert describe_slot(slots[0], now) == "segunda-feira (26/10) às 8h"
