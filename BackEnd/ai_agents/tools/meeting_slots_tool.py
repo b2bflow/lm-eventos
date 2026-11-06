@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from agenda.services.free_slots import MEETING_MINUTES, describe_slot, next_free_slots
+from ai_agents.tools.meeting_booking_tools import start_offer
 from ai_agents.tools.summary_tool import SummaryTool
 from utils.logger import logger, to_json_dump
 
@@ -42,11 +43,12 @@ def build_meeting_message(customer_name: str | None, event_type: str | None, slo
 
 class MeetingSlotsTool(SummaryTool):
     """Fim da qualificação de evento social ou corporativo: em vez de "logo você recebe o orçamento", a IA
-    oferece dois horários livres da agenda para uma reunião com o time técnico e sai da conversa.
+    oferece dois horários livres da agenda para uma reunião com o time técnico.
 
-    A resposta do cliente fica com a equipe (a IA já está pausada): ela confirma o horário e agenda a
-    reunião pela plataforma, o que leva o card para "Reunião agendada". O lead entra no funil como
-    "Lead qualificado" (via cotação em WAITING_BUDGET) e o grupo de atendimento é avisado.
+    A IA continua na conversa (06/11): a resposta do cliente vai para o agente de agendamento
+    (`meeting_agent`, ver meeting_booking_tools), que marca a reunião na agenda da Erica ou passa para a
+    equipe. O lead entra no funil como "Lead qualificado" (via cotação em WAITING_BUDGET) e o grupo de
+    atendimento é avisado.
     """
 
     name = "oferecer_horarios"
@@ -72,19 +74,15 @@ class MeetingSlotsTool(SummaryTool):
 
         customer_attributes = self._build_customer_attributes(customer, arguments)
         customer_attributes["next_step"] = (
-            f"Confirmar a reunião de {MEETING_MINUTES} min oferecida pela IA: {offered}" if offered
-            else f"Combinar com o cliente o horário da reunião de {MEETING_MINUTES} min"
+            f"Cliente escolhendo o horário da reunião (IA): {offered}" if offered
+            else "Cliente escolhendo o dia e horário da reunião (IA)"
         )
         customer_attributes["status"] = "WAITING_BUDGET"
 
-        # A IA sai da conversa: a resposta com o horário vai para a equipe agendar.
-        self._block_customer_and_mark_budget(customer)
-        self.customer.update(
-            id=customer.get("id"),
-            attributes={"new_service": True, "agent": "response_orchestrator", "next_step": customer_attributes["next_step"]},
-        )
+        # A IA segue na conversa com o agente de agendamento, que sabe quais horários foram oferecidos.
+        start_offer(self.customer, customer.get("id"), slots, customer_attributes["next_step"])
         # Cotação em WAITING_BUDGET: lead qualificado pela IA, no funil e aviso no grupo de atendimento.
-        # A IA já foi pausada acima: uma falha aqui não pode deixar o cliente sem a mensagem dos horários.
+        # Uma falha aqui não pode deixar o cliente sem a mensagem dos horários.
         try:
             active_quote = self.quote_service.get_or_create_active_quote_for_customer(
                 customer_id=customer.get("id"),

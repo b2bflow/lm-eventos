@@ -4,6 +4,7 @@ from ai_agents.tools.deixar_tool import DeixarTool
 from ai_agents.tools.humano_tool import HumanoTool
 from ai_agents.tools.summary_tool import SummaryTool
 from ai_agents.tools.meeting_slots_tool import MeetingSlotsTool
+from ai_agents.tools.meeting_booking_tools import AskTimeTool, BookMeetingTool, OtherSlotsTool
 from ai_agents.interfaces.tool_interface import ITool
 
 from functools import partial
@@ -53,6 +54,18 @@ class ToolContainer:
                 customer_repository=self._repositories.customer,
                 conversation_repository=self._repositories.conversation,
             ),
+
+            # Agendamento da reunião pelo agente meeting_agent (depois de oferecer_horarios).
+            **{
+                tool.name: partial(
+                    tool,
+                    ai_client=self._clients.ai(),
+                    chat_client=self._clients.chat(),
+                    customer_repository=self._repositories.customer,
+                    conversation_repository=self._repositories.conversation,
+                )
+                for tool in (BookMeetingTool, OtherSlotsTool, AskTimeTool)
+            },
 
             "visita_tecnica": partial(
                 VisitaTecnica,

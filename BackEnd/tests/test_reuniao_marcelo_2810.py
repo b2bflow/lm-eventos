@@ -143,11 +143,11 @@ def test_free_slots_keep_30_min_from_existing_meetings():
         offered.update(describe_slot(s, datetime(2026, 10, 19, 12, 0)) for s in next_free_slots(count=2, now=now))
     # Oferta ocupa 1 h: 11:00 termina 12:00 (sem folga) e 13:00 começa colado no fim: não podem.
     for blocked in ("hoje às 11h", "hoje às 11h30", "hoje às 12h", "hoje às 12h30", "hoje às 13h",
-                    "hoje às 15h", "hoje às 15h30", "hoje às 16h", "hoje às 16h30", "hoje às 17h",
-                    "hoje às 17h30"):
+                    "hoje às 15h", "hoje às 15h30", "hoje às 16h", "hoje às 16h30", "hoje às 17h"):
         assert blocked not in offered
     assert "hoje às 10h30" in offered  # ocupa até 11:30, 30 min antes
     assert "hoje às 13h30" in offered  # 30 min depois do fim (13:00)
+    assert "hoje às 17h30" in offered  # 30 min depois do fim (17:00)
 
 
 @pytest.mark.django_db
@@ -162,11 +162,14 @@ def test_free_slots_buffer_exactly_30_min_is_allowed_and_only_round_times():
 
 
 @pytest.mark.django_db
-def test_free_slots_reserve_one_hour_and_end_by_18h():
-    # Sexta 23/10 às 15:00 Brasília: ocupando 1 h, o último horário do dia é 17:00 (termina 18:00).
+def test_free_slots_reserve_one_hour_and_end_by_19h():
+    # Sexta 23/10 às 15:00 Brasília: ocupando 1 h, o último horário do dia é 18:00 (termina 19:00).
     now = datetime(2026, 10, 23, 18, 0)
     slots = next_free_slots(now=now)
-    assert [describe_slot(s, now) for s in slots] == ["hoje às 16h", "amanhã às 8h"]
+    assert [describe_slot(s, now) for s in slots] == ["hoje às 16h", "hoje às 18h"]
+    # Sexta 17:30: não cabe mais nada hoje; sábado vai até 12:00 (último início 11:00).
+    now = datetime(2026, 10, 23, 20, 30)
+    assert [describe_slot(s, now) for s in next_free_slots(now=now)] == ["amanhã às 8h", "amanhã às 10h"]
 
 
 @pytest.mark.django_db
@@ -193,7 +196,7 @@ def test_meeting_message_has_two_options():
 
 @pytest.mark.django_db
 @freeze_time("2026-10-19 12:00:00")
-def test_meeting_tool_pauses_ai_qualifies_lead_and_offers_slots(group_notices):
+def test_meeting_tool_keeps_ai_qualifies_lead_and_offers_slots(group_notices):
     lead = Customer(name="Marina", phone="5562900001007", agent="event_agent").save()
     conversation = ConversationRepository.create_conversation(lead)
     tool = MeetingSlotsTool(ai_client=None, chat_client=None,
@@ -208,7 +211,10 @@ def test_meeting_tool_pauses_ai_qualifies_lead_and_offers_slots(group_notices):
     assert "hoje às 10h ou hoje às 12h" in output[0]["content"]
     lead.reload()
     conversation = ConversationModel.objects(id=conversation.id).first()
-    assert conversation.ai_active is False and conversation.tag == "operador humano"
+    # A IA continua: a resposta do cliente vai para o agente de agendamento (06/11).
+    assert conversation.ai_active is True and conversation.tag == "AGENTE"
+    assert lead.agent == "meeting_agent" and lead.blocked_until is None
+    assert lead.meeting_offer["round"] == 1 and len(lead.meeting_offer["slots"]) == 2
     assert lead.ai_qualified_at is not None and lead.customer_state_now == domain.QUALIFIED
     assert lead.funnel_entered_at is not None and lead.guest_count == 120
     assert "hoje às 10h ou hoje às 12h" in lead.next_step

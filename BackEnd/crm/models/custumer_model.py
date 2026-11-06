@@ -97,6 +97,8 @@ class Customer(Document):
     # Reabrir o lead (voltar a uma etapa em andamento) ou abrir um lead novo desarquiva.
     funnel_archived_at = DateTimeField(null=True)
     ai_qualified_at = DateTimeField(null=True)  # a IA terminou a qualificação (cotação em WAITING_BUDGET)
+    # Agendamento da reunião pela IA (social/corporativo): horários oferecidos (ISO, UTC), tentativa e situação.
+    meeting_offer = DictField()
 
     created_at = DateTimeField(default=datetime.utcnow)  # UTC sem fuso, como o resto do banco
     updated_at = DateTimeField(default=datetime.utcnow)

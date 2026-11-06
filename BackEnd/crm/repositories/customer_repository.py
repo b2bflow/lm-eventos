@@ -19,7 +19,7 @@ class CustomerRepository(ICustomerRepository):
         "next_action_at", "qualified_at", "first_contact_at", "stage_changed_at",
         # Fluxo da IA em producao
         "blocked_until", "silenced_until", "send_button", "waiting_for_name", "name_collected",
-        "last_message_attendant", "followup_sent",
+        "last_message_attendant", "followup_sent", "meeting_offer",
     ])
 
     def __init__(self, database_client: MongoDBClient):
@@ -191,9 +191,12 @@ class CustomerRepository(ICustomerRepository):
         four_hours_ago = datetime.now() - timedelta(hours=4)
 
         with self.db.get_connection_context():
+            # Cliente escolhendo o horário da reunião (agente de agendamento) não recebe o "conversa parada":
+            # o follow-up trocaria o agente e a resposta dele com o horário se perderia.
             customers = Customer.objects(
                 last_message_attendant__lte=four_hours_ago,
                 followup_sent=False,
+                agent__ne="meeting_agent",
             )
 
         return [customer.to_dict() for customer in customers]

@@ -471,6 +471,12 @@ class GenerateResponseService:
 
             resolved_output_content = self._resolve_output_content(full_output)
 
+            # Ferramenta que já falou com o cliente por conta própria (ex.: agendar_reuniao manda a
+            # confirmação da agenda) devolve resposta vazia: não manda nem grava mensagem em branco.
+            if not resolved_output_content.strip():
+                logger.info("[GENERATE RESPONSE SERVICE] Resposta vazia para %s; nada enviado.", phone)
+                return
+
             self.chat.send_message(
                 phone=phone,
                 message=self._remove_links(resolved_output_content).replace("()", ""),
