@@ -34,7 +34,8 @@ WAITING, BOOKED, HANDED_OFF = "aguardando", "agendada", "equipe"
 
 UNAVAILABLE = {
     BUSY: "Esse horário já está ocupado na nossa agenda. Teria algum outro horário que fique bom para você?",
-    CLOSED: ("Nossas reuniões são de segunda a sexta, das 9h às 19h. "
+    # Diz o horário de início (último às 18h); a reunião em si vai até 19h na agenda.
+    CLOSED: ("Nossas reuniões são de segunda a sexta, das 9h às 18h. "
              "Teria algum outro horário nesse intervalo que fique bom para você?"),
     NOT_ROUND: ("Nossas reuniões começam sempre em hora cheia ou meia hora (por exemplo, 14h ou 14h30). "
                 "Qual horário fica melhor para você?"),

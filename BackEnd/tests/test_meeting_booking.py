@@ -185,7 +185,7 @@ def test_second_try_with_free_time_is_booked():
 def test_client_time_out_of_hours_explains_the_hours():
     lead = lead_waiting([utc(19, 10), utc(19, 14)])
     output = run(BookMeetingTool, lead, data="21/10/2026", horario="19:00")
-    assert text(output).startswith("Nossas reuniões são de segunda a sexta, das 9h às 19h.")
+    assert text(output).startswith("Nossas reuniões são de segunda a sexta, das 9h às 18h.")
     assert "sábado" not in text(output)
 
 
