@@ -1,6 +1,6 @@
 """IA de social e corporativo agenda a reunião com o time técnico (pedido do João, 06/11/2026).
 
-Reuniões de segunda a sexta, das 8h às 19h. Depois de oferecer os horários, a IA marca o que o cliente aceitar (ou o horário
+Reuniões de segunda a sexta, das 9h às 19h. Depois de oferecer os horários, a IA marca o que o cliente aceitar (ou o horário
 que ele disser, se estiver livre), oferece outros horários num período/dia ou pergunta o melhor horário
 uma vez só; se ainda não der, passa para a equipe.
 """
@@ -73,15 +73,15 @@ def assert_handed_off(lead: Customer, output: list[dict]):
     assert meetings(lead) == []
 
 
-# --- Horário de reuniões: 8h às 19h -----------------------------------------------------------
+# --- Horário de reuniões: 9h às 19h -----------------------------------------------------------
 
 @pytest.mark.django_db
 def test_check_slot_rules():
     now = utc(19, 9)
     assert check_slot(utc(19, 18), now=now) is None  # termina 19:00
-    assert check_slot(utc(19, 8), now=utc(19, 7)) is None
+    assert check_slot(utc(19, 9), now=utc(19, 8)) is None
     assert check_slot(utc(19, 18, 30), now=now) == CLOSED  # terminaria 19:30
-    assert check_slot(utc(19, 7, 30), now=utc(19, 6)) == CLOSED
+    assert check_slot(utc(19, 8, 30), now=utc(19, 7)) == CLOSED  # antes das 9h
     assert check_slot(utc(24, 9), now=now) == CLOSED  # sábado
     assert check_slot(utc(25, 10), now=now) == CLOSED  # domingo
     assert check_slot(utc(19, 14, 15), now=now) == NOT_ROUND
@@ -101,7 +101,7 @@ def test_free_slots_by_period_and_day():
     night = next_free_slots(now=now, period="noite")
     assert [to_local(s).strftime("%d %H:%M") for s in night] == ["19 18:00", "20 18:00"]
     morning_friday = next_free_slots(now=now, period="manha", day=utc(23, 0).date())
-    assert [to_local(s).strftime("%d %H:%M") for s in morning_friday] == ["23 08:00", "23 10:00"]
+    assert [to_local(s).strftime("%d %H:%M") for s in morning_friday] == ["23 09:00", "23 11:00"]
     # Não repete o que já foi oferecido.
     again = next_free_slots(now=now, period="tarde", exclude=afternoon)
     assert not set(again) & set(afternoon)
@@ -185,7 +185,7 @@ def test_second_try_with_free_time_is_booked():
 def test_client_time_out_of_hours_explains_the_hours():
     lead = lead_waiting([utc(19, 10), utc(19, 14)])
     output = run(BookMeetingTool, lead, data="21/10/2026", horario="19:00")
-    assert text(output).startswith("Nossas reuniões são de segunda a sexta, das 8h às 19h.")
+    assert text(output).startswith("Nossas reuniões são de segunda a sexta, das 9h às 19h.")
     assert "sábado" not in text(output)
 
 
@@ -221,7 +221,7 @@ def test_period_rejected_again_goes_to_team():
 def test_day_without_time_offers_slots_that_day():
     lead = lead_waiting([utc(19, 10), utc(19, 14)])
     output = run(OtherSlotsTool, lead, periodo="qualquer", data="23/10/2026")
-    assert text(output) == ("Sem problemas. Consigo sexta-feira (23/10) às 8h ou sexta-feira (23/10) às 10h. "
+    assert text(output) == ("Sem problemas. Consigo sexta-feira (23/10) às 9h ou sexta-feira (23/10) às 11h. "
                             "Algum desses horários fica bom para você?")
 
 
