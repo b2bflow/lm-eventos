@@ -73,18 +73,26 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <NumberField label={social ? "Convidados" : "Pessoas"} value={form.guests} onChange={(v) => set("guests", v)} />
-        <div className={`space-y-1 ${form.multi_day ? "" : "col-span-1 sm:col-span-2"}`}>
-          <Label htmlFor={id("inicio")} className="text-xs">{form.multi_day ? "Início do evento" : "Data do evento"}</Label>
-          <Input id={id("inicio")} type="date" value={form.event_date} onChange={(e) => set("event_date", e.target.value)} />
-        </div>
-        {form.multi_day && (
-          <div className="space-y-1">
-            <Label htmlFor={id("fim")} className="text-xs">Fim do evento{eventDays > 1 ? ` (${eventDays} dias)` : ""}</Label>
-            <Input id={id("fim")} type="date" min={form.event_date || undefined} value={form.end_date}
-              onChange={(e) => set("end_date", e.target.value)} />
+        {/* Início e fim lado a lado quando cabem; na coluna estreita (notebook com o resumo ao lado, celular),
+            um embaixo do outro para a data não ficar cortada */}
+        <div className="col-span-1 sm:col-span-2 flex flex-wrap gap-3">
+          <div className="space-y-1 flex-1 min-w-[8.5rem]">
+            <Label htmlFor={id("inicio")} className="text-xs whitespace-nowrap">
+              {form.multi_day ? "Início do evento" : "Data do evento"}
+            </Label>
+            <Input id={id("inicio")} type="date" value={form.event_date} onChange={(e) => set("event_date", e.target.value)} />
           </div>
-        )}
-        <div className="col-span-2">
+          {form.multi_day && (
+            <div className="space-y-1 flex-1 min-w-[8.5rem]">
+              <Label htmlFor={id("fim")} className="text-xs whitespace-nowrap">
+                Fim do evento{eventDays > 1 ? ` (${eventDays} dias)` : ""}
+              </Label>
+              <Input id={id("fim")} type="date" min={form.event_date || undefined} value={form.end_date}
+                onChange={(e) => set("end_date", e.target.value)} />
+            </div>
+          )}
+        </div>
+        <div className="col-span-2 sm:col-span-3">
           <SwitchField id={id("multidia")} label="Evento de mais de um dia?" checked={form.multi_day}
             onChange={(v) => set("multi_day", v)} />
         </div>
