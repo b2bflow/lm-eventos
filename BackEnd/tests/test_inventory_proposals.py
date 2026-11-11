@@ -205,6 +205,29 @@ def test_corporate_needs_event_date(sdr_client, lead):
 
 
 @pytest.mark.django_db
+def test_multi_day_event_reserves_the_whole_period(sdr_client, stock, lead):
+    inputs = {"guests": 100, "event_date": "2026-11-20", "multi_day": True, "end_date": "2026-11-22",
+              "with_invoice": False}
+    url = "/api/v1/sales/proposals/calculate/"
+    one_day = sdr_client.post(url, {"mode": "corporativo", "inputs": {**inputs, "end_date": None}}, format="json").data
+    resp = sdr_client.post(url, {"mode": "corporativo", "inputs": inputs}, format="json")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["period_start"].startswith("2026-11-20") and resp.data["period_end"].startswith("2026-11-23")
+    assert resp.data["total"] == one_day["total"]  # o preço não muda com os dias
+    saved = sdr_client.post("/api/v1/sales/proposals/", {"customer_id": str(lead.id), "mode": "social",
+                                                         "inputs": inputs}, format="json")
+    assert saved.status_code == 201, saved.data
+    assert saved.data["period_end"].startswith("2026-11-23") and saved.data["inputs"]["end_date"] == "2026-11-22"
+
+
+@pytest.mark.django_db
+def test_multi_day_event_end_cannot_be_before_start(sdr_client):
+    resp = sdr_client.post("/api/v1/sales/proposals/calculate/", {"mode": "social", "inputs": {
+        "guests": 100, "event_date": "2026-11-20", "multi_day": True, "end_date": "2026-11-19"}}, format="json")
+    assert resp.status_code == 400 and "fim do evento" in resp.data["detail"]
+
+
+@pytest.mark.django_db
 def test_social_with_competitor_quote_becomes_meeting_with_erica(sdr_client, stock, lead, contacts, zapi_outbox):
     inputs = {"event_date": "2026-11-21", "guests": 120, "structure": "gol_3x4", "led_m2": 6, "dj": True,
               "competitor_quote": True, "margin": 0.2, "with_invoice": False}

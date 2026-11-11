@@ -6,7 +6,11 @@ export type EventVariant = "corporativo" | "social";
 
 export interface EventForm {
   guests: number;
+  /** Data do evento; com `multi_day`, é o primeiro dia. */
   event_date: string;
+  /** Evento de mais de um dia: liga a data de fim (`end_date`), que vai para o período da reserva. */
+  multi_day: boolean;
+  end_date: string;
   band: Band;
   dance_floor: boolean;
   stage_m2: number;
@@ -64,7 +68,7 @@ export const SOCIAL_LIGHTS = [
 ];
 
 export const emptyEvent = (variant: EventVariant): EventForm => ({
-  guests: 0, event_date: "", band: "nenhuma", dance_floor: variant === "social", stage_m2: 0, stage_covered: true,
+  guests: 0, event_date: "", multi_day: false, end_date: "", band: "nenhuma", dance_floor: variant === "social", stage_m2: 0, stage_covered: true,
   led_m2: 0, led_technician: false, led_structure: 0, backdrop: 0, lights: {}, extra_mics: 0, tp: 0, praticaveis: 0,
   slide_passer: 0, digital_mixer: 0, pass_cable_m: 0,
   sound_enabled: false, stage_video_enabled: false, lighting_enabled: false, operational: ["carga", "descarga", "frete", "alimentacao"],
@@ -95,6 +99,9 @@ export function eventInputs(variant: EventVariant, form: EventForm, isAdmin: boo
   const keys = [...COMMON_EVENT_KEYS, ...VARIANT_KEYS[variant]];
   const inputs: Record<string, unknown> = Object.fromEntries(keys.map((k) => [k, form[k]]));
   inputs.lights = positive(form.lights);
+  // Data de fim só com a chave ligada e depois do início; sem ela, o evento é de um dia
+  inputs.multi_day = form.multi_day;
+  if (form.multi_day && form.end_date && form.end_date !== form.event_date) inputs.end_date = form.end_date;
   inputs.extra_items = Object.entries(positive(form.kits || {})).map(([code, qty]) => ({ code, qty }));
   // Sem margem: a tabela já tem a margem da Erica (vale também ao reabrir proposta antiga com margem)
   inputs.margin = 0;
@@ -110,6 +117,8 @@ export function withServiceDefaults(
   return {
     ...rest,
     kits: Object.fromEntries((extra_items || []).map((e) => [e.code, e.qty])),
+    multi_day: inputs.multi_day ?? !!inputs.end_date,
+    end_date: inputs.end_date || "",
     sound_enabled: inputs.sound_enabled ?? true,
     stage_video_enabled: inputs.stage_video_enabled ?? true,
     lighting_enabled: inputs.lighting_enabled ?? true,

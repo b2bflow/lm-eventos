@@ -39,6 +39,10 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
     (code && catalog?.sound_sets?.[code]?.map((p) => `${p.qty} ${pieceName(p.code)}`).join(" + ")) || "";
   const ceremonyDefault = catalog?.sound_sets?.som_cerimonia ?? [];
   const kits = (catalog?.items || []).filter((i) => i.is_kit);
+  // Evento de mais de um dia: quantos dias, contando o primeiro e o último
+  const endBeforeStart = form.multi_day && !!form.event_date && !!form.end_date && form.end_date < form.event_date;
+  const eventDays = form.multi_day && form.event_date && form.end_date && !endBeforeStart
+    ? Math.round((Date.parse(form.end_date) - Date.parse(form.event_date)) / 86_400_000) + 1 : 0;
   const ceremonyQty = (code: string) =>
     form.ceremony_items?.[code] ?? ceremonyDefault.find((p) => p.code === code)?.qty ?? 0;
   const setCeremonyQty = (code: string, value: number) => set("ceremony_items",
@@ -69,12 +73,24 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <NumberField label={social ? "Convidados" : "Pessoas"} value={form.guests} onChange={(v) => set("guests", v)} />
-        <div className="space-y-1 col-span-1 sm:col-span-2">
-          <Label className="text-xs">Data do evento</Label>
-          <Input type="date" value={form.event_date} onChange={(e) => set("event_date", e.target.value)} />
+        <div className={`space-y-1 ${form.multi_day ? "" : "col-span-1 sm:col-span-2"}`}>
+          <Label htmlFor={id("inicio")} className="text-xs">{form.multi_day ? "Início do evento" : "Data do evento"}</Label>
+          <Input id={id("inicio")} type="date" value={form.event_date} onChange={(e) => set("event_date", e.target.value)} />
+        </div>
+        {form.multi_day && (
+          <div className="space-y-1">
+            <Label htmlFor={id("fim")} className="text-xs">Fim do evento{eventDays > 1 ? ` (${eventDays} dias)` : ""}</Label>
+            <Input id={id("fim")} type="date" min={form.event_date || undefined} value={form.end_date}
+              onChange={(e) => set("end_date", e.target.value)} />
+          </div>
+        )}
+        <div className="col-span-2">
+          <SwitchField id={id("multidia")} label="Evento de mais de um dia?" checked={form.multi_day}
+            onChange={(v) => set("multi_day", v)} />
         </div>
         {social && <SwitchField id={id("dj")} label="DJ" checked={form.dj} onChange={(v) => set("dj", v)} />}
       </div>
+      {endBeforeStart && <p className="text-xs text-destructive -mt-1">O fim do evento não pode ser antes do início.</p>}
 
       {social && (
         <Section title="Estrutura">

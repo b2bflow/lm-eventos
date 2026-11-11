@@ -61,6 +61,29 @@ def test_context_follows_the_three_canva_models():
     assert structure["mission"][0].startswith("Nossa missão é planejar, organizar")
 
 
+def test_multi_day_event_shows_the_period_on_header_and_cover():
+    kwargs = dict(valid_until=datetime(2026, 10, 21), issued_at=datetime(2026, 10, 16))
+    inputs = {"event_date": "2026-11-21", "multi_day": True, "end_date": "2026-11-23", "guests": 150}
+    wedding = build_pdf_context(social_proposal(inputs=inputs), {"name": "Ana", "celebration_type": "Casamento"},
+                                SETTINGS, **kwargs)
+    assert wedding["header"][0] == "Data do evento: 21/11/2026 a 23/11/2026"
+    assert wedding["cover_date"] == "21 A 23/NOVEMBRO/2026"
+    corporate = build_pdf_context({**social_proposal(inputs=inputs), "mode": "corporativo"}, {"name": "Leandro"},
+                                  SETTINGS, **kwargs)
+    assert corporate["cover_date"] == "21 A 23 DE NOVEMBRO"
+    turn = {**inputs, "event_date": "2026-11-30", "end_date": "2026-12-01"}
+    corporate = build_pdf_context({**social_proposal(inputs=turn), "mode": "corporativo"}, {"name": "Leandro"},
+                                  SETTINGS, **kwargs)
+    assert corporate["cover_date"] == "30 DE NOVEMBRO A 01 DE DEZEMBRO"
+    assert corporate["header"][0] == "Data do evento: 30/11/2026 a 01/12/2026"
+    new_year = build_pdf_context(social_proposal(inputs={**inputs, "event_date": "2026-12-31", "end_date": "2027-01-01"}),
+                                 {"name": "Ana", "celebration_type": "Casamento"}, SETTINGS, **kwargs)
+    assert new_year["cover_date"] == "31/DEZEMBRO/2026 A 01/JANEIRO/2027"
+    same_day = build_pdf_context(social_proposal(inputs={**inputs, "end_date": "2026-11-21"}), {"name": "Ana"},
+                                 SETTINGS, **kwargs)
+    assert same_day["header"][0] == "Data do evento: 21/11/2026"
+
+
 def test_pdf_lists_band_microphone_apart_and_quantities_match_the_lines():
     from sales.services.quote_calculator import CorporateInput, calculate_corporativo
     result = calculate_corporativo(CorporateInput(guests=2, band="voz_violao", extra_mics=2, digital_mixer=1),

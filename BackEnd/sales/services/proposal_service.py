@@ -130,6 +130,8 @@ class ProposalService:
             event_day = inputs.get("event_date") or (customer.event_date if customer and customer.event_date else None)
             start = _parse_day(event_day, "a data do evento")
             end = _parse_day(inputs.get("end_date"), "o fim do evento") if inputs.get("end_date") else start
+            if end < start:
+                raise ValueError("O fim do evento não pode ser antes do início.")
         return datetime.combine(start, datetime.min.time()), datetime.combine(end, datetime.min.time()) + timedelta(days=1)
 
     @staticmethod

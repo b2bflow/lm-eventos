@@ -151,13 +151,35 @@ def _long_day(value) -> str:
     return f"{day.day:02d} de {MONTHS[day.month - 1]} de {day.year}" if day else ""
 
 
-def _cover_day(value, model: str) -> str:
-    """Data da capa como no Canva: "23 DE JULHO" (corporativo) ou "15/AGOSTO/2026" (casamento)."""
+def _event_end(inputs: dict, start) -> date | None:
+    """Último dia do evento de mais de um dia (calculadora: chave "mais de um dia" + fim); None = um dia só."""
+    first, last = _day(start), _day(inputs.get("end_date"))
+    return last if first and last and last > first else None
+
+
+def _fmt_period(start, end: date | None) -> str:
+    return f"{_fmt_day(start)} a {_fmt_day(end)}" if end else _fmt_day(start)
+
+
+def _cover_day(value, model: str, end: date | None = None) -> str:
+    """Data da capa como no Canva: "23 DE JULHO" (corporativo) ou "15/AGOSTO/2026" (casamento).
+    Evento de mais de um dia: "23 A 25 DE JULHO" / "15 A 17/AGOSTO/2026"."""
     day = _day(value)
     if not day:
         return ""
     month = MONTHS[day.month - 1].upper()
-    return f"{day.day:02d} DE {month}" if model == "corporativo" else f"{day.day:02d}/{month}/{day.year}"
+    if model == "corporativo":
+        if not end:
+            return f"{day.day:02d} DE {month}"
+        end_month = MONTHS[end.month - 1].upper()
+        start_text = f"{day.day:02d}" if end.month == day.month else f"{day.day:02d} DE {month}"
+        return f"{start_text} A {end.day:02d} DE {end_month}"
+    if not end:
+        return f"{day.day:02d}/{month}/{day.year}"
+    end_text = f"{end.day:02d}/{MONTHS[end.month - 1].upper()}/{end.year}"
+    if (end.year, end.month) == (day.year, day.month):
+        return f"{day.day:02d} A {end_text}"
+    return f"{day.day:02d}/{month}{'' if end.year == day.year else f'/{day.year}'} A {end_text}"
 
 
 def _qty(value, unit: str) -> str:
@@ -295,6 +317,7 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         not_included.append("Nota fiscal")
 
     event_day = inputs.get("event_date") or customer.get("event_date") or proposal.get("period_start")
+    event_end = _event_end(inputs, event_day) if mode in ("corporativo", "social") else None
     if mode == "porta":
         header = [f"Retirada: {_fmt_day(inputs.get('pickup_date') or proposal.get('period_start'))}",
                   f"Devolução: {_fmt_day(inputs.get('return_date'))}",
@@ -305,7 +328,7 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         if inputs.get("end_date"):
             header.insert(1, f"Devolução: {_fmt_day(inputs.get('end_date'))}")
     else:
-        header = [f"Data do evento: {_fmt_day(event_day)}",
+        header = [f"Data do evento: {_fmt_period(event_day, event_end)}",
                   f"Local: {customer.get('venue') or qualification.get('local') or 'a definir'}",
                   f"Horário: {qualification.get('horario') or qualification.get('horario_evento') or 'a definir'}"]
 
@@ -335,7 +358,7 @@ def build_pdf_context(proposal: dict, customer: dict, settings: dict, valid_unti
         "issued_at": _long_day(issued_at),
         "model": model,
         "cover_name": (customer.get("name") or customer.get("company") or "").upper() if model != "estrutura" else None,
-        "cover_date": _cover_day(event_day, model) if model != "estrutura" else None,
+        "cover_date": _cover_day(event_day, model, event_end) if model != "estrutura" else None,
         "issued_day": _fmt_day(issued_at),
         "mission_page": "pagina2.jpg" if mode != "social" or mission_text(mode, customer.get("celebration_type"))
         is MISSION_CASAMENTO else "pagina2_sem_texto.jpg",
