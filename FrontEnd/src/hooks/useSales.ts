@@ -12,6 +12,8 @@ export interface CatalogItem {
   owned: boolean;
   block: string | null;
   note: string | null;
+  /** Torre cobrada por metro: metros cobrados por peça (pedida em peças). */
+  billed_length_m?: number | null;
   /** Kit criado no Estoque: vendido por kit, peças em `sound_sets`. */
   is_kit?: boolean;
 }

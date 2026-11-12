@@ -9,6 +9,7 @@ import { formatBRL } from "@/lib/format";
 import { CORPORATE_LIGHTS, SOCIAL_LIGHTS, type Band, type EventForm, type EventVariant } from "@/lib/quoteForms";
 import type { Catalog } from "@/hooks/useSales";
 import { NumberField, Section, SwitchField, ToggleSection } from "./CalcFields";
+import { StockExtras } from "./StockExtras";
 
 // Custos que só fazem sentido no produto único; o DJ do social tem chave própria.
 const HIDDEN_COSTS: Record<EventVariant, string[]> = {
@@ -201,11 +202,13 @@ export function EventFormFields({ variant, form, onChange, catalog, isAdmin }: P
             {kits.map((kit) => (
               <NumberField key={kit.code} label={kit.name}
                 suffix={`${kit.sale_price === null ? "sem preço" : formatBRL(kit.sale_price)} · ${pieces(kit.code)}`}
-                value={form.kits?.[kit.code] || 0} onChange={(v) => set("kits", { ...form.kits, [kit.code]: v })} />
+                value={form.extras?.[kit.code] || 0} onChange={(v) => set("extras", { ...form.extras, [kit.code]: v })} />
             ))}
           </div>
         </Section>
       )}
+
+      <StockExtras idPrefix={variant} catalog={catalog} extras={form.extras || {}} onChange={(v) => set("extras", v)} />
 
       <Section title="Custos operacionais">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

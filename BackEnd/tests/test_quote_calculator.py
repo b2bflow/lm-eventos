@@ -381,3 +381,27 @@ def test_social_sound_off_skips_ceremony_and_system():
     result = calculate_social(SocialInput(guests=100, ceremony_sound=True, sound_enabled=False, led_m2=4,
                                           margin=0, with_invoice=False), TABLE)
     assert set(codes(result)) == {"video_led_social"}
+
+
+# --- Extras (itens avulsos do estoque) -----------------------------------------------------
+
+@pytest.mark.parametrize("calculate,data_cls", [(calculate_corporativo, CorporateInput), (calculate_social, SocialInput)])
+def test_extras_add_any_stock_item_even_with_sections_off(calculate, data_cls):
+    # Seção "Extras" da calculadora: item avulso do estoque, com as seções de serviço desligadas
+    social = {"dj": False} if data_cls is SocialInput else {}
+    data = data_cls(guests=50, sound_enabled=False, stage_video_enabled=False, lighting_enabled=False, **social,
+                    operational=[], margin=0, with_invoice=False,
+                    extra_items=[{"code": "q30_torre_3m", "qty": 4}, {"code": "luz_par_led", "qty": 2}])
+    result = calculate(data, TABLE)
+    lines = codes(result)
+    assert set(lines) == {"q30_torre_3m", "luz_par_led"}
+    assert lines["q30_torre_3m"]["subtotal"] == unit_price("q30_torre_3m", TABLE) * 4
+    assert lines["q30_torre_3m"]["unit"] == "peça"
+
+
+def test_extras_count_in_the_stock_check():
+    data = CorporateInput(guests=50, extra_items=[{"code": "q30_torre_3m", "qty": 4}])
+    short = calculate_corporativo(data, TABLE, availability={"q30_torre_3m": 3})
+    assert "estoque_insuficiente" in lock_codes(short)
+    ok = calculate_corporativo(data, TABLE, availability={"q30_torre_3m": 4})
+    assert "estoque_insuficiente" not in lock_codes(ok)

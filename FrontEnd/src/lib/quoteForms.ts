@@ -45,8 +45,9 @@ export interface EventForm {
   dj: boolean;
   has_project: boolean;
   competitor_quote: boolean;
-  /** Kits criados no Estoque ({código: quantidade}); vão para o backend como extra_items. */
-  kits: Record<string, number>;
+  /** Itens avulsos do estoque e kits criados no Estoque ({código: quantidade}); vão para o backend
+   * como extra_items. A seção "Kits do estoque" mostra os kits, a "Extras" os demais itens. */
+  extras: Record<string, number>;
 }
 
 export interface SingleProductForm {
@@ -74,7 +75,7 @@ export const emptyEvent = (variant: EventVariant): EventForm => ({
   sound_enabled: false, stage_video_enabled: false, lighting_enabled: false, operational: ["carga", "descarga", "frete", "alimentacao"],
   manual_freight: 0, project_cost: 0, margin: 0, with_invoice: true, discount: 0, manual_adjustment: 0,
   structure: "nenhuma", ceremony_sound: false, ceremony_items: null, dj: variant === "social", has_project: false, competitor_quote: false,
-  kits: {},
+  extras: {},
 });
 
 export const emptySingleProduct = (): SingleProductForm => ({
@@ -102,7 +103,7 @@ export function eventInputs(variant: EventVariant, form: EventForm, isAdmin: boo
   // Data de fim só com a chave ligada e depois do início; sem ela, o evento é de um dia
   inputs.multi_day = form.multi_day;
   if (form.multi_day && form.end_date && form.end_date !== form.event_date) inputs.end_date = form.end_date;
-  inputs.extra_items = Object.entries(positive(form.kits || {})).map(([code, qty]) => ({ code, qty }));
+  inputs.extra_items = Object.entries(positive(form.extras || {})).map(([code, qty]) => ({ code, qty }));
   // Sem margem: a tabela já tem a margem da Erica (vale também ao reabrir proposta antiga com margem)
   inputs.margin = 0;
   if (!isAdmin) inputs.manual_adjustment = 0;
@@ -116,7 +117,7 @@ export function withServiceDefaults(
   const { extra_items, ...rest } = inputs;
   return {
     ...rest,
-    kits: Object.fromEntries((extra_items || []).map((e) => [e.code, e.qty])),
+    extras: Object.fromEntries((extra_items || []).map((e) => [e.code, e.qty])),
     multi_day: inputs.multi_day ?? !!inputs.end_date,
     end_date: inputs.end_date || "",
     sound_enabled: inputs.sound_enabled ?? true,
