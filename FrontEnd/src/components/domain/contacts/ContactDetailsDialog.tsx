@@ -20,6 +20,7 @@ import {
 } from "@/hooks/useContacts";
 import { AttachmentView } from "@/components/domain/funnel/AttachmentView";
 import { isAdminUser, useCurrentUser } from "@/hooks/useFunnel";
+import { TagEditor } from "@/components/domain/tags/TagEditor";
 
 const NONE = "__none__";
 
@@ -178,6 +179,10 @@ export function ContactDetailsDialog({ contactId, onClose }: { contactId: string
                 <MessageSquare className="w-4 h-4 mr-1" /> Conversa
               </Button>
             </div>
+
+            <Section title="Tags">
+              <TagEditor customerId={contact.id} value={contact.tags} />
+            </Section>
 
             <Section title={`Leads (${contact.leads.length})`}>
               {contact.leads.length === 0 ? (

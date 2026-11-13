@@ -24,6 +24,8 @@ export interface Conversa {
   customer_human_operator?: boolean;
   customer_ai_qualified_at?: string | null;
   customer_funnel_entered_at?: string | null;
+  /** Tags (etiquetas) do cliente: chaves do catálogo (useTags). */
+  customer_tags?: string[];
   /** Contato nos Chats internos (fora da lista principal, sem IA). */
   customer_internal_chat?: boolean;
 }
@@ -68,6 +70,8 @@ export interface ConversationFilters {
   assignee?: string;
   attendance?: "" | "AGENTE" | "OPERADOR";
   aiQualified?: boolean;
+  /** Só clientes com esta tag (chave do catálogo). */
+  customerTag?: string;
 }
 
 export const conversationsKey = (tab: ConversationTab, search: string, filters: ConversationFilters = {}) =>
@@ -81,6 +85,7 @@ async function fetchConversations(tab: ConversationTab, search: string, cursor: 
   if (filters.assignee) params.assignee = filters.assignee;
   if (filters.attendance) params.tag = filters.attendance;
   if (filters.aiQualified) params.ai_qualified = "true";
+  if (filters.customerTag) params.customer_tag = filters.customerTag;
   if (cursor) params.cursor = cursor;
   const { data } = await api.get<CursorPage<Conversa>>("/chat/conversations/", { params });
   return data;

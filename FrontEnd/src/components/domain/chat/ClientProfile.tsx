@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { formatSafeDate } from "@/lib/dateUtils";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, OWNER_LABELS, PRODUCT_LABELS, resolveStage } from "@/constants/mappings";
 import { NewLeadDialog } from "@/components/domain/funnel/NewLeadDialog";
+import { TagEditor } from "@/components/domain/tags/TagEditor";
 
 const NO_ASSIGNEE = "__none__";
 const AI_ASSIGNEE = "__ia__";
@@ -46,6 +47,7 @@ interface ClientProfileProps {
     customer_product?: string | null;
     customer_human_operator?: boolean;
     customer_funnel_entered_at?: string | null;
+    customer_tags?: string[];
   } | undefined;
   open: boolean;
   onClose: () => void;
@@ -55,6 +57,8 @@ interface ClientProfileProps {
   onSelectConversation?: (id: string) => void; // NOVO: Redirecionamento
   onAssign?: (assignee: string | null) => void;
   onCall?: () => void;
+  /** Tags do cliente gravadas (para a conversa aberta acompanhar). */
+  onTagsChange?: (tags: string[]) => void;
 }
 
 const getStatusDisplay = (status: string | undefined) => {
@@ -63,7 +67,7 @@ const getStatusDisplay = (status: string | undefined) => {
 };
 
 /** Perfil do cliente da conversa aberta, em popup centralizado. */
-export function ClientProfile({ customer, open, onClose, onEdit, onCloseConversation, isClosed, onSelectConversation, onAssign, onCall }: ClientProfileProps) {
+export function ClientProfile({ customer, open, onClose, onEdit, onCloseConversation, isClosed, onSelectConversation, onAssign, onCall, onTagsChange }: ClientProfileProps) {
   const navigate = useNavigate();
   const [converting, setConverting] = useState(false);
 
@@ -113,6 +117,15 @@ export function ClientProfile({ customer, open, onClose, onEdit, onCloseConversa
               <Button size="sm" variant="outline" onClick={() => navigate(`/contatos?contato=${customer.id}`)}>
                 <Contact className="w-4 h-4 mr-1" /> Contato
               </Button>
+            </div>
+
+            <Separator className="bg-border/50" />
+
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Tag className="w-4 h-4" /> Tags
+              </h3>
+              <TagEditor customerId={customer.id} value={customer.customer_tags} onChange={onTagsChange} />
             </div>
 
             <Separator className="bg-border/50" />

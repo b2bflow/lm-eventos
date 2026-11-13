@@ -35,7 +35,7 @@ def _handle(fn):
 
 
 class ContactListController(APIView):
-    """GET /crm/contacts/?search=&contact_type=&owner=&partner=&page=&page_size= e POST (cria)."""
+    """GET /crm/contacts/?search=&contact_type=&owner=&partner=&tag=&page=&page_size= e POST (cria)."""
     permission_classes = [IsAuthenticated]
 
     @_handle
@@ -46,7 +46,7 @@ class ContactListController(APIView):
         results, total = CrmContainer.get_contact_service().list_contacts(
             offset=(page - 1) * page_size, limit=page_size, search=params.get("search"),
             contact_type=params.get("contact_type") or None, owner=params.get("owner") or None,
-            partner=_bool_param(params.get("partner")),
+            partner=_bool_param(params.get("partner")), tag=params.get("tag") or None,
         )
         return Response({"count": total, "page": page, "page_size": page_size,
                          "has_more": page * page_size < total, "results": results})

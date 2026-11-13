@@ -9,9 +9,8 @@ import {
 import { 
   LEAD_STATUS_LABELS, 
   LEAD_STATUS_STYLES,
-  CUSTOMER_TAG_LABELS,
-  CUSTOMER_TAG_STYLES
 } from "@/constants/mappings";
+import { TagChips } from "@/components/domain/tags/TagChips";
 
 interface Lead {
   id: string;
@@ -19,6 +18,7 @@ interface Lead {
   phone: string;
   customer_state_now: string;
   customer_custom_tag?: string | null;
+  customer_tags?: string[];
   celebration_type?: string | null;
   event_title?: string | null;
   event_date?: string | null;
@@ -115,14 +115,7 @@ export function LeadsTable({ data, isLoading, onEdit, onDelete }: LeadsTableProp
                   >
                     {LEAD_STATUS_LABELS[lead.customer_state_now] || lead.customer_state_now}
                   </Badge>
-                  {lead.customer_custom_tag && (
-                    <Badge
-                      variant="outline"
-                      className={CUSTOMER_TAG_STYLES[lead.customer_custom_tag] || "bg-secondary"}
-                    >
-                      {CUSTOMER_TAG_LABELS[lead.customer_custom_tag] || lead.customer_custom_tag}
-                    </Badge>
-                  )}
+                  <TagChips tags={lead.customer_tags ?? (lead.customer_custom_tag ? [lead.customer_custom_tag] : [])} />
                 </div>
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">

@@ -7,6 +7,7 @@ class CustomerDTO(serializers.Serializer):
     customer_state_now = serializers.CharField()
     actual_status = serializers.CharField(required=False)
     customer_custom_tag = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    tags = serializers.ListField(child=serializers.CharField(), read_only=True)  # PUT /crm/contacts/<id>/tags/
     celebration_type = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     event_title = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     event_date = serializers.CharField(allow_blank=True, allow_null=True, required=False)
@@ -74,6 +75,7 @@ class QuoteDTO(serializers.Serializer):
     actual_status = serializers.CharField(required=False)
     status = serializers.CharField(required=False)
     customer_custom_tag = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    customer_tags = serializers.ListField(child=serializers.CharField(), read_only=True)  # tags do cliente
     celebration_type = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     event_title = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     event_date = serializers.CharField(allow_blank=True, allow_null=True, required=False)

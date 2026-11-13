@@ -84,10 +84,12 @@ export default function WhatsApp() {
   const listFilters = useMemo<ConversationFilters>(() => {
     const attendance = ({ agente: "AGENTE", operador: "OPERADOR" } as const)[searchParams.get("atendimento") ?? ""];
     const assignee = searchParams.get("responsavel");
+    const customerTag = searchParams.get("tag");
     return {
       ...(attendance ? { attendance } : {}),
       ...(assignee ? { assignee } : {}),
       ...(searchParams.get("qualificados") === "1" ? { aiQualified: true } : {}),
+      ...(customerTag ? { customerTag } : {}),
     };
   }, [searchParams]);
   const setListFilters = (filters: ConversationFilters) => {
@@ -96,6 +98,7 @@ export default function WhatsApp() {
     put("atendimento", filters.attendance?.toLowerCase());
     put("responsavel", filters.assignee);
     put("qualificados", filters.aiQualified ? "1" : undefined);
+    put("tag", filters.customerTag);
     setSearchParams(params, { replace: true });
   };
   const [callOpen, setCallOpen] = useState(false);
@@ -458,6 +461,7 @@ export default function WhatsApp() {
       assignee: c.assignee,
       aiQualified: !!c.customer_ai_qualified_at,
       internal: !!c.customer_internal_chat,
+      tags: c.customer_tags,
     }));
     contactCandidates.forEach((contact) =>
       items.push({
@@ -584,6 +588,12 @@ export default function WhatsApp() {
           onSelectConversation={handleSelectConversation}
           onAssign={(assignee) => assignMutation.mutate({ id: selectedConversationObj.id, assignee })}
           onCall={handleCall}
+          onTagsChange={(tags) => {
+            const customerId = selectedConversationObj.customer;
+            setSelectedSnapshot((prev) => (prev && prev.customer === customerId ? { ...prev, customer_tags: tags } : prev));
+            // Filtro por tag: o card pode ter entrado ou saído da lista.
+            if (listFilters.customerTag) refreshFirstConversationPages(queryClient);
+          }}
         />
       )}
 

@@ -8,6 +8,8 @@ class ConversationSerializer(DocumentSerializer):
     customer_phone = serializers.CharField(source='customer.phone', read_only=True, default="Sem Número")
     customer_status = serializers.CharField(source='customer.customer_state_now', read_only=True, default="ANALYSIS")
     customer_custom_tag = serializers.CharField(source='customer.customer_custom_tag', read_only=True, allow_null=True)
+    # Tags (etiquetas) do cliente: as da equipe e a automática (chaves de crm.models.customer_tag_model).
+    customer_tags = serializers.SerializerMethodField()
     blocked_until = serializers.DateTimeField(source='customer.blocked_until', read_only=True, allow_null=True)
     quote_id = serializers.CharField(source='quote.id', read_only=True, allow_null=True)
     customer_state_now = serializers.CharField(source='quote.status', read_only=True, allow_null=True)
@@ -43,7 +45,7 @@ class ConversationSerializer(DocumentSerializer):
         model = ConversationModel
         fields = [
             'id', 'customer', 'quote_id', 'customer_name', 'customer_phone', 'customer_status', 
-            'customer_custom_tag',
+            'customer_custom_tag', 'customer_tags',
             'customer_state_now', 'celebration_type', 'event_title', 'event_date', 'event_time',
             'guest_count', 'quoted_amount', 'contract_value', 'venue', 'notes',
             'operator_requests', 'next_step',
@@ -58,6 +60,10 @@ class ConversationSerializer(DocumentSerializer):
     def get_last_interaction_at(self, obj):
         value = getattr(obj, 'last_message_at', None) or getattr(obj, 'updated_at', None)
         return serializers.DateTimeField().to_representation(value) if value else None
+
+    def get_customer_tags(self, obj):
+        customer = getattr(obj, 'customer', None)
+        return customer.tag_keys if customer is not None and hasattr(customer, 'tag_keys') else []
 
     def get_handover_by_name(self, obj):
         """Nome de quem retomou a IA ou assumiu a conversa por último."""

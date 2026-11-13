@@ -47,6 +47,7 @@ class ServiceLog(Document):
         ('PROPOSAL_DELETED', 'Proposta excluída'),
         ('HANDOVER', 'Passagem entre IA e humano'),
         ('CONVERSATION_ASSIGNED', 'Conversa atribuída'),
+        ('TAGS_CHANGED', 'Tags alteradas'),
     )
     action_type = StringField(choices=ACTION_CHOICES, required=True)
     description = StringField()

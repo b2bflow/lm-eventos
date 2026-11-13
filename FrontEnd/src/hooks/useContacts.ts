@@ -15,6 +15,8 @@ export interface ContactSummary {
   owner: string;
   human_operator: boolean;
   notes: string | null;
+  /** Tags (etiquetas) do contato: chaves do catálogo (useTags). */
+  tags?: string[];
   last_interaction_at: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -68,6 +70,7 @@ export interface ContactFilters {
   contact_type?: string;
   owner?: string;
   partner?: boolean;
+  tag?: string;
 }
 
 export interface ImportResult {
@@ -100,6 +103,7 @@ export function useContacts(filters: ContactFilters) {
       if (filters.contact_type) params.contact_type = filters.contact_type;
       if (filters.owner) params.owner = filters.owner;
       if (filters.partner !== undefined) params.partner = String(filters.partner);
+      if (filters.tag) params.tag = filters.tag;
       return (await api.get<ContactPage>("/crm/contacts/", { params })).data;
     },
     getNextPageParam: (last) => (last.has_more ? last.page + 1 : undefined),

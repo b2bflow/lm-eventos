@@ -54,7 +54,7 @@ class CustomerRepository(ICustomerRepository):
                 customers = customers.filter(customer_state_now=status_filter)
 
             if custom_tag_filter and custom_tag_filter != 'all':
-                customers = customers.filter(customer_custom_tag=custom_tag_filter)
+                customers = customers.filter(Q(tags=custom_tag_filter) | Q(customer_custom_tag=custom_tag_filter))
 
             if search_term:
                 customers = customers.filter(
@@ -76,7 +76,7 @@ class CustomerRepository(ICustomerRepository):
                 legacy = [old for old in domain.LEGACY_STAGES if domain.resolve_legacy_stage(old) == status_filter]
                 customers = customers.filter(customer_state_now__in=[status_filter, *legacy])
             if custom_tag_filter and custom_tag_filter != 'all':
-                customers = customers.filter(customer_custom_tag=custom_tag_filter)
+                customers = customers.filter(Q(tags=custom_tag_filter) | Q(customer_custom_tag=custom_tag_filter))
             if search_term:
                 customers = customers.filter(
                     Q(name__icontains=search_term) |

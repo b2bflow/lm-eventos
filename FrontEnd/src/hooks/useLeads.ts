@@ -12,6 +12,7 @@ export interface Lead {
   customer_state_now: string;
   actual_status?: string;
   customer_custom_tag?: string | null;
+  customer_tags?: string[];
   celebration_type?: string | null;
   event_title?: string | null;
   event_date?: string | null;

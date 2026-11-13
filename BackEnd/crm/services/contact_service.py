@@ -89,8 +89,10 @@ class ContactService:
 
     # --- Leitura ---------------------------------------------------------------------------
 
-    def _queryset(self, search=None, contact_type=None, owner=None, partner=None):
+    def _queryset(self, search=None, contact_type=None, owner=None, partner=None, tag=None):
         queryset = Customer.objects
+        if tag:
+            queryset = queryset.filter(Q(tags=tag) | Q(customer_custom_tag=tag))
         if contact_type:
             queryset = queryset.filter(contact_type=contact_type)
         if owner:
@@ -132,6 +134,7 @@ class ContactService:
             "owner": customer.owner or "sdr",
             "human_operator": bool(customer.human_operator),
             "notes": customer.notes,
+            "tags": customer.tag_keys,
             "last_interaction_at": customer.last_interaction_at.isoformat() if customer.last_interaction_at else None,
             "created_at": customer.created_at.isoformat() if customer.created_at else None,
             "updated_at": customer.updated_at.isoformat() if customer.updated_at else None,

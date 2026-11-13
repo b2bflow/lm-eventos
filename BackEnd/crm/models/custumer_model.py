@@ -27,6 +27,7 @@ class Customer(Document):
             'name', 'phone', 'customer_state_now', '-created_at',
             'product', 'owner', 'human_operator', 'flags', 'next_action_at', 'funnel_entered_at',
             'funnel_archived_at', 'whatsapp_lid',
+            'tags',
         ],
         'strict': False
     }
@@ -38,7 +39,10 @@ class Customer(Document):
         (s, f'{s} (antigo)') for s in domain.LEGACY_STAGES
     )
     customer_state_now = StringField(choices=STATE_CHOICES, default=domain.NEW_LEAD)
+    # Tag automática (IA/orçamento). As tags escolhidas pela equipe ficam em `tags`.
     customer_custom_tag = StringField(null=True)
+    # Tags (etiquetas) da equipe: chaves de crm.models.customer_tag_model.CustomerTag.
+    tags = ListField(StringField(max_length=60))
     blocked_until = DateTimeField(null=True)
     silenced_until = DateTimeField(null=True)
     new_service = BooleanField(default=True)
@@ -111,6 +115,14 @@ class Customer(Document):
         """Etapa no vocabulário novo, mesmo para registros ainda não migrados."""
         return domain.resolve_legacy_stage(self.customer_state_now, self.proposal_sent_at)
 
+    @property
+    def tag_keys(self) -> list[str]:
+        """Tags do cliente: as escolhidas pela equipe e, por último, a automática (customer_custom_tag)."""
+        keys = list(self.tags or [])
+        if self.customer_custom_tag and self.customer_custom_tag not in keys:
+            keys.append(self.customer_custom_tag)
+        return keys
+
     def to_dict(self) -> dict:
         stage = self.stage
         return {
@@ -121,6 +133,7 @@ class Customer(Document):
             "customer_state_now": stage,
             "actual_status": stage,
             "customer_custom_tag": self.customer_custom_tag,
+            "tags": self.tag_keys,
             "celebration_type": self.celebration_type,
             "event_title": self.event_title,
             "event_date": _iso(self.event_date),

@@ -74,6 +74,7 @@ class Quote(Document):
             "actual_status": self.status,
             "status": self.status,
             "customer_custom_tag": getattr(customer, "customer_custom_tag", None),
+            "customer_tags": getattr(customer, "tag_keys", None) or [],
             "celebration_type": self.celebration_type,
             "event_title": self.event_title,
             "event_date": self.event_date.isoformat() if self.event_date else None,

@@ -73,8 +73,8 @@ class QuoteRepository:
             quotes = quotes.filter(status=status_filter)
 
         if custom_tag_filter and custom_tag_filter != "all":
-            matching_customers = Customer.objects(customer_custom_tag=custom_tag_filter).only("id")
-            quotes = quotes.filter(customer__in=list(matching_customers))
+            from crm.services.customer_tag_service import customer_ids_with_tag
+            quotes = quotes.filter(customer__in=customer_ids_with_tag(custom_tag_filter))
 
         if search_term:
             matching_customers = Customer.objects(

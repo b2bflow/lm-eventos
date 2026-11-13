@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import type { ConversationFilters, ConversationTab } from "@/hooks/useConversations";
+import { TagChips } from "@/components/domain/tags/TagChips";
+import { TagFilterSelect } from "@/components/domain/tags/TagFilterSelect";
 
 const ALL = "__all__";
 
@@ -25,6 +27,8 @@ interface Conversation {
   aiQualified?: boolean;
   /** Conversa dos Chats internos (sem IA): no lugar das etiquetas de IA e etapa aparece "Interno". */
   internal?: boolean;
+  /** Tags (etiquetas) do cliente. */
+  tags?: string[];
 }
 
 export type ConversationListItem = Conversation;
@@ -157,16 +161,20 @@ export function ConversationList({
                 </SelectContent>
               </Select>
             </div>
-            <button type="button" onClick={() => onFiltersChange({ ...filters, aiQualified: !filters.aiQualified })}
-              aria-pressed={!!filters.aiQualified}
-              className={cn(
-                "mt-2 w-full flex items-center justify-center gap-1.5 h-8 rounded-md border text-xs font-semibold transition-colors",
-                filters.aiQualified
-                  ? "bg-emerald-600 text-white border-emerald-600"
-                  : "bg-card/50 text-muted-foreground border-border/60 hover:text-foreground"
-              )}>
-              <BadgeCheck className="w-3.5 h-3.5" /> Só qualificados pela IA
-            </button>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <TagFilterSelect value={filters.customerTag} triggerClassName="h-8 text-xs bg-card/50"
+                onChange={(customerTag) => onFiltersChange({ ...filters, customerTag })} />
+              <button type="button" onClick={() => onFiltersChange({ ...filters, aiQualified: !filters.aiQualified })}
+                aria-pressed={!!filters.aiQualified}
+                className={cn(
+                  "w-full flex items-center justify-center gap-1.5 h-8 rounded-md border text-xs font-semibold transition-colors",
+                  filters.aiQualified
+                    ? "bg-emerald-600 text-white border-emerald-600"
+                    : "bg-card/50 text-muted-foreground border-border/60 hover:text-foreground"
+                )}>
+                <BadgeCheck className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">Qualificados IA</span>
+              </button>
+            </div>
           </>
         )}
       </div>
@@ -297,6 +305,7 @@ export function ConversationList({
                             )}
                           </>
                         )}
+                        <TagChips tags={conv.tags} max={3} chipClassName="text-[10px] py-0.5" />
                       </div>
 
                       {/* Horário forçado na ponta inferior direita */}

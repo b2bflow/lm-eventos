@@ -11,6 +11,7 @@ from crm.controllers.funnel_controller import (
     FunnelBoardController, FunnelListController, FunnelMetaController, LmSettingsController, SdrTaskController,
     WhatsAppGroupsController,
 )
+from crm.controllers.tag_controller import ContactTagsController, TagDetailController, TagListController
 
 router = DefaultRouter()
 router.register(r'customers', CustomerController, basename='customer')
@@ -31,6 +32,9 @@ urlpatterns = [
     path('contacts/<str:contact_id>/', ContactDetailController.as_view(), name='contact-detail'),
     path('contacts/<str:contact_id>/new-lead/', ContactNewLeadController.as_view(), name='contact-new-lead'),
     path('contacts/<str:contact_id>/timeline/', ContactTimelineController.as_view(), name='contact-timeline'),
+    path('contacts/<str:contact_id>/tags/', ContactTagsController.as_view(), name='contact-tags'),
+    path('tags/', TagListController.as_view(), name='customer-tags'),
+    path('tags/<str:tag_id>/', TagDetailController.as_view(), name='customer-tag-detail'),
     path('qualification/fields/', QualificationFieldsController.as_view(), name='qualification-fields'),
     path('', include(router.urls)),
 ]

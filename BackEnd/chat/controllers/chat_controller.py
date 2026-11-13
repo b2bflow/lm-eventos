@@ -45,7 +45,7 @@ class ConversationViewSet(ModelViewSet):
 
         Ordem: hora da última mensagem (abrir ou ler a conversa não a leva para o topo).
         Query: page_size (padrão 20, máx. 50), cursor, search (nome ou telefone), tag, needs_attention, assignee, ai_qualified,
-        status (OPEN ou CLOSED), internal (1 = só os Chats internos). As abertas sem busca deixam os Chats internos
+        customer_tag (tag do cliente), status (OPEN ou CLOSED), internal (1 = só os Chats internos). As abertas sem busca deixam os Chats internos
         de fora e trazem `internal` {total, unread} para a linha "Chats internos" da lista.
         Resposta: {results, next_cursor, has_more, total[, internal]}.
         """
@@ -66,6 +66,7 @@ class ConversationViewSet(ModelViewSet):
                 assignee=params.get('assignee') or None,
                 ai_qualified=_parse_bool(params.get('ai_qualified')),
                 internal=True if internal else (False if main_open_list else None),
+                customer_tag=params.get('customer_tag') or None,
             )
             items, next_cursor = paginate_desc(queryset, 'last_message_at', params.get('cursor'), page_size)
             serializer = self.get_serializer(items, many=True)

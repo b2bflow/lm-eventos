@@ -16,6 +16,8 @@ import { isAdminUser, useCurrentUser } from "@/hooks/useFunnel";
 import { useContacts, type ContactFilters, type ContactSummary } from "@/hooks/useContacts";
 import { ContactDetailsDialog } from "@/components/domain/contacts/ContactDetailsDialog";
 import { ImportPartnersDialog, NewContactDialog } from "@/components/domain/contacts/ContactDialogs";
+import { TagChips } from "@/components/domain/tags/TagChips";
+import { TagFilterSelect } from "@/components/domain/tags/TagFilterSelect";
 
 const ALL = "__all__";
 
@@ -64,6 +66,10 @@ const COLUMNS: ResponsiveColumn<ContactSummary>[] = [
     ),
   },
   {
+    id: "tags", header: "Tags",
+    cell: (c) => (c.tags?.length ? <TagChips tags={c.tags} max={3} /> : <span className="text-xs text-muted-foreground">—</span>),
+  },
+  {
     id: "lead", header: "Lead atual",
     cell: (c) => c.current_lead ? (
       <span className="flex flex-wrap items-center gap-1.5">
@@ -102,7 +108,7 @@ export default function Contatos() {
     setSearchParams(next, { replace: true });
   };
 
-  const filtered = !!(filters.search || filters.contact_type || filters.owner || filters.partner !== undefined);
+  const filtered = !!(filters.search || filters.contact_type || filters.owner || filters.partner !== undefined || filters.tag);
 
   return (
     <PageShell
@@ -136,6 +142,8 @@ export default function Contatos() {
           onChange={(v) => setFilters({ ...filters, partner: v === undefined ? undefined : v === "yes" })}
           placeholder="Parceiros e leads" options={PARTNER_OPTIONS}
         />
+        <TagFilterSelect value={filters.tag} onChange={(tag) => setFilters({ ...filters, tag })}
+          triggerClassName="w-full sm:w-auto sm:min-w-[170px] gap-2" />
         {filtered && (
           <Button variant="ghost" size="sm" onClick={() => { setSearchInput(""); setFilters({}); }}>
             <X className="w-4 h-4 mr-1" /> Limpar
