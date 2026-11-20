@@ -30,6 +30,8 @@ export interface FunnelLead {
   owner?: string;
   flags: string[];
   ai_qualified_at?: string | null;
+  /** Clicou em "Solicitar orçamento" no menu da IA (coluna "Pediu orçamento"). */
+  quote_requested_at?: string | null;
   funnel_entered_at?: string | null;
   /** Card na aba "Arquivados" do funil (ganho ou perdido arquivado). */
   funnel_archived_at?: string | null;

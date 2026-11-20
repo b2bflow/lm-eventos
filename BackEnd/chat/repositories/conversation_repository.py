@@ -108,13 +108,15 @@ class ConversationRepository(IConversationRepository):
     @staticmethod
     def filtered_queryset(search: str | None = None, tag: str | None = None, needs_attention: bool | None = None, status: str | None = None,
                           assignee: str | None = None, ai_qualified: bool | None = None, internal: bool | None = None,
-                          customer_tag: str | None = None):
+                          customer_tag: str | None = None, ai_quotes: bool | None = None):
         """Conversas filtradas no banco: busca por nome ou telefone do cliente, etiqueta, atenção e situação.
 
         status: OPEN (abertas) ou CLOSED (fechadas e arquivadas).
         internal: True só os Chats internos; False tira eles (lista principal de abertas). None não filtra.
         tag: AGENTE (IA atendendo) ou OPERADOR (inclui as variações gravadas pela IA ao transferir).
         ai_qualified: só conversas de leads qualificados pela IA (Customer.ai_qualified_at).
+        ai_quotes: "Orçamentos IA": quem clicou em "Solicitar orçamento" no menu da IA, tenha ou não
+            terminado a qualificação (Customer.quote_requested_at ou ai_qualified_at).
         assignee: ia (IA atendendo), none (humano sem responsável) ou sdr, erica, lucia.
         customer_tag: só clientes com a tag (etiqueta do cliente, chave do catálogo; inclui a automática).
         """
@@ -143,6 +145,9 @@ class ConversationRepository(IConversationRepository):
             queryset = queryset.filter(tag=tag)
         if ai_qualified:
             queryset = queryset.filter(customer__in=list(Customer.objects(ai_qualified_at__ne=None).scalar('id')))
+        if ai_quotes:
+            asked = Customer.objects(Q(quote_requested_at__ne=None) | Q(ai_qualified_at__ne=None)).scalar('id')
+            queryset = queryset.filter(customer__in=list(asked))
         if customer_tag:
             from crm.services.customer_tag_service import customer_ids_with_tag
             queryset = queryset.filter(customer__in=customer_ids_with_tag(customer_tag))

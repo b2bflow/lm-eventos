@@ -2,7 +2,7 @@ import { BadgeCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, OWNER_LABELS, PRODUCT_LABELS } from "@/constants/mappings";
+import { FUNNEL_STAGE_LABELS, LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, OWNER_LABELS, PRODUCT_LABELS } from "@/constants/mappings";
 import { formatBRL, formatDateTime, formatDay, phoneDisplay } from "@/lib/format";
 import { useFunnelList, type FunnelFilters } from "@/hooks/useFunnel";
 
@@ -53,7 +53,7 @@ export function FunnelListView({ filters, onOpen }: { filters: FunnelFilters; on
                   <TableCell className="whitespace-nowrap">{lead.product ? PRODUCT_LABELS[lead.product] : "—"}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`whitespace-nowrap ${LEAD_STATUS_STYLES[lead.customer_state_now] ?? ""}`}>
-                      {LEAD_STATUS_LABELS[lead.customer_state_now] ?? lead.customer_state_now}
+                      {FUNNEL_STAGE_LABELS[lead.customer_state_now] ?? LEAD_STATUS_LABELS[lead.customer_state_now] ?? lead.customer_state_now}
                     </Badge>
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{OWNER_LABELS[lead.owner || "sdr"]}</TableCell>

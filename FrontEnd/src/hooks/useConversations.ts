@@ -23,6 +23,8 @@ export interface Conversa {
   customer_product?: string | null;
   customer_human_operator?: boolean;
   customer_ai_qualified_at?: string | null;
+  /** Clicou em "Solicitar orçamento" no menu da IA (lead atual). */
+  customer_quote_requested_at?: string | null;
   customer_funnel_entered_at?: string | null;
   /** Tags (etiquetas) do cliente: chaves do catálogo (useTags). */
   customer_tags?: string[];
@@ -65,11 +67,12 @@ export interface NewMessageEvent {
 const PAGE_SIZE = 20;
 const MESSAGES_PAGE_SIZE = 30;
 
-/** Filtros da lista além da aba e da busca: responsável, quem atende (IA/operador) e qualificados pela IA. */
+/** Filtros da lista além da aba e da busca: responsável, quem atende (IA/operador) e Orçamentos IA. */
 export interface ConversationFilters {
   assignee?: string;
   attendance?: "" | "AGENTE" | "OPERADOR";
-  aiQualified?: boolean;
+  /** "Orçamentos IA": clicou em "Solicitar orçamento" no menu da IA (qualificado ou não). */
+  aiQuotes?: boolean;
   /** Só clientes com esta tag (chave do catálogo). */
   customerTag?: string;
 }
@@ -84,7 +87,7 @@ async function fetchConversations(tab: ConversationTab, search: string, cursor: 
   if (search) params.search = search;
   if (filters.assignee) params.assignee = filters.assignee;
   if (filters.attendance) params.tag = filters.attendance;
-  if (filters.aiQualified) params.ai_qualified = "true";
+  if (filters.aiQuotes) params.ai_quotes = "true";
   if (filters.customerTag) params.customer_tag = filters.customerTag;
   if (cursor) params.cursor = cursor;
   const { data } = await api.get<CursorPage<Conversa>>("/chat/conversations/", { params });

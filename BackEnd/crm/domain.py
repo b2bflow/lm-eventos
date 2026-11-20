@@ -20,6 +20,11 @@ STAGES = (NEW_LEAD, QUALIFIED, MEETING_SCHEDULED, PROPOSAL_SENT, PROPOSAL_ACCEPT
 # que ainda não é lead do funil.
 BOARD_STAGES = tuple(s for s in STAGES if s != NEW_LEAD)
 
+# Colunas mostradas no quadro: "Pediu orçamento" volta como primeira coluna (reunião com o Marcelo,
+# 19/11), mas só com quem clicou em "Solicitar orçamento" no menu da IA (Customer.quote_requested_at).
+# Ninguém move um card para lá: é entrada automática. O card sai sozinho quando a IA qualifica.
+BOARD_COLUMNS = (NEW_LEAD,) + BOARD_STAGES
+
 STAGE_LABELS = {
     NEW_LEAD: 'Novo lead',
     QUALIFIED: 'Lead qualificado',
@@ -29,6 +34,9 @@ STAGE_LABELS = {
     CONTRACT_SIGNED: 'Contrato assinado',
     LOST: 'Perdido',
 }
+
+# Nome da coluna no quadro, quando difere da etapa (fora do funil, NEW_LEAD continua "Novo lead").
+BOARD_LABELS = {**STAGE_LABELS, NEW_LEAD: 'Pediu orçamento'}
 
 # Etapas do processo antigo. Continuam aceitas no banco até o `migrate_lm_stages` rodar,
 # mas nunca são gravadas pelo código novo e saem traduzidas nas leituras.

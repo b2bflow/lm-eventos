@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import api from "@/services/api";
 import {
-  FLAG_LABELS, FUNNEL_STAGES, LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, LOST_REASON_LABELS, ORIGIN_LABELS,
+  FLAG_LABELS, FUNNEL_MOVE_STAGES, FUNNEL_STAGE_LABELS, LEAD_STATUS_LABELS, LEAD_STATUS_STYLES, LOST_REASON_LABELS, ORIGIN_LABELS,
   OWNER_LABELS, PRODUCT_LABELS, PROPOSAL_MODE_LABELS, type LeadStage,
 } from "@/constants/mappings";
 import { openProposalPdf } from "@/hooks/useSales";
@@ -39,7 +39,8 @@ import {
 
 // Campos da qualificação já exibidos pelos campos do CRM (espelhados no backend)
 const MIRRORED_FIELDS = new Set(["nome", "email", "empresa", "cargo", "local", "data_evento", "publico"]);
-const STEPS: LeadStage[] = FUNNEL_STAGES.filter((s) => s !== "LOST");
+const STEPS: LeadStage[] = FUNNEL_MOVE_STAGES.filter((s) => s !== "LOST");
+const stageLabel = (stage: string) => FUNNEL_STAGE_LABELS[stage] ?? LEAD_STATUS_LABELS[stage] ?? stage;
 const NONE = "__none__";
 
 function toLocalInput(value?: string | null): string {
@@ -70,23 +71,25 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-/** Faixa com as etapas do funil: clicar muda a etapa (as mesmas regras do quadro). */
+/** Faixa com as etapas do funil: clicar muda a etapa (as mesmas regras do quadro). "Pediu orçamento"
+ * só aparece enquanto o lead está nela (entrada automática: não dá para voltar para lá). */
 function StageStepper({ stage, onChange }: { stage: string; onChange: (stage: LeadStage) => void }) {
-  const current = STEPS.indexOf(stage as LeadStage);
+  const steps: LeadStage[] = stage === "NEW_LEAD" ? ["NEW_LEAD", ...STEPS] : STEPS;
+  const current = steps.indexOf(stage as LeadStage);
   return (
     <div className="flex rounded-xl overflow-hidden border border-border/60 bg-muted/40" role="list" aria-label="Etapas do funil">
-      {STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = current >= 0 && i < current;
         const active = i === current;
         return (
-          <button key={step} type="button" role="listitem" onClick={() => !active && onChange(step)}
+          <button key={step} type="button" role="listitem" onClick={() => !active && step !== "NEW_LEAD" && onChange(step)}
             aria-current={active ? "step" : undefined}
             className={cn(
               "flex-1 min-w-0 px-2 py-2 text-xs sm:text-sm font-medium transition-colors border-r border-border/40 last:border-r-0 truncate",
               active ? "bg-primary text-primary-foreground" : done ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-muted",
             )}>
             {done && <Check className="inline w-3.5 h-3.5 mr-1 -mt-0.5" />}
-            {LEAD_STATUS_LABELS[step]}
+            {stageLabel(step)}
           </button>
         );
       })}
@@ -476,7 +479,7 @@ function LeadDetails({ id, onClose }: { id: string; onClose: () => void }) {
             <DialogDescription asChild>
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mt-1">
                 {lead.company && <span>{lead.company}</span>}
-                <Badge variant="outline" className={LEAD_STATUS_STYLES[stage]}>{LEAD_STATUS_LABELS[stage]}</Badge>
+                <Badge variant="outline" className={LEAD_STATUS_STYLES[stage]}>{stageLabel(stage)}</Badge>
                 {archived && <Badge variant="secondary"><Archive className="w-3 h-3 mr-1" /> Arquivado</Badge>}
                 {lead.product && <Badge variant="secondary">{PRODUCT_LABELS[lead.product]}</Badge>}
                 {lead.ai_qualified_at && (

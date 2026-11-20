@@ -36,6 +36,7 @@ class CustomerDTO(serializers.Serializer):
     funnel_entered_at = serializers.CharField(allow_null=True, required=False)
     funnel_archived_at = serializers.CharField(allow_null=True, required=False)
     ai_qualified_at = serializers.CharField(allow_null=True, required=False)
+    quote_requested_at = serializers.CharField(allow_null=True, required=False)
     product = serializers.CharField(allow_null=True, required=False)
     qualification = serializers.DictField(required=False)
     pending_fields = serializers.ListField(required=False)

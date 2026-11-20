@@ -3,7 +3,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LEAD_STAGE_TONES, LEAD_STATUS_LABELS, type LeadStage } from "@/constants/mappings";
+import { FUNNEL_STAGE_LABELS, LEAD_STAGE_TONES, LEAD_STATUS_LABELS, type LeadStage } from "@/constants/mappings";
 import { TONE_DOT_CLASSES } from "@/lib/tones";
 import { formatBRL } from "@/lib/format";
 import { fetchMoreForStage, type FunnelBoard, type FunnelFilters, type FunnelLead } from "@/hooks/useFunnel";
@@ -25,7 +25,9 @@ interface ColumnProps {
 }
 
 function Column({ stage, label, leads, count, hasMore, loadingMore, onLoadMore, onOpen, onAdd, onArchive, onUnarchive }: ColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage });
+  // "Pediu orçamento" é entrada automática (clique em "Solicitar orçamento" no WhatsApp): não aceita card arrastado.
+  const autoOnly = stage === "NEW_LEAD";
+  const { setNodeRef, isOver } = useDroppable({ id: stage, disabled: autoOnly });
   const value = leads.reduce((sum, l) => sum + (l.contract_value || l.quoted_amount || 0), 0);
   return (
     <div
@@ -38,7 +40,8 @@ function Column({ stage, label, leads, count, hasMore, loadingMore, onLoadMore, 
       )}
     >
       <header className="px-3 pt-3 pb-2 border-b border-border/40">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"
+          title={autoOnly ? "Clicou em \"Solicitar orçamento\" no WhatsApp e a IA ainda não terminou a qualificação" : undefined}>
           <span className={cn("w-2 h-2 rounded-full", TONE_DOT_CLASSES[LEAD_STAGE_TONES[stage] ?? "neutral"])} aria-hidden />
           <span className="truncate">{label}</span>
           <span className="ml-auto text-xs font-normal text-muted-foreground tabular-nums">{count}</span>
@@ -52,7 +55,11 @@ function Column({ stage, label, leads, count, hasMore, loadingMore, onLoadMore, 
             <Plus className="w-3.5 h-3.5" /> Novo card
           </button>
         )}
-        {leads.length === 0 && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Nenhum lead nesta etapa.</p>}
+        {leads.length === 0 && (
+          <p className="px-1 py-4 text-center text-xs text-muted-foreground">
+            {autoOnly ? "Entra aqui quem clica em \"Solicitar orçamento\" no WhatsApp." : "Nenhum lead nesta etapa."}
+          </p>
+        )}
         {leads.map((lead) => (
           <LeadCard key={lead.id} lead={lead} onOpen={onOpen} onArchive={onArchive} onUnarchive={onUnarchive} />
         ))}
@@ -114,7 +121,7 @@ export function FunnelBoardView({ board, stages, labels, filters, onOpen, onAdd,
           <Column
             key={stage}
             stage={stage}
-            label={labels?.[stage] ?? LEAD_STATUS_LABELS[stage]}
+            label={labels?.[stage] ?? FUNNEL_STAGE_LABELS[stage] ?? LEAD_STATUS_LABELS[stage]}
             leads={leads}
             count={column.count}
             hasMore={extra[stage] ? extra[stage]!.hasMore : column.has_more}

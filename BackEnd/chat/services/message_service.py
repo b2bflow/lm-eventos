@@ -132,6 +132,12 @@ class MessageService(IMessageService):
         """Define qual agente usar e se deve atualizar tag."""
 
         if vals[0]:
+            if vals[1] == "1":
+                # "Solicitar orçamento": o lead entra no funil já agora, mesmo que pare de responder antes
+                # de a IA terminar a qualificação (reunião com o Marcelo, 19/11). Nunca levanta erro.
+                from crm.services.funnel_entry import mark_quote_requested
+                mark_quote_requested(customer)
+
             if vals[1] == "1" or vals[1] == "13":
                 msg_text = "Sobre o que você gostaria de falar? Selecione uma das opções abaixo:"
 

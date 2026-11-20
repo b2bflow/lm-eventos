@@ -79,7 +79,7 @@ export default function WhatsApp() {
   const [isSending, setIsSending] = useState(false);
   const [activeTab, setActiveTab] = useState<ConversationTab>("OPEN");
   const [searchInput, setSearchInput] = useState("");
-  // Filtros da lista na URL (?atendimento=agente&responsavel=ia&qualificados=1): link e F5 mantêm a escolha
+  // Filtros da lista na URL (?atendimento=agente&responsavel=ia&orcamentos=1): link e F5 mantêm a escolha
   const [searchParams, setSearchParams] = useSearchParams();
   const listFilters = useMemo<ConversationFilters>(() => {
     const attendance = ({ agente: "AGENTE", operador: "OPERADOR" } as const)[searchParams.get("atendimento") ?? ""];
@@ -88,7 +88,8 @@ export default function WhatsApp() {
     return {
       ...(attendance ? { attendance } : {}),
       ...(assignee ? { assignee } : {}),
-      ...(searchParams.get("qualificados") === "1" ? { aiQualified: true } : {}),
+      // "qualificados=1" era o filtro antigo (Qualificados IA): links salvos abrem o Orçamentos IA
+      ...(searchParams.get("orcamentos") === "1" || searchParams.get("qualificados") === "1" ? { aiQuotes: true } : {}),
       ...(customerTag ? { customerTag } : {}),
     };
   }, [searchParams]);
@@ -97,7 +98,8 @@ export default function WhatsApp() {
     const put = (key: string, value?: string) => (value ? params.set(key, value) : params.delete(key));
     put("atendimento", filters.attendance?.toLowerCase());
     put("responsavel", filters.assignee);
-    put("qualificados", filters.aiQualified ? "1" : undefined);
+    params.delete("qualificados");
+    put("orcamentos", filters.aiQuotes ? "1" : undefined);
     put("tag", filters.customerTag);
     setSearchParams(params, { replace: true });
   };
@@ -460,6 +462,7 @@ export default function WhatsApp() {
       needs_attention: c.needs_attention,
       assignee: c.assignee,
       aiQualified: !!c.customer_ai_qualified_at,
+      quoteRequested: !!c.customer_quote_requested_at,
       internal: !!c.customer_internal_chat,
       tags: c.customer_tags,
     }));

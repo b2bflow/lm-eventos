@@ -81,8 +81,8 @@ def test_acceptance_partial_lead_shows_as_qualified_with_saved_data(api_client, 
     api_client.post(f"{url}/qualification/field/", {"field": "empresa", "value": "Acme Ltda"}, format="json")
 
     board = api_client.get("/api/v1/crm/funnel/").data
-    # Sem coluna "Novo lead": lead aberto à mão já entra como qualificado
-    assert "NEW_LEAD" not in board
+    # Lead aberto à mão já entra como qualificado ("Pediu orçamento" é só de quem clica no botão)
+    assert board["NEW_LEAD"]["count"] == 0
     card = board["QUALIFIED"]["results"][0]
     assert card["guest_count"] == 300 and card["company"] == "Acme Ltda"
     assert card["qualification"] == {"publico": "300 pessoas", "empresa": "Acme Ltda"}

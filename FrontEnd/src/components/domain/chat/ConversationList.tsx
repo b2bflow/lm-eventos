@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2, BadgeCheck, UserCheck, Archive, ArrowLeft } from "lucide-react";
+import { MessageSquare, Sparkles, User, CheckCircle2, Clock, Search, Loader2, BadgeCheck, UserCheck, Archive, ArrowLeft, FileText } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_SOLID, OWNER_LABELS, conversationResponsible, resolveStage } from "@/constants/mappings";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,6 +25,8 @@ interface Conversation {
   assignee?: string | null;
   /** Lead qualificado pela IA (Customer.ai_qualified_at). */
   aiQualified?: boolean;
+  /** Clicou em "Solicitar orçamento" no menu da IA (Customer.quote_requested_at). */
+  quoteRequested?: boolean;
   /** Conversa dos Chats internos (sem IA): no lugar das etiquetas de IA e etapa aparece "Interno". */
   internal?: boolean;
   /** Tags (etiquetas) do cliente. */
@@ -48,7 +50,7 @@ interface ConversationListProps {
   hasMore: boolean;
   isLoading?: boolean;
   isLoadingMore?: boolean;
-  /** Responsável ("" todas, ia, sdr, erica, lucia ou none), quem atende (IA/operador) e só qualificados pela IA. */
+  /** Responsável ("" todas, ia, sdr, erica, lucia ou none), quem atende (IA/operador) e Orçamentos IA. */
   filters?: ConversationFilters;
   onFiltersChange?: (filters: ConversationFilters) => void;
 }
@@ -164,15 +166,16 @@ export function ConversationList({
             <div className="grid grid-cols-2 gap-2 mt-2">
               <TagFilterSelect value={filters.customerTag} triggerClassName="h-8 text-xs bg-card/50"
                 onChange={(customerTag) => onFiltersChange({ ...filters, customerTag })} />
-              <button type="button" onClick={() => onFiltersChange({ ...filters, aiQualified: !filters.aiQualified })}
-                aria-pressed={!!filters.aiQualified}
+              <button type="button" onClick={() => onFiltersChange({ ...filters, aiQuotes: !filters.aiQuotes })}
+                aria-pressed={!!filters.aiQuotes}
+                title="Quem clicou em &quot;Solicitar orçamento&quot; no menu da IA, tenha ou não terminado a qualificação"
                 className={cn(
                   "w-full flex items-center justify-center gap-1.5 h-8 rounded-md border text-xs font-semibold transition-colors",
-                  filters.aiQualified
+                  filters.aiQuotes
                     ? "bg-emerald-600 text-white border-emerald-600"
                     : "bg-card/50 text-muted-foreground border-border/60 hover:text-foreground"
                 )}>
-                <BadgeCheck className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">Qualificados IA</span>
+                <FileText className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">Orçamentos IA</span>
               </button>
             </div>
           </>
@@ -291,10 +294,15 @@ export function ConversationList({
                             )}>
                               {statusInfo.label}
                             </div>
-                            {conv.aiQualified && (
+                            {conv.aiQualified ? (
                               <span className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                                 title="Lead qualificado pela IA">
                                 <BadgeCheck className="w-3 h-3" />Qualificado IA
+                              </span>
+                            ) : conv.quoteRequested && (
+                              <span className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                title="Clicou em &quot;Solicitar orçamento&quot;, mas a IA ainda não terminou a qualificação">
+                                <FileText className="w-3 h-3" />Pediu orçamento
                               </span>
                             )}
                             {responsible && (

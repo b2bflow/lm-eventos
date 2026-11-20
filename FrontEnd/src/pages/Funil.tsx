@@ -197,7 +197,8 @@ export default function Funil() {
     if (!lead || !over) return;
     if (over === DROP_ARCHIVED) archiveLead(lead);
     else if (over === DROP_ACTIVE) unarchiveLead(lead);
-    else if (over !== lead.customer_state_now) handleMove(lead.id, over as LeadStage);
+    // "Pediu orçamento" só recebe quem clica no botão do WhatsApp (a coluna nem aceita o arrasto)
+    else if (over !== lead.customer_state_now && over !== "NEW_LEAD") handleMove(lead.id, over as LeadStage);
   };
 
   const stages: readonly LeadStage[] = archived ? ARCHIVED_STAGES : FUNNEL_STAGES;

@@ -55,6 +55,8 @@ class PipelineService:
             return
         # O card anda livre entre as colunas do quadro (reunião com o Marcelo, 28/10): "Proposta enviada"
         # e "Proposta aceita" não exigem mais proposta enviada pela calculadora.
+        if target == domain.NEW_LEAD:
+            raise ValueError("Só entra em 'Pediu orçamento' quem clica em \"Solicitar orçamento\" no WhatsApp.")
         if target not in domain.BOARD_STAGES:
             raise ValueError(f"'{domain.STAGE_LABELS[target]}' não é uma coluna do funil.")
         if target == domain.LOST and lost_reason not in domain.LOST_REASONS:
@@ -290,9 +292,11 @@ class PipelineService:
 
     def _board_queryset(self, product=None, owner=None, flag=None, search=None, include_human=False,
                         ai_qualified=False, archived=False):
-        # Só quem entrou no funil depois de zerado (crm.services.funnel_entry)
-        queryset = Customer.objects(contact_type__nin=['parceiro', 'fornecedor', 'candidato'], funnel_entered_at__ne=None,
-                                    customer_state_now__nin=[domain.NEW_LEAD, 'ANALYSIS'])
+        # Só quem entrou no funil depois de zerado (crm.services.funnel_entry). Em "Novo lead" só aparece
+        # quem pediu orçamento no menu da IA (coluna "Pediu orçamento"): os contatos que entraram no
+        # funil antes, quando conversa nova bastava, continuam fora do quadro.
+        queryset = Customer.objects(contact_type__nin=['parceiro', 'fornecedor', 'candidato'], funnel_entered_at__ne=None)
+        queryset = queryset.filter(Q(customer_state_now__nin=[domain.NEW_LEAD, 'ANALYSIS']) | Q(quote_requested_at__ne=None))
         # Abas do funil: "Ativos" (padrão) ou "Arquivados" (ganhos e perdidos arquivados)
         queryset = queryset.filter(funnel_archived_at__ne=None) if archived else queryset.filter(funnel_archived_at=None)
         if not include_human:
@@ -372,13 +376,13 @@ class PipelineService:
         offsets = offsets or {}
         columns = {}
         base = self._board_queryset(**filters)
-        for stage in stages or (ARCHIVE_STAGES.values() if filters.get('archived') else domain.BOARD_STAGES):
+        for stage in stages or (ARCHIVE_STAGES.values() if filters.get('archived') else domain.BOARD_COLUMNS):
             queryset = self._stage_queryset(base, stage)
             offset = int(offsets.get(stage, 0) or 0)
             total = queryset.count()
             items = list(queryset.order_by('-updated_at', '-id').skip(offset).limit(per_stage))
             columns[stage] = {
-                "label": domain.STAGE_LABELS[stage],
+                "label": domain.BOARD_LABELS[stage],
                 "count": total,
                 "offset": offset,
                 "has_more": offset + len(items) < total,

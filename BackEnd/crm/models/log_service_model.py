@@ -48,6 +48,7 @@ class ServiceLog(Document):
         ('HANDOVER', 'Passagem entre IA e humano'),
         ('CONVERSATION_ASSIGNED', 'Conversa atribuída'),
         ('TAGS_CHANGED', 'Tags alteradas'),
+        ('QUOTE_REQUESTED', 'Pediu orçamento'),
     )
     action_type = StringField(choices=ACTION_CHOICES, required=True)
     description = StringField()

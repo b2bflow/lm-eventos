@@ -35,6 +35,9 @@ class ConversationSerializer(DocumentSerializer):
     customer_human_operator = serializers.BooleanField(source='customer.human_operator', read_only=True, default=False)
     customer_ai_qualified_at = serializers.DateTimeField(source='customer.ai_qualified_at', read_only=True, allow_null=True,
                                                          default=None)
+    # Clicou em "Solicitar orçamento" no menu da IA (filtro "Orçamentos IA" no WhatsApp).
+    customer_quote_requested_at = serializers.DateTimeField(source='customer.quote_requested_at', read_only=True,
+                                                            allow_null=True, default=None)
     customer_funnel_entered_at = serializers.DateTimeField(source='customer.funnel_entered_at', read_only=True,
                                                            allow_null=True, default=None)
     handover_by_name = serializers.SerializerMethodField()
@@ -53,7 +56,7 @@ class ConversationSerializer(DocumentSerializer):
             'last_interaction_at', 'unread_count', 'created_at',
             'final_customer_status', 'past_conversations', 'past_quotes',
             'needs_attention', 'blocked_until', 'assignee', 'handover_by', 'handover_by_name', 'handover_at',
-            'customer_product', 'customer_human_operator', 'customer_ai_qualified_at',
+            'customer_product', 'customer_human_operator', 'customer_ai_qualified_at', 'customer_quote_requested_at',
             'customer_funnel_entered_at', 'customer_internal_chat',
         ]
 

@@ -46,7 +46,7 @@ def test_archive_as_lost_moves_card_to_archived_tab(sdr_api):
     assert ServiceLog.objects(customer=lead, action_type="FUNNEL_ARCHIVED").count() == 1
 
     active = sdr_api.get(FUNNEL).data
-    assert set(active) == set(domain.BOARD_STAGES) and active[domain.LOST]["count"] == 0
+    assert set(active) == set(domain.BOARD_COLUMNS) and active[domain.LOST]["count"] == 0
     archived = sdr_api.get(FUNNEL, {"archived": "true"}).data
     assert set(archived) == {domain.CONTRACT_SIGNED, domain.LOST}
     assert _card_ids(archived, domain.LOST) == [str(lead.id)]

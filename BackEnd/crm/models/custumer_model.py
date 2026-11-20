@@ -101,6 +101,9 @@ class Customer(Document):
     # Reabrir o lead (voltar a uma etapa em andamento) ou abrir um lead novo desarquiva.
     funnel_archived_at = DateTimeField(null=True)
     ai_qualified_at = DateTimeField(null=True)  # a IA terminou a qualificação (cotação em WAITING_BUDGET)
+    # O cliente clicou em "Solicitar orçamento" no menu da IA (lead atual): entra no funil na coluna
+    # "Pediu orçamento" mesmo sem terminar a qualificação (reunião com o Marcelo, 19/11).
+    quote_requested_at = DateTimeField(null=True)
     # Agendamento da reunião pela IA (social/corporativo): horários oferecidos (ISO, UTC), tentativa e situação.
     meeting_offer = DictField()
 
@@ -174,6 +177,7 @@ class Customer(Document):
             "funnel_entered_at": _iso(self.funnel_entered_at),
             "funnel_archived_at": _iso(self.funnel_archived_at),
             "ai_qualified_at": _iso(self.ai_qualified_at),
+            "quote_requested_at": _iso(self.quote_requested_at),
             "blocked_until": _iso(self.blocked_until),
             "silenced_until": _iso(self.silenced_until),
             "send_button": self.send_button,

@@ -30,7 +30,7 @@ class FunnelBoardController(APIView):
         try:
             per_stage = min(max(int(params.get('per_stage', 30)), 1), 100)
             stage = params.get('stage')
-            if stage and stage not in domain.BOARD_STAGES:
+            if stage and stage not in domain.BOARD_COLUMNS:
                 return Response({"detail": "Etapa inválida."}, status=status.HTTP_400_BAD_REQUEST)
             board = CrmContainer.get_pipeline_service().board(
                 stages=[stage] if stage else None,
@@ -63,7 +63,7 @@ class FunnelListController(APIView):
         params = request.query_params
         try:
             stage = params.get('stage') or None
-            if stage and stage not in domain.BOARD_STAGES:
+            if stage and stage not in domain.BOARD_COLUMNS:
                 return Response({"detail": "Etapa inválida."}, status=status.HTTP_400_BAD_REQUEST)
             data = CrmContainer.get_pipeline_service().lead_list(
                 offset=int(params.get('offset', 0) or 0),

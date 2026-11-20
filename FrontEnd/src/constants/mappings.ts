@@ -12,8 +12,19 @@ export const LEAD_STATUS_OPTIONS = [
 
 export type LeadStage = (typeof LEAD_STATUS_OPTIONS)[number];
 
-/** Colunas do quadro (backend: domain.BOARD_STAGES). "Novo lead" saiu: o funil começa em "Lead qualificado". */
-export const FUNNEL_STAGES: readonly LeadStage[] = LEAD_STATUS_OPTIONS.filter((s) => s !== "NEW_LEAD");
+/**
+ * Colunas do quadro (backend: domain.BOARD_COLUMNS). A primeira, "Pediu orçamento" (etapa NEW_LEAD), só
+ * recebe quem clicou em "Solicitar orçamento" no menu da IA: ninguém move card para lá.
+ */
+export const FUNNEL_STAGES: readonly LeadStage[] = LEAD_STATUS_OPTIONS;
+
+/** Etapas para onde o card pode ir (arrastar, popup do lead): todas menos "Pediu orçamento". */
+export const FUNNEL_MOVE_STAGES: readonly LeadStage[] = LEAD_STATUS_OPTIONS.filter((s) => s !== "NEW_LEAD");
+
+/** Nome da etapa dentro do funil. Fora dele (Contatos, WhatsApp), NEW_LEAD continua "Novo lead". */
+export const FUNNEL_STAGE_LABELS: Record<string, string> = {
+  NEW_LEAD: "Pediu orçamento",
+};
 
 export const LEAD_STATUS_LABELS: Record<string, string> = {
   NEW_LEAD: "Novo lead",
