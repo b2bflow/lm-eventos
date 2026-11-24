@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import api from "@/services/api";
+import { WhatsAppConnection } from "./WhatsAppConnection";
 
 interface GoogleStatus {
   client_configured: boolean;
@@ -24,7 +25,7 @@ function errorDetail(error: unknown, fallback: string) {
   return (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || fallback;
 }
 
-/** Aba Integrações: Google Agenda (conectar, sincronizar, pausar a leitura automática e desconectar). */
+/** Aba Integrações: WhatsApp (Z-API) e Google Agenda (conectar, sincronizar, pausar a leitura automática e desconectar). */
 export function SystemSettings() {
   const queryClient = useQueryClient();
   const { data: google, isLoading } = useQuery({
@@ -83,6 +84,8 @@ export function SystemSettings() {
 
   return (
     <div className="space-y-6">
+      <WhatsAppConnection />
+
       <div className="p-6 rounded-2xl border border-border/50 bg-background/40 backdrop-blur-xl shadow-sm relative overflow-hidden">
         <div className="mb-6 relative z-10 flex flex-wrap items-start justify-between gap-3">
           <div>
