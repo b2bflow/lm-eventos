@@ -17,7 +17,7 @@ class VisitaTecnica(ITool, FunctionCallMixin):
     name = "visita_tecnica"
     model = "gpt-5.1"
     technical_visit_tag = "visita tecnica"
-    _function_call_input = "Avise o cliente que logo ele ira receber o seu orçamento, seja educado e cordial."
+    _function_call_input = "Avise o cliente que logo ele ira receber o seu orçamento, seja educada e cordial."
 
     def __init__(
         self,

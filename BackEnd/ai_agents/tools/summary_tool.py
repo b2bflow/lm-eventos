@@ -16,7 +16,7 @@ from ai_agents.mixins.function_call_mixin import FunctionCallMixin
 class SummaryTool(ITool, FunctionCallMixin):
     name = "resumo"
     model = "gpt-5.1"
-    _function_call_input = "Avise o cliente que logo ele ira receber o seu orçamento, seja educado e cordial."
+    _function_call_input = "Avise o cliente que logo ele ira receber o seu orçamento, seja educada e cordial."
 
     def __init__(
         self,

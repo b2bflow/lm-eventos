@@ -16,7 +16,7 @@ from ai_agents.mixins.function_call_mixin import FunctionCallMixin
 class HumanoTool(ITool, FunctionCallMixin):
     name = "humano"
     model = "gpt-5.1"
-    _function_call_input = "Avise ao cliente que logo entraremos em contato, seja educado e cordial."
+    _function_call_input = "Avise ao cliente que logo entraremos em contato, seja educada e cordial."
 
     def __init__(
         self,

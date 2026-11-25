@@ -16,7 +16,7 @@ from ai_agents.mixins.function_call_mixin import FunctionCallMixin
 class ContinuarTool(ITool, FunctionCallMixin):
     name = "continuar"
     model = "gpt-5.1"
-    _function_call_input = "Avise ao cliente que logo entraremos em contato, seja educado e cordial."
+    _function_call_input = "Avise ao cliente que logo entraremos em contato, seja educada e cordial."
 
     def __init__(
         self,
@@ -69,7 +69,7 @@ class ContinuarTool(ITool, FunctionCallMixin):
 
         self.chat.send_message(
             phone=phone,
-            message="Olá eu sou o Marcelo, atendente da LM Eventos. Para continuarmos, me informe qual seu nome. ",
+            message="Olá eu sou a Ana Carolina, atendente da LM Eventos. Para continuarmos, me informe qual seu nome. ",
         )
 
         tasks = [

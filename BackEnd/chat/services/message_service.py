@@ -403,7 +403,7 @@ class MessageService(IMessageService):
 
             if self.customer_repository.claim_new_service(customer_id):
                 logger.info(f"[MessageService] Enviando mensagem de boas-vindas para {phone} com ID do cliente {customer_id}")
-                msg_text = "Olá bem vindo, a LM Eventos, me chamo Marcelo e vou dar início ao seu atendimento. Seu contato é sobre?"
+                msg_text = "Olá bem vindo, a LM Eventos, me chamo Ana Carolina e vou dar início ao seu atendimento. Seu contato é sobre?"
 
                 buttons = [
                     {"id": "1", "label": "Solicitar orçamento"},
